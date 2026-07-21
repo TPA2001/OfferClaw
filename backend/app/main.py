@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 
 from app.core.database import engine, Base
-from app.api import profile, autofill, resume, jobs, applications, subscription, agent, automation
+from app.api import automation, profile, agent, applications
 
 # Configure logging
 logging.basicConfig(
@@ -19,8 +19,39 @@ logging.basicConfig(
 logger = logging.getLogger("offerclaw")
 
 # Create database tables
+from app.models.profile import Profile           # noqa: F401
+from app.models.application import Application, AgentSession  # noqa: F401
 Base.metadata.create_all(bind=engine)
 logger.info("Database tables created")
+
+# === 自动迁移：为已存在的 applications 表追加新列（SQLite 安全的 ALTER TABLE）===
+# 这样旧数据库无需手动迁移即可获得新字段
+def _migrate_applications_table():
+    """对 SQLite 友好的列追加迁移：缺失的列用 ALTER TABLE ADD COLUMN 补齐"""
+    from sqlalchemy import text, inspect
+    insp = inspect(engine)
+    if "applications" not in insp.get_table_names():
+        return
+    existing_cols = {c["name"] for c in insp.get_columns("applications")}
+    new_cols = [
+        ("rejection_stage", "VARCHAR(30)"),
+        ("interview_round", "INTEGER"),
+        ("next_interview_at", "DATETIME"),
+        ("offer_status", "VARCHAR(20)"),
+        ("priority", "VARCHAR(10) DEFAULT 'medium'"),
+        ("assessment_deadline", "DATETIME"),
+        ("offer_salary", "VARCHAR(100)"),
+        ("offer_location", "VARCHAR(100)"),
+        ("offer_deadline", "DATETIME"),
+        ("hr_contact", "VARCHAR(200)"),
+    ]
+    with engine.begin() as conn:
+        for col_name, col_type in new_cols:
+            if col_name not in existing_cols:
+                conn.execute(text(f"ALTER TABLE applications ADD COLUMN {col_name} {col_type}"))
+                logger.info(f"Migrated: added column applications.{col_name}")
+
+_migrate_applications_table()
 
 # Create FastAPI app
 app = FastAPI(
@@ -39,14 +70,10 @@ app.add_middleware(
 )
 
 # Register routers
+app.include_router(automation.router)
 app.include_router(profile.router)
-app.include_router(autofill.router)
-app.include_router(resume.router)
-app.include_router(jobs.router)
-app.include_router(applications.router)
-app.include_router(subscription.router)
 app.include_router(agent.router)
-app.include_router(automation.router)  # Smart form filling
+app.include_router(applications.router)
 
 
 @app.get("/")
@@ -67,7 +94,10 @@ async def health():
         "status": "healthy",
         "services": {
             "database": "connected",
-            "automation": "available"
+            "automation": "available",
+            "profile": "available",
+            "agent": "available",
+            "applications": "available"
         }
     }
 

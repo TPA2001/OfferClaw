@@ -2,78 +2,10 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>智能填写 - OfferClaw</title>
-    <link rel="stylesheet" href="styles/main.css">
+    <meta http-equiv="refresh" content="0; url=smart-fill.html">
+    <title>重定向中...</title>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="nav-brand">
-            <h1>🎯 OfferClaw</h1>
-        </div>
-        <div class="nav-links">
-            <a href="index.html">首页</a>
-            <a href="dashboard.html">看板</a>
-            <a href="profile.html">个人画像</a>
-            <a href="automation.html" class="active">智能填写</a>
-        </div>
-    </nav>
-
-    <main class="container">
-        <section class="automation-header">
-            <h2>🤖 智能填写助手</h2>
-            <p>自动识别表单字段，智能匹配用户画像</p>
-        </section>
-
-        <section class="automation-status">
-            <div class="status-card">
-                <h3>服务状态</h3>
-                <div id="service-status">检查中...</div>
-            </div>
-        </section>
-
-        <section class="automation-usage">
-            <h3>使用方法</h3>
-            <ol>
-                <li>安装浏览器扩展（开发中）</li>
-                <li>打开企业网申页面</li>
-                <li>点击扩展图标开始智能填写</li>
-                <li>确认匹配结果并提交</li>
-            </ol>
-        </section>
-
-        <section class="automation-api">
-            <h3>API 接口</h3>
-            <div class="api-endpoint">
-                <h4>字段提取</h4>
-                <code>POST /api/v1/automation/extract</code>
-            </div>
-            <div class="api-endpoint">
-                <h4>语义匹配</h4>
-                <code>POST /api/v1/automation/match</code>
-            </div>
-            <div class="api-endpoint">
-                <h4>执行填写</h4>
-                <code>POST /api/v1/automation/fill</code>
-            </div>
-        </section>
-    </main>
-
-    <script>
-        // Check automation service status
-        async function checkStatus() {
-            try {
-                const response = await fetch('http://localhost:8000/api/v1/automation/status');
-                const data = await response.json();
-                document.getElementById('service-status').innerHTML =
-                    '<span style="color: green;">✓ 运行正常</span>';
-            } catch (error) {
-                document.getElementById('service-status').innerHTML =
-                    '<span style="color: red;">✗ 服务不可用</span>';
-            }
-        }
-
-        checkStatus();
-    </script>
+    <p>已迁移至 smart-fill.html，<a href="smart-fill.html">点击跳转</a></p>
 </body>
 </html>

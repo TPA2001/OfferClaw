@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能填写助手 - OfferClaw</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <style>
+        .smart-fill-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3rem;
+        }
+        
+        .step {
+            flex: 1;
+            text-align: center;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin: 0 0.5rem;
+            position: relative;
+        }
+        
+        .step.active {
+            background: #4a90e2;
+            color: white;
+        }
+        
+        .step.completed {
+            background: #28a745;
+            color: white;
+        }
+        
+        .step-number {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .url-input-section {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .url-input-section input {
+            width: 100%;
+            padding: 1rem;
+            font-size: 1rem;
+            border: 2px solid #dee2e6;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+        
+        .field-list {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .field-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .field-item:last-child {
+            border-bottom: none;
+        }
+        
+        .field-label {
+            font-weight: 500;
+        }
+        
+        .field-type {
+            color: #6c757d;
+            font-size: 0.875rem;
+        }
+        
+        .mapping-value {
+            flex: 1;
+            margin: 0 1rem;
+        }
+        
+        .mapping-value input,
+        .mapping-value select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+        
+        .script-output {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            border: 1px solid #dee2e6;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4a90e2;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .alert {
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">
+            <div class="nav-brand-mark">O</div>
+            <div class="nav-brand-text">
+                <h1>OfferClaw</h1>
+                <p>Job Hunt Archive</p>
+            </div>
+        </a>
+        <div class="nav-links">
+            <a href="index.html">看板</a>
+            <a href="profile.html">个人画像</a>
+            <a href="smart-fill.html" class="active">智能填写</a>
+            <a href="agent.html">Agent</a>
+            <a href="settings.html">设置</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- 步骤指示器 -->
+        <div class="step-indicator">
+            <div class="step active" id="step1">
+                <div class="step-number">1</div>
+                <div>输入URL</div>
+            </div>
+            <div class="step" id="step2">
+                <div class="step-number">2</div>
+                <div>识别字段</div>
+            </div>
+            <div class="step" id="step3">
+                <div class="step-number">3</div>
+                <div>匹配填写</div>
+            </div>
+            <div class="step" id="step4">
+                <div class="step-number">4</div>
+                <div>生成脚本</div>
+            </div>
+        </div>
+
+        <!-- 步骤 1: 输入 URL -->
+        <div id="section1" class="url-input-section">
+            <h2>步骤 1: 输入目标网页 URL</h2>
+            <p>输入企业网申页面的 URL，系统将自动识别表单字段。</p>
+            
+            <input type="url" id="urlInput" placeholder="例如：https://jobs.company.com/apply" />
+            
+            <button class="btn btn-primary" onclick="extractFields()">
+                🔍 开始识别
+            </button>
+            
+            <div id="loading1" class="loading">
+                <div class="spinner"></div>
+                <p>正在抓取页面并识别表单字段...</p>
+            </div>
+        </div>
+
+        <!-- 步骤 2: 显示字段列表 -->
+        <div id="section2" style="display: none;">
+            <div class="field-list">
+                <h2>步骤 2: 已识别的表单字段</h2>
+                <p>系统已识别以下表单字段，请确认并点击"智能匹配"按钮。</p>
+                
+                <div id="fieldsList"></div>
+                
+                <button class="btn btn-primary" onclick="matchFields()" style="margin-top: 1rem;">
+                    🤖 智能匹配
+                </button>
+                
+                <div id="loading2" class="loading">
+                    <div class="spinner"></div>
+                    <p>正在进行语义匹配...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 步骤 3: 显示匹配结果 -->
+        <div id="section3" style="display: none;">
+            <div class="field-list">
+                <h2>步骤 3: 匹配结果</h2>
+                <p>系统已根据您的用户画像自动匹配填写内容，您可以手动调整。</p>
+                
+                <div id="mappingsList"></div>
+                
+                <button class="btn btn-primary" onclick="generateScript()" style="margin-top: 1rem;">
+                    📝 生成填写脚本
+                </button>
+            </div>
+        </div>
+
+        <!-- 步骤 4: 显示脚本 -->
+        <div id="section4" style="display: none;">
+            <div class="field-list">
+                <h2>步骤 4: 填写脚本</h2>
+                <div class="alert alert-success">
+                    <strong>✓ 脚本已生成！</strong><br>
+                    请将下方脚本复制到目标页面的浏览器控制台（按 F12 打开）并执行。
+                </div>
+                
+                <div id="scriptOutput" class="script-output"></div>
+                
+                <button class="btn btn-secondary" onclick="copyScript()" style="margin-top: 1rem;">
+                    📋 复制脚本
+                </button>
+                
+                <div class="alert alert-success" id="copySuccess" style="display: none; margin-top: 1rem;">
+                    <strong>✓ 已复制到剪贴板！</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/v1';
+        let extractedFields = [];
+        let matchedMappings = [];
+        
+        // 步骤 1: 提取字段
+        async function extractFields() {
+            const url = document.getElementById('urlInput').value.trim();
+            
+            if (!url) {
+                alert('请输入 URL');
+                return;
+            }
+            
+            // 显示加载动画
+            document.getElementById('loading1').classList.add('show');
+            
+            try {
+                const response = await fetch(`${API_BASE}/automation/extract-from-url`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer demo-token'
+                    },
+                    body: JSON.stringify({ url })
+                });
+                
+                const result = await response.json();
+                
+                if (result.code === 0) {
+                    extractedFields = result.data.fields;
+                    displayFields(result.data);
+                    
+                    // 更新步骤指示器
+                    updateStep(1);
+                    document.getElementById('section1').style.display = 'none';
+                    document.getElementById('section2').style.display = 'block';
+                } else {
+                    alert('提取失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('请求失败，请检查后端服务是否运行');
+            } finally {
+                document.getElementById('loading1').classList.remove('show');
+            }
+        }
+        
+        // 显示字段列表
+        function displayFields(data) {
+            const fieldsList = document.getElementById('fieldsList');
+            fieldsList.innerHTML = `
+                <p><strong>页面标题:</strong> ${data.title}</p>
+                <p><strong>识别到字段数:</strong> ${data.field_count}</p>
+                <hr>
+                ${data.fields.map((field, idx) => `
+                    <div class="field-item">
+                        <div>
+                            <div class="field-label">${field.label}</div>
+                            <div class="field-type">${field.type} ${field.required ? '(必填)' : ''}</div>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+        }
+        
+        // 步骤 2: 匹配字段
+        async function matchFields() {
+            document.getElementById('loading2').classList.add('show');
+            
+            try {
+                const response = await fetch(`${API_BASE}/automation/match`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer demo-token'
+                    },
+                    body: JSON.stringify({ fields: extractedFields })
+                });
+                
+                const result = await response.json();
+                
+                if (result.code === 0) {
+                    matchedMappings = result.data.mappings;
+                    displayMappings();
+                    
+                    // 更新步骤指示器
+                    updateStep(2);
+                    document.getElementById('section2').style.display = 'none';
+                    document.getElementById('section3').style.display = 'block';
+                } else {
+                    alert('匹配失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('请求失败，请检查后端服务是否运行');
+            } finally {
+                document.getElementById('loading2').classList.remove('show');
+            }
+        }
+        
+        // 显示匹配结果
+        function displayMappings() {
+            const mappingsList = document.getElementById('mappingsList');
+            mappingsList.innerHTML = matchedMappings.map((mapping, idx) => `
+                <div class="field-item">
+                    <div style="flex: 0.3;">
+                        <div class="field-label">${extractedFields[idx].label}</div>
+                        <div class="field-type">${extractedFields[idx].type}</div>
+                    </div>
+                    <div class="mapping-value">
+                        <input type="text" value="${mapping.value || ''}" 
+                               onchange="updateMapping(${idx}, this.value)" />
+                    </div>
+                    <div style="color: ${mapping.confidence > 0.7 ? '#28a745' : '#ffc107'};">
+                        置信度: ${mapping.confidence.toFixed(2)}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // 更新匹配值
+        function updateMapping(index, value) {
+            matchedMappings[index].value = value;
+        }
+        
+        // 步骤 3: 生成脚本
+        async function generateScript() {
+            try {
+                const response = await fetch(`${API_BASE}/automation/generate-script`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer demo-token'
+                    },
+                    body: JSON.stringify({
+                        fields: extractedFields,
+                        mappings: matchedMappings
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.code === 0) {
+                    displayScript(result.data.script);
+                    
+                    // 更新步骤指示器
+                    updateStep(3);
+                    document.getElementById('section3').style.display = 'none';
+                    document.getElementById('section4').style.display = 'block';
+                } else {
+                    alert('生成失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('请求失败，请检查后端服务是否运行');
+            }
+        }
+        
+        // 显示脚本
+        function displayScript(script) {
+            document.getElementById('scriptOutput').textContent = script;
+        }
+        
+        // 复制脚本
+        function copyScript() {
+            const script = document.getElementById('scriptOutput').textContent;
+            navigator.clipboard.writeText(script).then(() => {
+                document.getElementById('copySuccess').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('copySuccess').style.display = 'none';
+                }, 2000);
+            });
+        }
+        
+        // 更新步骤指示器
+        function updateStep(completedStep) {
+            for (let i = 1; i <= 4; i++) {
+                const step = document.getElementById(`step${i}`);
+                step.classList.remove('active', 'completed');
+                
+                if (i <= completedStep) {
+                    step.classList.add('completed');
+                } else if (i === completedStep + 1) {
+                    step.classList.add('active');
+                }
+            }
+        }
+    </script>
+</body>
+</html>

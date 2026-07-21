@@ -1,0 +1,209 @@
+"""
+Agent API
+- POST /api/v1/agent/chat: SSE 流式对话
+- POST /api/v1/agent/confirm: 确认敏感操作
+- GET  /api/v1/agent/sessions: 列出会话
+- GET  /api/v1/agent/sessions/{id}: 获取会话详情
+- DELETE /api/v1/agent/sessions/{id}: 删除会话
+"""
+
+import json
+import logging
+import uuid
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse, JSONResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.auth import get_current_user
+from app.core.database import get_db
+from app.core.llm import get_default_provider
+from app.agent.apps import create_job_agent
+from app.agent.runtime.events import (
+    ContentDelta, ToolCallStart, ToolResultEvent,
+    DoneEvent, ConfirmRequiredEvent, ErrorEvent,
+)
+from app.models.application import AgentSession
+
+logger = logging.getLogger("offerclaw.api.agent")
+
+router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
+
+
+# ============ Schemas ============
+
+class ChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+
+
+class ConfirmRequest(BaseModel):
+    action_id: str
+    approved: bool
+    session_id: str
+
+
+# ============ SSE 辅助 ============
+
+def _event_to_sse(event) -> str:
+    """把 AgentEvent 序列化为 SSE 数据行"""
+    data = event.model_dump(mode="json")
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+# ============ 路由 ============
+
+@router.post("/chat")
+async def agent_chat(
+    req: ChatRequest,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Agent 对话接口（SSE 流式响应）
+
+    事件类型：
+    - content_delta: 文本增量 {"type":"content_delta","delta":"..."}
+    - tool_call_start: 工具调用开始
+    - tool_result: 工具执行结果
+    - confirm_required: 需要用户确认
+    - done: 完成
+    - error: 错误
+    """
+    logger.info(f"用户 {user_id} 对话: {req.message[:80]}")
+
+    llm = get_default_provider()
+    agent = create_job_agent(
+        llm=llm,
+        db=db,
+        user_id=user_id,
+        session_id=req.session_id,
+    )
+
+    async def event_stream():
+        try:
+            async for event in agent.run_stream(req.message):
+                yield _event_to_sse(event)
+        except Exception as e:
+            logger.exception(f"Agent 流式异常: {e}")
+            yield _event_to_sse(ErrorEvent(message=str(e)))
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # nginx 不缓冲
+        },
+    )
+
+
+@router.post("/confirm")
+async def confirm_action(
+    req: ConfirmRequest,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    确认敏感操作后恢复执行（SSE 流式）
+
+    用户在前端点击"确认/取消"后调用此接口，agent 会恢复运行
+    """
+    logger.info(f"用户 {user_id} 确认操作 action_id={req.action_id} approved={req.approved}")
+
+    # 重新加载 agent state
+    llm = get_default_provider()
+    agent = create_job_agent(
+        llm=llm,
+        db=db,
+        user_id=user_id,
+        session_id=req.session_id,
+    )
+
+    async def event_stream():
+        try:
+            async for event in agent.resume_after_confirm(req.action_id, req.approved):
+                yield _event_to_sse(event)
+        except Exception as e:
+            logger.exception(f"Agent 恢复异常: {e}")
+            yield _event_to_sse(ErrorEvent(message=str(e)))
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
+
+
+@router.get("/sessions")
+async def list_sessions(
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    limit: int = 20,
+):
+    """列出用户的所有会话"""
+    sessions = db.query(AgentSession).filter(
+        AgentSession.user_id == user_id
+    ).order_by(AgentSession.updated_at.desc().nullslast()).limit(limit).all()
+
+    return {
+        "code": 0,
+        "data": [
+            {
+                "id": str(s.id),
+                "title": s.title or "未命名会话",
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+            }
+            for s in sessions
+        ],
+    }
+
+
+@router.get("/sessions/{session_id}")
+async def get_session(
+    session_id: str,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """获取会话详情（含完整消息历史）"""
+    sess = db.query(AgentSession).filter(
+        AgentSession.id == session_id,
+        AgentSession.user_id == user_id,
+    ).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    messages = json.loads(sess.messages or "[]")
+    return {
+        "code": 0,
+        "data": {
+            "id": str(sess.id),
+            "title": sess.title,
+            "messages": messages,
+            "created_at": sess.created_at.isoformat() if sess.created_at else None,
+            "updated_at": sess.updated_at.isoformat() if sess.updated_at else None,
+        },
+    }
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(
+    session_id: str,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """删除会话"""
+    sess = db.query(AgentSession).filter(
+        AgentSession.id == session_id,
+        AgentSession.user_id == user_id,
+    ).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    db.delete(sess)
+    db.commit()
+    return {"code": 0, "message": "会话已删除"}

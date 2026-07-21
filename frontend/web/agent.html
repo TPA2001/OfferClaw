@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent — OfferClaw</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <style>
+        .agent-layout {
+            max-width: 920px;
+            margin: 0 auto;
+            padding: 1.5rem 1.8rem 2rem;
+            height: calc(100vh - 70px);
+            display: flex;
+            flex-direction: column;
+            gap: 0.9rem;
+        }
+
+        /* Session bar */
+        .session-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.55rem 0.9rem;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+        }
+        .session-bar-left {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--ink-soft);
+        }
+        .session-bar select {
+            padding: 0.3rem 0.6rem;
+            border: 1px solid var(--line);
+            border-radius: 5px;
+            background: var(--paper-light);
+            color: var(--ink);
+            font-family: inherit;
+            font-size: 0.82rem;
+            cursor: pointer;
+        }
+        .session-bar select:focus {
+            outline: none;
+            border-color: var(--olive);
+            box-shadow: 0 0 0 2px var(--olive-glow);
+        }
+        .session-bar .session-actions {
+            display: flex;
+            gap: 0.3rem;
+        }
+
+        /* Chat area */
+        .chat-area {
+            flex: 1;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 1.3rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.9rem;
+            position: relative;
+        }
+        .chat-area::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: var(--olive);
+            border-radius: 10px 10px 0 0;
+            opacity: 0.4;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--ink-soft);
+            margin: auto;
+        }
+        .empty-state .empty-icon {
+            font-size: 2.8rem;
+            margin-bottom: 0.8rem;
+            display: inline-block;
+            animation: bobble 3s ease-in-out infinite;
+        }
+        @keyframes bobble {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+        .empty-state h3 {
+            font-family: var(--font-serif);
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--ink);
+            margin-bottom: 0.4rem;
+        }
+        .empty-state > p {
+            font-size: 0.9rem;
+            color: var(--ink-soft);
+            margin-bottom: 1.2rem;
+        }
+        .suggestions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            max-width: 580px;
+            margin: 0 auto;
+        }
+        .suggestion {
+            background: var(--paper-light);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 0.7rem 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s var(--ease);
+            font-size: 0.82rem;
+            color: var(--ink-soft);
+            text-align: left;
+            font-family: inherit;
+        }
+        .suggestion:hover {
+            background: var(--olive-soft);
+            border-color: var(--olive);
+            color: var(--olive-dark);
+            transform: translateX(2px);
+        }
+
+        /* Messages */
+        .msg {
+            display: flex;
+            gap: 0.7rem;
+            animation: msgIn 0.3s var(--ease-out);
+        }
+        @keyframes msgIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .msg-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            display: grid;
+            place-items: center;
+            font-family: var(--font-serif);
+            font-weight: 700;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+        .msg.user {
+            flex-direction: row-reverse;
+        }
+        .msg.user .msg-avatar {
+            background: var(--ink);
+            color: var(--paper-light);
+        }
+        .msg.assistant .msg-avatar {
+            background: var(--olive);
+            color: var(--paper-light);
+        }
+        .msg-bubble {
+            max-width: 75%;
+            padding: 0.65rem 0.95rem;
+            border-radius: 10px;
+            font-size: 0.88rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .msg.user .msg-bubble {
+            background: var(--ink);
+            color: var(--paper-light);
+            border-bottom-right-radius: 2px;
+        }
+        .msg.assistant .msg-bubble {
+            background: var(--paper-light);
+            color: var(--ink);
+            border: 1px solid var(--line);
+            border-bottom-left-radius: 2px;
+        }
+
+        /* Tool events */
+        .tool-event {
+            background: var(--olive-soft);
+            border-left: 3px solid var(--olive);
+            padding: 0.5rem 0.8rem;
+            border-radius: 4px;
+            font-size: 0.78rem;
+            color: var(--olive-dark);
+            margin-left: 2.6rem;
+            animation: msgIn 0.3s var(--ease-out);
+        }
+        .tool-event.error {
+            background: #fbeae6;
+            border-left-color: var(--danger);
+            color: var(--danger);
+        }
+        .tool-event-name {
+            font-weight: 600;
+            margin-bottom: 0.2rem;
+            font-family: var(--font-mono);
+        }
+
+        /* Confirm card */
+        .confirm-card {
+            background: #fef9e7;
+            border: 1px solid #f0c36d;
+            border-left: 3px solid var(--warn);
+            border-radius: 8px;
+            padding: 0.8rem 1rem;
+            margin-left: 2.6rem;
+            font-size: 0.85rem;
+            animation: msgIn 0.3s var(--ease-out);
+        }
+        .confirm-card code {
+            background: rgba(0,0,0,0.06);
+            padding: 0.1rem 0.35rem;
+            border-radius: 3px;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+        }
+        .confirm-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.7rem;
+        }
+        .confirm-actions button {
+            padding: 0.35rem 0.85rem;
+            border-radius: 5px;
+            border: 1px solid var(--line);
+            font-family: inherit;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s var(--ease);
+        }
+        .confirm-actions .approve {
+            background: var(--olive);
+            color: var(--paper-light);
+            border-color: var(--olive);
+        }
+        .confirm-actions .approve:hover { background: var(--olive-dark); }
+        .confirm-actions .reject {
+            background: var(--card);
+            color: var(--ink-soft);
+        }
+        .confirm-actions .reject:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+        .confirm-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Input area */
+        .input-area {
+            display: flex;
+            gap: 0.5rem;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 0.5rem;
+            align-items: flex-end;
+            transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+        }
+        .input-area:focus-within {
+            border-color: var(--olive);
+            box-shadow: 0 0 0 3px var(--olive-glow);
+        }
+        .input-area textarea {
+            flex: 1;
+            border: none;
+            background: transparent;
+            font-family: inherit;
+            font-size: 0.9rem;
+            color: var(--ink);
+            resize: none;
+            padding: 0.5rem 0.6rem;
+            outline: none;
+            line-height: 1.5;
+            min-height: 24px;
+            max-height: 120px;
+        }
+        .input-area textarea::placeholder {
+            color: var(--ink-faint);
+        }
+        .input-area button {
+            background: var(--olive);
+            color: var(--paper-light);
+            border: none;
+            padding: 0.55rem 1.2rem;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s var(--ease);
+        }
+        .input-area button:hover:not(:disabled) {
+            background: var(--olive-dark);
+            transform: translateY(-1px);
+        }
+        .input-area button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Typing indicator */
+        .typing-dots {
+            display: inline-flex;
+            gap: 3px;
+            align-items: center;
+        }
+        .typing-dots span {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--ink-faint);
+            animation: typing 1.2s ease-in-out infinite;
+        }
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+            30% { transform: translateY(-4px); opacity: 1; }
+        }
+
+        @media (max-width: 640px) {
+            .agent-layout { padding: 1rem; height: auto; min-height: calc(100vh - 70px); }
+            .suggestions { grid-template-columns: 1fr; }
+            .msg-bubble { max-width: 85%; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">
+            <div class="nav-brand-mark">O</div>
+            <div class="nav-brand-text">
+                <h1>OfferClaw</h1>
+                <p>Job Hunt Archive</p>
+            </div>
+        </a>
+        <div class="nav-links">
+            <a href="index.html">看板</a>
+            <a href="profile.html">个人画像</a>
+            <a href="smart-fill.html">智能填写</a>
+            <a href="agent.html" class="active">Agent</a>
+            <a href="settings.html">设置</a>
+        </div>
+    </nav>
+
+    <div class="agent-layout">
+        <!-- Session bar -->
+        <div class="session-bar">
+            <div class="session-bar-left">
+                <span style="font-family:var(--font-mono);font-size:0.72rem;letter-spacing:1px;color:var(--olive);">SESSION</span>
+                <select id="sessionSelect">
+                    <option value="">新会话</option>
+                </select>
+            </div>
+            <div class="session-actions">
+                <button class="btn btn-ghost btn-sm" id="newSessionBtn">＋ 新建</button>
+                <button class="btn btn-ghost btn-sm" id="refreshSessionsBtn">↻ 刷新</button>
+            </div>
+        </div>
+
+        <!-- Chat area -->
+        <div class="chat-area" id="chatArea">
+            <div class="empty-state" id="emptyState">
+                <div class="empty-icon">🤖</div>
+                <h3>你好，我是 OfferClaw Agent</h3>
+                <p>对话式求职助手 — 管理投递、查询状态、复盘进度</p>
+                <div class="suggestions">
+                    <button class="suggestion" onclick="sendSuggestion('记录我投递了腾讯的后端开发岗位')">📝 记录我投递了腾讯的后端开发岗位</button>
+                    <button class="suggestion" onclick="sendSuggestion('查看我的投递记录')">📊 查看我的投递记录</button>
+                    <button class="suggestion" onclick="sendSuggestion('我的投递统计概览')">📈 我的投递统计概览</button>
+                    <button class="suggestion" onclick="sendSuggestion('腾讯进入面试了')">🔄 腾讯进入面试了</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input -->
+        <div class="input-area">
+            <textarea id="msgInput" placeholder="输入消息，Enter 发送，Shift+Enter 换行..." rows="1"></textarea>
+            <button id="sendBtn" onclick="sendMessage()">发送</button>
+        </div>
+    </div>
+
+    <script>
+        const TOKEN = "demo-token";
+        const API_BASE = "http://localhost:8000";
+
+        let currentSessionId = null;
+        let isStreaming = false;
+        let pendingConfirm = null;
+
+        const chatArea = document.getElementById('chatArea');
+        const msgInput = document.getElementById('msgInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const sessionSelect = document.getElementById('sessionSelect');
+        const emptyState = document.getElementById('emptyState');
+
+        msgInput.addEventListener('input', () => {
+            msgInput.style.height = 'auto';
+            msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
+        });
+        msgInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        function sendSuggestion(text) {
+            msgInput.value = text;
+            sendMessage();
+        }
+
+        function hideEmptyState() {
+            if (emptyState) emptyState.style.display = 'none';
+        }
+
+        function appendUserMsg(text) {
+            hideEmptyState();
+            const div = document.createElement('div');
+            div.className = 'msg user';
+            div.innerHTML = `<div class="msg-avatar">我</div><div class="msg-bubble"></div>`;
+            div.querySelector('.msg-bubble').textContent = text;
+            chatArea.appendChild(div);
+            scrollToBottom();
+        }
+
+        function appendAssistantMsg() {
+            hideEmptyState();
+            const div = document.createElement('div');
+            div.className = 'msg assistant';
+            div.id = 'current-assistant';
+            div.innerHTML = `<div class="msg-avatar">O</div><div class="msg-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
+            chatArea.appendChild(div);
+            return div.querySelector('.msg-bubble');
+        }
+
+        function appendToolEvent(name, status, data) {
+            const div = document.createElement('div');
+            div.className = 'tool-event' + (status === 'error' ? ' error' : '');
+            let content = `<div class="tool-event-name">🔧 ${name}</div>`;
+            if (data && data.message) content += `<div>${escapeHtml(data.message)}</div>`;
+            div.innerHTML = content;
+            chatArea.appendChild(div);
+            scrollToBottom();
+        }
+
+        function appendConfirmCard(actionId, toolName, description, args) {
+            const div = document.createElement('div');
+            div.className = 'confirm-card';
+            div.id = `confirm-${actionId}`;
+            div.innerHTML = `
+                <div><strong>⚠️ 需要确认操作</strong></div>
+                <div style="margin-top:0.3rem;">工具：<code>${toolName}</code></div>
+                <div style="margin-top:0.2rem;">说明：${escapeHtml(description)}</div>
+                <div style="margin-top:0.4rem;">参数：<code>${escapeHtml(JSON.stringify(args))}</code></div>
+                <div class="confirm-actions">
+                    <button class="approve" onclick="confirmAction('${actionId}', true)">确认执行</button>
+                    <button class="reject" onclick="confirmAction('${actionId}', false)">取消</button>
+                </div>
+            `;
+            chatArea.appendChild(div);
+            scrollToBottom();
+        }
+
+        function escapeHtml(s) {
+            if (typeof s !== 'string') s = JSON.stringify(s);
+            return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        function scrollToBottom() {
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const text = msgInput.value.trim();
+            if (!text || isStreaming) return;
+
+            appendUserMsg(text);
+            msgInput.value = '';
+            msgInput.style.height = 'auto';
+
+            const assistantBubble = appendAssistantMsg();
+            await streamRequest('/api/v1/agent/chat', { message: text, session_id: currentSessionId }, assistantBubble);
+        }
+
+        async function confirmAction(actionId, approved) {
+            if (!pendingConfirm || pendingConfirm.actionId !== actionId) return;
+            const card = document.getElementById(`confirm-${actionId}`);
+            if (card) {
+                card.querySelectorAll('button').forEach(b => b.disabled = true);
+            }
+            const assistantBubble = appendAssistantMsg();
+            await streamRequest('/api/v1/agent/confirm', {
+                action_id: actionId,
+                approved: approved,
+                session_id: pendingConfirm.sessionId,
+            }, assistantBubble);
+            pendingConfirm = null;
+        }
+
+        async function streamRequest(path, body, assistantBubble) {
+            isStreaming = true;
+            sendBtn.disabled = true;
+            let contentBuffer = '';
+            let firstDelta = true;
+
+            try {
+                const resp = await fetch(API_BASE + path, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${TOKEN}`,
+                    },
+                    body: JSON.stringify(body),
+                });
+
+                if (!resp.ok) {
+                    assistantBubble.textContent = `请求失败：${resp.status} ${resp.statusText}`;
+                    isStreaming = false;
+                    sendBtn.disabled = false;
+                    return;
+                }
+
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const dataStr = line.slice(6).trim();
+                        if (!dataStr) continue;
+                        let evt;
+                        try { evt = JSON.parse(dataStr); } catch { continue; }
+
+                        if (evt.type === 'content_delta') {
+                            if (firstDelta) {
+                                assistantBubble.textContent = '';
+                                firstDelta = false;
+                            }
+                            contentBuffer += evt.delta;
+                            assistantBubble.textContent = contentBuffer;
+                            scrollToBottom();
+                        } else if (evt.type === 'tool_result') {
+                            appendToolEvent(evt.tool_name, evt.success ? 'success' : 'error', {
+                                message: evt.error || (evt.data && evt.data.message) || '完成'
+                            });
+                        } else if (evt.type === 'confirm_required') {
+                            appendConfirmCard(evt.action_id, evt.tool_name, evt.description, evt.arguments);
+                            pendingConfirm = { actionId: evt.action_id, sessionId: evt.session_id || currentSessionId };
+                            if (evt.session_id) currentSessionId = evt.session_id;
+                        } else if (evt.type === 'done') {
+                            if (evt.session_id) {
+                                currentSessionId = evt.session_id;
+                                updateSessionSelect();
+                            }
+                            if (firstDelta && !contentBuffer) {
+                                assistantBubble.textContent = '（任务完成，已调用工具）';
+                            }
+                        } else if (evt.type === 'error') {
+                            assistantBubble.textContent = '❌ 错误：' + evt.message;
+                        }
+                    }
+                }
+            } catch (e) {
+                assistantBubble.textContent = '网络错误：' + e.message;
+            } finally {
+                isStreaming = false;
+                sendBtn.disabled = false;
+                scrollToBottom();
+            }
+        }
+
+        async function loadSessions() {
+            try {
+                const resp = await fetch(API_BASE + '/api/v1/agent/sessions', {
+                    headers: { 'Authorization': `Bearer ${TOKEN}` },
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    sessionSelect.innerHTML = '<option value="">新会话</option>';
+                    for (const s of data.data) {
+                        const opt = document.createElement('option');
+                        opt.value = s.id;
+                        opt.textContent = s.title || '未命名';
+                        sessionSelect.appendChild(opt);
+                    }
+                    if (currentSessionId) sessionSelect.value = currentSessionId;
+                }
+            } catch (e) {
+                console.error('加载会话列表失败', e);
+            }
+        }
+
+        async function updateSessionSelect() {
+            await loadSessions();
+        }
+
+        sessionSelect.addEventListener('change', async () => {
+            const sid = sessionSelect.value;
+            currentSessionId = sid || null;
+            chatArea.innerHTML = '';
+            if (!sid) {
+                chatArea.appendChild(emptyState);
+                emptyState.style.display = '';
+                return;
+            }
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/v1/agent/sessions/${sid}`, {
+                    headers: { 'Authorization': `Bearer ${TOKEN}` },
+                });
+                const data = await resp.json();
+                if (data.code === 0 && data.data.messages) {
+                    for (const m of data.data.messages) {
+                        if (m.role === 'user') {
+                            appendUserMsg(m.content);
+                        } else if (m.role === 'assistant' && m.content) {
+                            const bubble = appendAssistantMsg();
+                            bubble.textContent = m.content;
+                        }
+                    }
+                    scrollToBottom();
+                }
+            } catch (e) {
+                console.error('加载会话详情失败', e);
+            }
+        });
+
+        document.getElementById('newSessionBtn').addEventListener('click', () => {
+            currentSessionId = null;
+            sessionSelect.value = '';
+            chatArea.innerHTML = '';
+            chatArea.appendChild(emptyState);
+            emptyState.style.display = '';
+        });
+
+        document.getElementById('refreshSessionsBtn').addEventListener('click', loadSessions);
+
+        loadSessions();
+    </script>
+</body>
+</html>

@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设置 - OfferClaw</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --paper: #f5f1e8;
+            --paper-light: #faf8f3;
+            --card: #fefdf9;
+            --ink: #2d2a26;
+            --ink-soft: #6b665e;
+            --ink-faint: #a8a299;
+            --olive: #6b7d0a;
+            --olive-dark: #556b08;
+            --olive-soft: #e8ebd0;
+            --terra: #c4664a;
+            --line: #e0dacd;
+            --line-soft: #ece7da;
+            --danger: #b94a3a;
+            --success: #5a7a3a;
+            --warn: #b8860b;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--paper);
+            color: var(--ink);
+            min-height: 100vh;
+            background-image:
+                radial-gradient(circle at 20% 10%, rgba(107,125,10,0.04) 0%, transparent 40%),
+                radial-gradient(circle at 80% 90%, rgba(196,102,74,0.03) 0%, transparent 40%);
+        }
+
+        .navbar {
+            background: var(--card); border-bottom: 1px solid var(--line);
+            padding: 1rem 2rem; display: flex; justify-content: space-between;
+            align-items: center; position: sticky; top: 0; z-index: 100;
+            backdrop-filter: blur(8px);
+        }
+        .nav-brand h1 { font-family: 'Noto Serif SC', serif; font-size: 1.4rem; color: var(--olive); margin: 0; letter-spacing: 0.5px; }
+        .nav-brand p { margin: 0; font-size: 0.75rem; color: var(--ink-faint); }
+        .nav-links { display: flex; gap: 1.5rem; }
+        .nav-links a {
+            text-decoration: none; color: var(--ink-soft); font-weight: 500; font-size: 0.9rem;
+            padding: 0.4rem 0.2rem; border-bottom: 2px solid transparent; transition: all 0.2s;
+        }
+        .nav-links a:hover { color: var(--olive); }
+        .nav-links a.active { color: var(--olive); border-bottom-color: var(--olive); }
+
+        .container { max-width: 880px; margin: 0 auto; padding: 2.5rem 2rem 4rem; }
+
+        .page-header {
+            display: flex; justify-content: space-between; align-items: flex-end;
+            margin-bottom: 2rem; padding-bottom: 1.2rem;
+            border-bottom: 2px solid var(--ink); position: relative;
+        }
+        .page-header::after { content:''; position:absolute; bottom:-2px; left:0; width:60px; height:2px; background: var(--olive); }
+        .page-title { font-family: 'Noto Serif SC', serif; font-size: 1.8rem; font-weight: 700; margin: 0; }
+        .page-subtitle { font-size: 0.85rem; color: var(--ink-faint); margin: 0.3rem 0 0; }
+
+        .section { margin-bottom: 2rem; }
+        .section-title {
+            font-family: 'Noto Serif SC', serif; font-size: 1.1rem; font-weight: 700;
+            color: var(--ink); margin: 0 0 1rem;
+            display: flex; align-items: center; gap: 0.5rem;
+            padding-bottom: 0.5rem; border-bottom: 1px dashed var(--line-soft);
+        }
+        .section-title .num {
+            font-size: 0.75rem; color: var(--ink-faint); font-style: italic;
+            font-weight: 400; font-family: 'Noto Serif SC', serif;
+        }
+
+        .card {
+            background: var(--card); border: 1px solid var(--line);
+            border-radius: 10px; padding: 1.3rem 1.5rem; margin-bottom: 0.8rem;
+            transition: box-shadow 0.2s;
+        }
+        .card:hover { box-shadow: 0 2px 12px rgba(45,42,38,0.05); }
+
+        /* 状态项 */
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.8rem;
+        }
+        .status-item {
+            background: var(--paper-light); border: 1px solid var(--line);
+            border-radius: 8px; padding: 0.9rem 1.1rem;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .status-item .label { font-size: 0.82rem; color: var(--ink-soft); }
+        .status-item .value {
+            font-size: 0.85rem; font-weight: 600;
+            display: flex; align-items: center; gap: 0.35rem;
+        }
+        .dot {
+            width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+        }
+        .dot.ok { background: var(--success); box-shadow: 0 0 0 3px rgba(90,122,58,0.15); }
+        .dot.err { background: var(--danger); box-shadow: 0 0 0 3px rgba(185,74,58,0.15); }
+        .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(184,134,11,0.15); }
+        .dot.pending { background: var(--ink-faint); }
+
+        /* 配置展示 */
+        .config-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.6rem 0; border-bottom: 1px dashed var(--line-soft);
+        }
+        .config-row:last-child { border-bottom: none; }
+        .config-key { font-size: 0.85rem; color: var(--ink-soft); }
+        .config-val {
+            font-size: 0.85rem; font-family: 'Noto Sans SC', monospace;
+            color: var(--ink); font-weight: 500;
+            max-width: 60%; text-align: right; word-break: break-all;
+        }
+        .config-val.masked { color: var(--ink-faint); letter-spacing: 2px; }
+        .config-val.set { color: var(--success); }
+        .config-val.unset { color: var(--ink-faint); font-style: italic; }
+
+        /* 指南代码块 — 稿纸风 */
+        .guide-block {
+            background: var(--paper-deep); color: var(--ink);
+            border: 1px solid var(--line);
+            border-left: 3px solid var(--olive);
+            border-radius: 6px; padding: 1rem 1.2rem;
+            font-family: var(--font-mono); font-size: 0.8rem;
+            line-height: 1.8; overflow-x: auto; margin: 0.8rem 0;
+            position: relative;
+            white-space: pre;
+        }
+        .guide-block .comment { color: var(--ink-faint); font-style: italic; }
+        .guide-block .key { color: var(--olive-dark); font-weight: 600; }
+        .guide-block .val { color: var(--terra-deep); }
+        .copy-btn {
+            position: absolute; top: 0.6rem; right: 0.6rem;
+            background: var(--card); border: 1px solid var(--line); color: var(--ink-soft);
+            padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.72rem;
+            cursor: pointer; font-family: inherit; transition: background 0.2s;
+        }
+        .copy-btn:hover { background: var(--olive-soft); border-color: var(--olive); color: var(--olive-dark); }
+
+        /* 按钮 */
+        .btn {
+            padding: 0.5rem 1rem; border: none; border-radius: 6px;
+            font-size: 0.83rem; font-weight: 500; font-family: inherit;
+            cursor: pointer; transition: all 0.2s;
+            display: inline-flex; align-items: center; gap: 0.35rem;
+        }
+        .btn-primary { background: var(--olive); color: white; }
+        .btn-primary:hover { background: var(--olive-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(107,125,10,0.25); }
+        .btn-ghost { background: transparent; color: var(--ink-soft); border: 1px solid var(--line); }
+        .btn-ghost:hover { background: var(--card); border-color: var(--olive); color: var(--olive); }
+        .btn-sm { padding: 0.35rem 0.8rem; font-size: 0.78rem; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* 预设卡片 */
+        .preset-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.8rem; margin-top: 0.8rem;
+        }
+        .preset-card {
+            background: var(--paper-light); border: 1px solid var(--line);
+            border-radius: 8px; padding: 1rem; cursor: pointer;
+            transition: all 0.2s; position: relative;
+        }
+        .preset-card:hover {
+            border-color: var(--olive); background: var(--card);
+            transform: translateY(-1px); box-shadow: 0 3px 10px rgba(45,42,38,0.06);
+        }
+        .preset-card.active { border-color: var(--olive); background: var(--olive-soft); }
+        .preset-name { font-weight: 700; font-size: 0.92rem; margin-bottom: 0.2rem; }
+        .preset-desc { font-size: 0.75rem; color: var(--ink-soft); line-height: 1.5; }
+        .preset-card .check {
+            position: absolute; top: 0.7rem; right: 0.7rem;
+            color: var(--olive); font-size: 1rem; display: none;
+        }
+        .preset-card.active .check { display: block; }
+
+        /* LLM 测试 */
+        .test-box {
+            background: var(--paper-light); border: 1px solid var(--line);
+            border-radius: 8px; padding: 1rem; margin-top: 0.8rem;
+        }
+        .test-input-row { display: flex; gap: 0.5rem; margin-bottom: 0.7rem; }
+        .test-input-row input {
+            flex: 1; padding: 0.5rem 0.7rem; border: 1px solid var(--line);
+            border-radius: 6px; font-size: 0.85rem; font-family: inherit;
+            background: var(--card); color: var(--ink);
+        }
+        .test-input-row input:focus { outline: none; border-color: var(--olive); }
+        .test-result {
+            font-size: 0.82rem; color: var(--ink-soft);
+            min-height: 1.5rem; padding: 0.5rem; border-radius: 4px;
+            white-space: pre-wrap; word-break: break-word;
+        }
+        .test-result.success { background: rgba(90,122,58,0.08); color: var(--success); }
+        .test-result.error { background: rgba(185,74,58,0.08); color: var(--danger); }
+
+        /* 数据统计 */
+        .data-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.7rem;
+        }
+        .data-card {
+            background: var(--paper-light); border: 1px solid var(--line);
+            border-radius: 8px; padding: 0.9rem; text-align: center;
+        }
+        .data-card .num {
+            font-family: 'Noto Serif SC', serif; font-size: 1.5rem; font-weight: 700;
+            color: var(--olive); line-height: 1.2;
+        }
+        .data-card .label { font-size: 0.75rem; color: var(--ink-soft); margin-top: 0.2rem; }
+
+        /* Toast */
+        .toast-container { position: fixed; top: 80px; right: 24px; z-index: 1000; display: flex; flex-direction: column; gap: 0.5rem; }
+        .toast {
+            background: var(--card); border: 1px solid var(--line);
+            border-left: 3px solid var(--olive); padding: 0.7rem 1.1rem;
+            border-radius: 6px; font-size: 0.85rem; color: var(--ink);
+            box-shadow: 0 6px 20px rgba(45,42,38,0.12);
+            animation: slideIn 0.3s ease; max-width: 320px;
+        }
+        .toast.success { border-left-color: var(--success); }
+        .toast.error { border-left-color: var(--danger); }
+        @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        .info-banner {
+            background: var(--olive-soft); border: 1px solid var(--olive);
+            border-radius: 8px; padding: 0.8rem 1.1rem; font-size: 0.82rem;
+            color: var(--olive-dark); margin-bottom: 1.2rem;
+            display: flex; align-items: flex-start; gap: 0.5rem;
+        }
+        .info-banner strong { font-weight: 700; }
+
+        @media (max-width: 640px) {
+            .container { padding: 1.5rem 1rem; }
+            .nav-links { gap: 0.7rem; font-size: 0.82rem; }
+            .config-val { max-width: 50%; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">
+            <div class="nav-brand-mark">O</div>
+            <div class="nav-brand-text">
+                <h1>OfferClaw</h1>
+                <p>Job Hunt Archive</p>
+            </div>
+        </a>
+        <div class="nav-links">
+            <a href="index.html">看板</a>
+            <a href="profile.html">个人画像</a>
+            <a href="smart-fill.html">智能填写</a>
+            <a href="agent.html">Agent</a>
+            <a href="settings.html" class="active">设置</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-header">
+            <div>
+                <h2 class="page-title">设置</h2>
+                <p class="page-subtitle">系统状态、LLM 配置与数据概览</p>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadAll()">↻ 刷新</button>
+        </div>
+
+        <div class="info-banner">
+            <span>💡</span>
+            <span><strong>提示：</strong>LLM 配置通过后端 <code>.env</code> 文件管理，修改后重启后端生效。下方可查看当前配置状态并测试连通性。</span>
+        </div>
+
+        <!-- 系统状态 -->
+        <div class="section">
+            <h3 class="section-title">系统状态 <span class="num">I</span></h3>
+            <div class="card">
+                <div class="status-grid" id="statusGrid">
+                    <div class="status-item">
+                        <span class="label">后端服务</span>
+                        <span class="value"><span class="dot pending"></span>检查中</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">数据库</span>
+                        <span class="value"><span class="dot pending"></span>检查中</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">Agent 服务</span>
+                        <span class="value"><span class="dot pending"></span>检查中</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">智能填写</span>
+                        <span class="value"><span class="dot pending"></span>检查中</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LLM 配置 -->
+        <div class="section">
+            <h3 class="section-title">LLM 配置 <span class="num">II</span></h3>
+            <div class="card">
+                <div class="config-row">
+                    <span class="config-key">Provider</span>
+                    <span class="config-val" id="cfgProvider">-</span>
+                </div>
+                <div class="config-row">
+                    <span class="config-key">API Key</span>
+                    <span class="config-val masked" id="cfgApiKey">-</span>
+                </div>
+                <div class="config-row">
+                    <span class="config-key">Base URL</span>
+                    <span class="config-val" id="cfgBaseUrl">-</span>
+                </div>
+                <div class="config-row">
+                    <span class="config-key">Model</span>
+                    <span class="config-val" id="cfgModel">-</span>
+                </div>
+            </div>
+
+            <p style="font-size:0.82rem;color:var(--ink-soft);margin:1rem 0 0.5rem;">
+                选择预设服务，生成对应的 <code>.env</code> 配置：
+            </p>
+            <div class="preset-grid" id="presetGrid">
+                <div class="preset-card" data-preset="openai" data-base="https://api.openai.com/v1" data-model="gpt-4o-mini">
+                    <span class="check">✓</span>
+                    <div class="preset-name">OpenAI 官方</div>
+                    <div class="preset-desc">gpt-4o-mini，需要海外网络访问</div>
+                </div>
+                <div class="preset-card" data-preset="qwen" data-base="https://dashscope.aliyuncs.com/compatible-mode/v1" data-model="qwen-plus">
+                    <span class="check">✓</span>
+                    <div class="preset-name">通义千问</div>
+                    <div class="preset-desc">阿里云，国内直连无需代理</div>
+                </div>
+                <div class="preset-card" data-preset="deepseek" data-base="https://api.deepseek.com/v1" data-model="deepseek-chat">
+                    <span class="check">✓</span>
+                    <div class="preset-name">DeepSeek</div>
+                    <div class="preset-desc">性价比高，国内可用</div>
+                </div>
+                <div class="preset-card" data-preset="glm" data-base="https://open.bigmodel.cn/api/paas/v4" data-model="glm-4-flash">
+                    <span class="check">✓</span>
+                    <div class="preset-name">智谱 GLM</div>
+                    <div class="preset-desc">glm-4-flash，有免费额度</div>
+                </div>
+            </div>
+
+            <div class="guide-block" id="envGuide">
+<span class="comment"># 复制以下内容到 backend/.env 文件</span>
+<span class="key">LLM_PROVIDER</span>=<span class="val">openai</span>
+<span class="key">OPENAI_API_KEY</span>=<span class="val">sk-你的密钥</span>
+<span class="key">OPENAI_BASE_URL</span>=<span class="val">https://api.openai.com/v1</span>
+<span class="key">OPENAI_MODEL</span>=<span class="val">gpt-4o-mini</span>
+                <button class="copy-btn" onclick="copyEnv()">复制</button>
+            </div>
+
+            <!-- LLM 测试 -->
+            <div class="test-box">
+                <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.5rem;">🔌 连通性测试</div>
+                <div class="test-input-row">
+                    <input type="text" id="testInput" value="你好，请用一句话介绍自己" placeholder="输入测试消息...">
+                    <button class="btn btn-primary btn-sm" id="testBtn" onclick="testLLM()">测试</button>
+                </div>
+                <div class="test-result" id="testResult">点击"测试"验证 LLM 是否可用</div>
+            </div>
+        </div>
+
+        <!-- 数据概览 -->
+        <div class="section">
+            <h3 class="section-title">数据概览 <span class="num">III</span></h3>
+            <div class="card">
+                <div class="data-grid">
+                    <div class="data-card">
+                        <div class="num" id="dataApps">-</div>
+                        <div class="label">投递记录</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="num" id="dataSessions">-</div>
+                        <div class="label">Agent 会话</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="num" id="dataProfile">-</div>
+                        <div class="label">画像完成度</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 关于 -->
+        <div class="section">
+            <h3 class="section-title">关于 <span class="num">IV</span></h3>
+            <div class="card">
+                <div class="config-row">
+                    <span class="config-key">应用名称</span>
+                    <span class="config-val">OfferClaw</span>
+                </div>
+                <div class="config-row">
+                    <span class="config-key">版本</span>
+                    <span class="config-val">1.0.0</span>
+                </div>
+                <div class="config-row">
+                    <span class="config-key">架构</span>
+                    <span class="config-val">三层解耦 Agent（LLM / Runtime / App）</span>
+                </div>
+                <div class="config-row">
+                    <span class="config-key">后端</span>
+                    <span class="config-val">FastAPI + SQLite</span>
+                </div>
+                <div class="config-row">
+                    <span class="config-key">前端</span>
+                    <span class="config-val">原生 HTML / CSS / JS</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        const API_BASE = "http://localhost:8000";
+        const TOKEN = "demo-token";
+
+        let selectedPreset = 'openai';
+
+        // ============ Toast ============
+        function toast(msg, type = 'success') {
+            const c = document.getElementById('toastContainer');
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            t.textContent = msg;
+            c.appendChild(t);
+            setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(20px)'; setTimeout(() => t.remove(), 300); }, 2600);
+        }
+
+        // ============ 加载系统状态 ============
+        async function loadHealth() {
+            const grid = document.getElementById('statusGrid');
+            try {
+                const r = await fetch(`${API_BASE}/health`);
+                const data = await r.json();
+                const services = data.services || {};
+                grid.innerHTML = `
+                    <div class="status-item">
+                        <span class="label">后端服务</span>
+                        <span class="value"><span class="dot ok"></span>运行中</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">数据库</span>
+                        <span class="value"><span class="dot ${services.database === 'connected' ? 'ok' : 'err'}"></span>${services.database === 'connected' ? '已连接' : '异常'}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">Agent 服务</span>
+                        <span class="value"><span class="dot ${services.agent === 'available' ? 'ok' : 'err'}"></span>${services.agent === 'available' ? '可用' : '不可用'}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">智能填写</span>
+                        <span class="value"><span class="dot ${services.automation === 'available' ? 'ok' : 'err'}"></span>${services.automation === 'available' ? '可用' : '不可用'}</span>
+                    </div>
+                `;
+            } catch (e) {
+                grid.innerHTML = `
+                    <div class="status-item">
+                        <span class="label">后端服务</span>
+                        <span class="value"><span class="dot err"></span>无法连接</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">数据库</span>
+                        <span class="value"><span class="dot err"></span>未知</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">Agent 服务</span>
+                        <span class="value"><span class="dot err"></span>未知</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">智能填写</span>
+                        <span class="value"><span class="dot err"></span>未知</span>
+                    </div>
+                `;
+            }
+        }
+
+        // ============ 加载 LLM 配置 ============
+        // 由于没有直接的配置 API，我们通过 Agent 行为推断
+        // 尝试发一条消息看是否走 Mock（Mock 会返回特定格式）
+        async function loadLLMConfig() {
+            // 尝试从 localStorage 读取上次保存的配置（用户手动输入）
+            const saved = localStorage.getItem('offerclaw_llm_config');
+            if (saved) {
+                try {
+                    const cfg = JSON.parse(saved);
+                    document.getElementById('cfgProvider').textContent = cfg.provider || 'openai';
+                    document.getElementById('cfgApiKey').textContent = cfg.apiKey ? '••••••' + cfg.apiKey.slice(-4) : '未设置';
+                    document.getElementById('cfgBaseUrl').textContent = cfg.baseUrl || '-';
+                    document.getElementById('cfgModel').textContent = cfg.model || '-';
+                    if (cfg.provider) selectedPreset = cfg.provider;
+                } catch {}
+            }
+            updatePresetActive();
+            updateEnvGuide();
+        }
+
+        function updatePresetActive() {
+            document.querySelectorAll('.preset-card').forEach(c => {
+                c.classList.toggle('active', c.dataset.preset === selectedPreset);
+            });
+        }
+
+        function updateEnvGuide() {
+            const card = document.querySelector(`.preset-card[data-preset="${selectedPreset}"]`);
+            if (!card) return;
+            const base = card.dataset.base;
+            const model = card.dataset.model;
+            const guide = document.getElementById('envGuide');
+            guide.innerHTML = `
+<span class="comment"># 复制以下内容到 backend/.env 文件</span>
+<span class="key">LLM_PROVIDER</span>=<span class="val">openai</span>
+<span class="key">OPENAI_API_KEY</span>=<span class="val">sk-你的密钥</span>
+<span class="key">OPENAI_BASE_URL</span>=<span class="val">${base}</span>
+<span class="key">OPENAI_MODEL</span>=<span class="val">${model}</span>
+                <button class="copy-btn" onclick="copyEnv()">复制</button>
+            `;
+        }
+
+        document.querySelectorAll('.preset-card').forEach(card => {
+            card.addEventListener('click', () => {
+                selectedPreset = card.dataset.preset;
+                updatePresetActive();
+                updateEnvGuide();
+                // 保存到 localStorage
+                localStorage.setItem('offerclaw_llm_config', JSON.stringify({
+                    provider: selectedPreset,
+                    baseUrl: card.dataset.base,
+                    model: card.dataset.model,
+                    apiKey: '',
+                }));
+                toast('已选择 ' + card.querySelector('.preset-name').textContent + ' 预设', 'success');
+            });
+        });
+
+        function copyEnv() {
+            const text = `LLM_PROVIDER=openai\nOPENAI_API_KEY=sk-你的密钥\nOPENAI_BASE_URL=${document.querySelector('.preset-card.active').dataset.base}\nOPENAI_MODEL=${document.querySelector('.preset-card.active').dataset.model}`;
+            navigator.clipboard.writeText(text).then(() => {
+                toast('已复制到剪贴板', 'success');
+            }).catch(() => toast('复制失败', 'error'));
+        }
+
+        // ============ LLM 测试 ============
+        async function testLLM() {
+            const msg = document.getElementById('testInput').value.trim() || '你好';
+            const btn = document.getElementById('testBtn');
+            const result = document.getElementById('testResult');
+            btn.disabled = true;
+            result.className = 'test-result';
+            result.textContent = '测试中...';
+
+            try {
+                const r = await fetch(`${API_BASE}/api/v1/agent/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${TOKEN}`,
+                    },
+                    body: JSON.stringify({ message: msg, session_id: null }),
+                });
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+                const reader = r.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let content = '';
+                let gotTool = false;
+                let isMock = false;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        try {
+                            const evt = JSON.parse(line.slice(6));
+                            if (evt.type === 'content_delta') {
+                                content += evt.delta;
+                            }
+                            if (evt.type === 'tool_result') gotTool = true;
+                            if (evt.type === 'done') {
+                                // Mock provider 通常无 content 或返回固定文本
+                                if (!content && gotTool) isMock = true;
+                            }
+                        } catch {}
+                    }
+                }
+
+                if (content) {
+                    result.className = 'test-result success';
+                    result.textContent = `✓ LLM 可用\n${isMock ? '（检测到 Mock 模式，未配置真实 API Key）\n' : ''}回复：${content.slice(0, 200)}`;
+                } else if (gotTool) {
+                    result.className = 'test-result success';
+                    result.textContent = '✓ Agent 已响应（Mock 模式，基于关键词触发工具）。配置真实 API Key 后可获得自然语言回复。';
+                } else {
+                    result.className = 'test-result error';
+                    result.textContent = '✗ 未收到有效响应';
+                }
+            } catch (e) {
+                result.className = 'test-result error';
+                result.textContent = '✗ 测试失败：' + e.message;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // ============ 数据概览 ============
+        async function loadDataStats() {
+            try {
+                const [appsRes, sessionsRes, profileRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/v1/applications/stats/overview`, { headers: { 'Authorization': `Bearer ${TOKEN}` } }),
+                    fetch(`${API_BASE}/api/v1/agent/sessions`, { headers: { 'Authorization': `Bearer ${TOKEN}` } }),
+                    fetch(`${API_BASE}/api/v1/profiles/`, { headers: { 'Authorization': `Bearer ${TOKEN}` } }),
+                ]);
+                const apps = await appsRes.json();
+                const sessions = await sessionsRes.json();
+                const profile = await profileRes.json();
+
+                document.getElementById('dataApps').textContent = apps.data?.total || 0;
+                document.getElementById('dataSessions').textContent = sessions.data?.length || 0;
+
+                // 画像完成度
+                if (profile.code === 0 && profile.data) {
+                    const d = profile.data;
+                    let filled = 0, total = 0;
+                    const b = d.basic_info || {};
+                    ['name','phone','email','gender','birth'].forEach(k => { total++; if (b[k]) filled++; });
+                    total++; if ((d.education || []).length > 0) filled++;
+                    total++; if ((d.experience || []).length > 0) filled++;
+                    total++; if ((d.skills || []).length > 0) filled++;
+                    const j = d.job_intent || {};
+                    ['role','cities'].forEach(k => { total++; if (j[k] && (Array.isArray(j[k]) ? j[k].length : j[k])) filled++; });
+                    document.getElementById('dataProfile').textContent = (total ? Math.round(filled / total * 100) : 0) + '%';
+                }
+            } catch (e) {
+                document.getElementById('dataApps').textContent = '-';
+                document.getElementById('dataSessions').textContent = '-';
+                document.getElementById('dataProfile').textContent = '-';
+            }
+        }
+
+        // ============ 加载全部 ============
+        function loadAll() {
+            loadHealth();
+            loadLLMConfig();
+            loadDataStats();
+        }
+
+        loadAll();
+    </script>
+</body>
+</html>
