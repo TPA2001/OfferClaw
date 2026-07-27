@@ -4,7 +4,6 @@
 """
 
 from sqlalchemy import Column, String, DateTime
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.sql import func
 import uuid
@@ -12,12 +11,18 @@ import uuid
 from app.core.database import Base
 
 
+def _uuid_str() -> str:
+    """生成 UUID 字符串（与 Application 表保持一致，兼容 SQLite）"""
+    return str(uuid.uuid4())
+
+
 class Profile(Base):
     """用户画像表"""
     __tablename__ = "profiles"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), unique=True, nullable=False, index=True)
+    # 用 String(36) 而非 UUID 类型，兼容 SQLite + 任意字符串 user_id
+    id = Column(String(36), primary_key=True, default=_uuid_str)
+    user_id = Column(String(64), unique=True, nullable=False, index=True)
 
     # 基本信息
     basic_info = Column(JSON, default={})
@@ -58,6 +63,38 @@ class Profile(Base):
     # 技能列表
     skills = Column(JSON, default=[])
     # ["Python", "Java", "MySQL", "Docker"]
+
+    # 项目经历
+    projects = Column(JSON, default=[])
+    # [
+    #   {
+    #     "name": "OfferClaw 求职管理系统",
+    #     "role": "全栈开发",
+    #     "start_date": "2024-01",
+    #     "end_date": "2024-06",
+    #     "description": "基于 FastAPI + Playwright 实现的求职管理工具...",
+    #     "tech_stack": ["Python", "FastAPI", "Vue"]
+    #   }
+    # ]
+
+    # 自我评价 / 个人简介
+    summary = Column(JSON, default={})
+    # {
+    #   "self_eval": "5 年后端开发经验，熟悉分布式系统设计...",
+    #   "advantage": "主导过百万级 QPS 系统的架构设计",
+    #   "career_goal": "希望成长为技术专家..."
+    # }
+
+    # 证书 / 荣誉
+    certifications = Column(JSON, default=[])
+    # [
+    #   {
+    #     "name": "PMP 项目管理认证",
+    #     "issuer": "PMI",
+    #     "date": "2023-06",
+    #     "score": ""
+    #   }
+    # ]
 
     # 求职意向
     job_intent = Column(JSON, default={})

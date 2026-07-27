@@ -10,8 +10,10 @@ ENV/
 
 # Database
 *.db
+*.db-journal
 *.sqlite
 *.sqlite3
+*.sqlite-journal
 
 # Environment variables
 .env
@@ -40,7 +42,26 @@ build/
 .coverage
 htmlcov/
 
+# Type checkers / linters cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 # Temporary files
 *.tmp
 *.bak
 *.swp
+
+# ===== OfferClaw 项目专用 =====
+
+# 浏览器配置目录（含 Cookie、登录态、历史记录等敏感数据，严禁提交）
+backend/data/
+
+# 自动填表生成的临时截图/请求快照
+backend/data/auto-fill-*.jpg
+backend/data/auto-fill-req.json
+backend/data/auto-fill-resp.json
+
+# 运行时数据库（即使放非默认位置也排除）
+offerclaw.db
+offerclaw.db-journal

@@ -45,6 +45,10 @@ class ConfirmRequest(BaseModel):
     session_id: str
 
 
+class RenameSessionRequest(BaseModel):
+    title: str
+
+
 # ============ SSE 辅助 ============
 
 def _event_to_sse(event) -> str:
@@ -144,23 +148,68 @@ async def list_sessions(
     db: Session = Depends(get_db),
     limit: int = 20,
 ):
-    """列出用户的所有会话"""
+    """列出用户的所有会话（含消息数与最后一条消息预览，便于区分会话）"""
     sessions = db.query(AgentSession).filter(
         AgentSession.user_id == user_id
     ).order_by(AgentSession.updated_at.desc().nullslast()).limit(limit).all()
 
-    return {
-        "code": 0,
-        "data": [
-            {
-                "id": str(s.id),
-                "title": s.title or "未命名会话",
-                "created_at": s.created_at.isoformat() if s.created_at else None,
-                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
-            }
-            for s in sessions
-        ],
-    }
+    data = []
+    for s in sessions:
+        messages = []
+        try:
+            messages = json.loads(s.messages or "[]")
+        except Exception:
+            messages = []
+
+        # 取最后一条用户/助手消息的文本作为预览
+        preview = ""
+        for msg in reversed(messages):
+            content = msg.get("content") or msg.get("text") or ""
+            if isinstance(content, list):
+                # 兼容多段 content 结构
+                content = "".join(
+                    seg.get("text", "") for seg in content if isinstance(seg, dict)
+                )
+            if content:
+                preview = content[:60]
+                break
+
+        data.append({
+            "id": str(s.id),
+            "title": s.title or "未命名会话",
+            "message_count": len(messages),
+            "preview": preview,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+        })
+
+    return {"code": 0, "data": data}
+
+
+@router.patch("/sessions/{session_id}")
+async def rename_session(
+    session_id: str,
+    body: RenameSessionRequest,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """重命名会话标题"""
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="标题不能为空")
+    if len(title) > 100:
+        raise HTTPException(status_code=400, detail="标题过长（最多 100 字符）")
+
+    sess = db.query(AgentSession).filter(
+        AgentSession.id == session_id,
+        AgentSession.user_id == user_id,
+    ).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    sess.title = title
+    db.commit()
+    return {"code": 0, "data": {"id": str(sess.id), "title": sess.title}}
 
 
 @router.get("/sessions/{session_id}")

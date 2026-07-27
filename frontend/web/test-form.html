@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试表单 — OfferClaw</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <style>
+        .test-container { max-width: 760px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+        .test-form {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 2rem 2.2rem;
+            box-shadow: var(--shadow-sm);
+        }
+        .test-form h2 {
+            font-family: var(--font-serif);
+            color: var(--ink);
+            margin-bottom: 0.3rem;
+            font-size: 1.6rem;
+        }
+        .test-form .sub {
+            color: var(--ink-soft);
+            font-size: 0.88rem;
+            margin-bottom: 1.6rem;
+        }
+        .field-block {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            margin-bottom: 1.2rem;
+        }
+        .field-block label {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--ink);
+        }
+        .field-block .hint {
+            font-size: 0.72rem;
+            color: var(--ink-faint);
+            font-family: var(--font-mono);
+        }
+        .field-block input[type="text"],
+        .field-block input[type="email"],
+        .field-block input[type="tel"],
+        .field-block input[type="number"],
+        .field-block input[type="date"],
+        .field-block select,
+        .field-block textarea {
+            padding: 0.55rem 0.75rem;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            font-size: 0.88rem;
+            font-family: inherit;
+            background: var(--paper-light);
+            color: var(--ink);
+            transition: all 0.2s var(--ease);
+            width: 100%;
+        }
+        .field-block input:focus,
+        .field-block select:focus,
+        .field-block textarea:focus {
+            outline: none;
+            border-color: var(--olive);
+            background: white;
+            box-shadow: 0 0 0 3px var(--olive-glow);
+        }
+        .field-block textarea { min-height: 80px; resize: vertical; }
+
+        .radio-group, .checkbox-group {
+            display: flex;
+            gap: 1.2rem;
+            flex-wrap: wrap;
+            padding: 0.3rem 0;
+        }
+        .radio-group label, .checkbox-group label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-weight: 400;
+            font-size: 0.88rem;
+            cursor: pointer;
+            color: var(--ink);
+        }
+
+        .editable-div {
+            min-height: 80px;
+            padding: 0.55rem 0.75rem;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: var(--paper-light);
+            font-size: 0.88rem;
+            color: var(--ink);
+        }
+        .editable-div:empty::before {
+            content: attr(data-placeholder);
+            color: var(--ink-faint);
+        }
+
+        .custom-select {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+        .custom-select-trigger {
+            padding: 0.55rem 0.75rem;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: var(--paper-light);
+            font-size: 0.88rem;
+            color: var(--ink);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .custom-select-trigger::after {
+            content: '▾';
+            color: var(--ink-soft);
+            font-size: 0.7rem;
+        }
+        .custom-select-dropdown {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0; right: 0;
+            background: white;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            box-shadow: var(--shadow-md);
+            z-index: 10;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .custom-select-dropdown.open { display: block; }
+        .custom-select-option {
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            font-size: 0.85rem;
+            color: var(--ink);
+            transition: background 0.15s;
+        }
+        .custom-select-option:hover { background: var(--olive-soft); }
+
+        .submit-bar {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+            margin-top: 1.5rem;
+            padding-top: 1.2rem;
+            border-top: 1px dashed var(--line);
+        }
+
+        .type-tag {
+            display: inline-block;
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            background: var(--olive-soft);
+            color: var(--olive-dark);
+            padding: 0.05rem 0.35rem;
+            border-radius: 3px;
+            margin-left: 0.4rem;
+            vertical-align: middle;
+            font-weight: 500;
+        }
+        .type-tag.adv { background: var(--terra-soft); color: var(--terra-deep); }
+
+        .result-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(45, 42, 38, 0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+        }
+        .result-overlay.show { display: flex; }
+        .result-box {
+            background: var(--card);
+            padding: 1.8rem 2rem;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .result-box h3 { font-family: var(--font-serif); margin-bottom: 1rem; }
+        .result-box pre {
+            background: #2d2a26;
+            color: #e8e3d4;
+            padding: 1rem;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            line-height: 1.5;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">
+            <div class="nav-brand-mark">O</div>
+            <div class="nav-brand-text">
+                <h1>OfferClaw</h1>
+                <p>Test Form</p>
+            </div>
+        </a>
+        <div class="nav-links">
+            <a href="index.html">看板</a>
+            <a href="smart-fill.html" class="active">智能填写</a>
+        </div>
+    </nav>
+
+    <div class="test-container">
+        <div class="page-header">
+            <div class="page-title-group">
+                <div class="eyebrow">TEST FIXTURE · 测试夹具</div>
+                <h2 class="page-title">网申测试表单</h2>
+                <p class="page-subtitle">
+                    用于验证智能填写的字段识别与脚本填写能力。包含 input/select/textarea/checkbox/radio/contenteditable/自定义下拉/data-* 标记 共 8 类字段。
+                </p>
+            </div>
+            <div class="header-actions">
+                <a href="smart-fill.html" class="btn btn-primary btn-sm">前往智能填写</a>
+            </div>
+        </div>
+
+        <form class="test-form" id="testForm" onsubmit="return submitForm(event)">
+            <h2>应聘登记表</h2>
+            <p class="sub">所有字段仅用于演示智能填写，请通过 smart-fill.html 抓取本页测试。</p>
+
+            <!-- 1. 原生 input + label[for] -->
+            <div class="field-block">
+                <label for="name">姓名 <span class="type-tag">input.text</span></label>
+                <input type="text" id="name" name="name" placeholder="请输入姓名" required>
+                <span class="hint">id=name · label[for] 关联</span>
+            </div>
+
+            <!-- 2. 邮箱（aria-label） -->
+            <div class="field-block">
+                <input type="email" id="email" name="email" aria-label="邮箱" placeholder="请输入邮箱">
+                <span class="hint">aria-label=邮箱</span>
+            </div>
+
+            <!-- 3. 手机号（placeholder 推断） -->
+            <div class="field-block">
+                <input type="tel" id="phone" name="phone" placeholder="手机号">
+                <span class="hint">仅 placeholder</span>
+            </div>
+
+            <!-- 4. 日期 -->
+            <div class="field-block">
+                <label for="birthday">出生日期 <span class="type-tag">input.date</span></label>
+                <input type="date" id="birthday" name="birthday">
+            </div>
+
+            <!-- 5. 原生 select -->
+            <div class="field-block">
+                <label for="education">最高学历 <span class="type-tag">select</span></label>
+                <select id="education" name="education">
+                    <option value="">请选择</option>
+                    <option value="大专">大专</option>
+                    <option value="本科">本科</option>
+                    <option value="硕士">硕士</option>
+                    <option value="博士">博士</option>
+                </select>
+            </div>
+
+            <!-- 6. Radio 组 -->
+            <div class="field-block">
+                <label>性别 <span class="type-tag">radio</span></label>
+                <div class="radio-group">
+                    <label><input type="radio" name="gender" value="男"> 男</label>
+                    <label><input type="radio" name="gender" value="女"> 女</label>
+                </div>
+            </div>
+
+            <!-- 7. Checkbox 组 -->
+            <div class="field-block">
+                <label>意向城市 <span class="type-tag">checkbox</span></label>
+                <div class="checkbox-group">
+                    <label><input type="checkbox" name="city_pref" value="北京"> 北京</label>
+                    <label><input type="checkbox" name="city_pref" value="上海"> 上海</label>
+                    <label><input type="checkbox" name="city_pref" value="杭州"> 杭州</label>
+                    <label><input type="checkbox" name="city_pref" value="深圳"> 深圳</label>
+                </div>
+            </div>
+
+            <!-- 8. Textarea -->
+            <div class="field-block">
+                <label for="intro">自我介绍 <span class="type-tag">textarea</span></label>
+                <textarea id="intro" name="intro" placeholder="请输入自我介绍"></textarea>
+            </div>
+
+            <!-- 9. contenteditable -->
+            <div class="field-block">
+                <label>项目经历 <span class="type-tag adv">contenteditable</span></label>
+                <div id="projectExp" class="editable-div" contenteditable="true"
+                     data-placeholder="请输入项目经历（富文本）"></div>
+            </div>
+
+            <!-- 10. 自定义下拉（div 模拟） -->
+            <div class="field-block">
+                <label>期望薪资 <span class="type-tag adv">custom-select</span></label>
+                <div class="custom-select">
+                    <div class="custom-select-trigger" id="salaryTrigger"
+                         role="combobox" aria-label="期望薪资" tabindex="0">
+                        <span class="custom-select-value">请选择</span>
+                    </div>
+                    <div class="custom-select-dropdown" id="salaryDropdown">
+                        <div class="custom-select-option" data-value="10-15K">10-15K</div>
+                        <div class="custom-select-option" data-value="15-25K">15-25K</div>
+                        <div class="custom-select-option" data-value="25-40K">25-40K</div>
+                        <div class="custom-select-option" data-value="40K以上">40K以上</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 11. data-oc-field 标记的自定义字段 -->
+            <div class="field-block">
+                <label>GitHub 主页 <span class="type-tag adv">data-oc-field</span></label>
+                <input type="text" data-oc-field="github_url" data-oc-label="GitHub 主页"
+                       data-oc-type="url" placeholder="https://github.com/yourname">
+            </div>
+
+            <div class="submit-bar">
+                <button type="button" class="btn btn-ghost" onclick="clearForm()">清空</button>
+                <button type="submit" class="btn btn-primary">提交查看</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 结果展示 -->
+    <div class="result-overlay" id="resultOverlay" onclick="if(event.target===this)this.classList.remove('show')">
+        <div class="result-box">
+            <h3>表单提交数据</h3>
+            <pre id="resultPre"></pre>
+            <div style="text-align:right; margin-top:1rem;">
+                <button class="btn btn-primary" onclick="document.getElementById('resultOverlay').classList.remove('show')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 自定义下拉交互
+        const trigger = document.getElementById('salaryTrigger');
+        const dropdown = document.getElementById('salaryDropdown');
+        const valueSpan = trigger.querySelector('.custom-select-value');
+
+        trigger.addEventListener('click', () => dropdown.classList.toggle('open'));
+        trigger.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                dropdown.classList.toggle('open');
+            }
+        });
+        dropdown.querySelectorAll('.custom-select-option').forEach(opt => {
+            opt.addEventListener('click', () => {
+                valueSpan.textContent = opt.dataset.value;
+                valueSpan.dataset.value = opt.dataset.value;
+                dropdown.classList.remove('open');
+            });
+        });
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.custom-select')) dropdown.classList.remove('open');
+        });
+
+        function submitForm(e) {
+            e.preventDefault();
+            const data = {
+                name: name.value,
+                email: email.value,
+                phone: phone.value,
+                birthday: birthday.value,
+                education: education.value,
+                gender: document.querySelector('input[name="gender"]:checked')?.value || '',
+                city_pref: Array.from(document.querySelectorAll('input[name="city_pref"]:checked')).map(c => c.value),
+                intro: intro.value,
+                projectExp: projectExp.innerText,
+                salary: valueSpan.dataset.value || '',
+                github_url: document.querySelector('[data-oc-field="github_url"]').value,
+            };
+            document.getElementById('resultPre').textContent = JSON.stringify(data, null, 2);
+            document.getElementById('resultOverlay').classList.add('show');
+            return false;
+        }
+
+        function clearForm() {
+            document.getElementById('testForm').reset();
+            projectExp.innerText = '';
+            valueSpan.textContent = '请选择';
+            delete valueSpan.dataset.value;
+        }
+    </script>
+</body>
+</html>

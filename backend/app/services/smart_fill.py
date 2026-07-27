@@ -73,44 +73,198 @@ class SmartFillService:
     async def _extract_form_fields(self, page: Page) -> List[Dict[str, Any]]:
         """
         提取页面表单字段
-        
+
         策略：
         1. 识别原生表单元素（input/select/textarea）
-        2. 识别动态表单（React/Vue 等框架）
-        3. 识别常见字段类型（姓名、邮箱、手机号等）
+        2. 识别 contenteditable 富文本区
+        3. 识别自定义下拉（role=combobox / ant-select / el-select）
+        4. 识别 data-* 属性标记的自定义字段
+        5. 识别常见字段类型（姓名、邮箱、手机号等）
         """
         fields = []
-        
+        seen_keys = set()  # 去重用
+
         logger.info("开始提取表单字段...")
-        
-        # 策略1：原生表单元素
-        # Input 元素
+
+        def _dedup(field: Dict[str, Any]) -> bool:
+            key = field.get("id") or field.get("selector") or field.get("label")
+            if not key or key in seen_keys:
+                return False
+            seen_keys.add(key)
+            return True
+
+        # 策略1：原生 input
         inputs = await page.query_selector_all(
             'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"])'
         )
-        
         for idx, element in enumerate(inputs):
             field = await self._extract_input_field(element, idx, page)
-            if field:
+            if field and _dedup(field):
                 fields.append(field)
-        
-        # Select 元素
+
+        # 策略2：原生 select
         selects = await page.query_selector_all('select')
         for idx, element in enumerate(selects):
             field = await self._extract_select_field(element, idx, page)
-            if field:
+            if field and _dedup(field):
                 fields.append(field)
-        
-        # Textarea 元素
+
+        # 策略3：原生 textarea
         textareas = await page.query_selector_all('textarea')
         for idx, element in enumerate(textareas):
             field = await self._extract_textarea_field(element, idx, page)
-            if field:
+            if field and _dedup(field):
                 fields.append(field)
-        
+
+        # 策略4：contenteditable 富文本/自定义输入
+        editables = await page.query_selector_all(
+            '[contenteditable="true"], [contenteditable=""]'
+        )
+        for idx, element in enumerate(editables):
+            field = await self._extract_editable_field(element, idx, page)
+            if field and _dedup(field):
+                fields.append(field)
+
+        # 策略5：自定义下拉组件（Ant Design / ElementUI / 通用 role=combobox）
+        custom_selects = await page.query_selector_all(
+            '[role="combobox"], .ant-select-selector, .el-select, .el-select .el-input__inner, '
+            '.select-trigger, [class*="dropdown-trigger"]'
+        )
+        for idx, element in enumerate(custom_selects):
+            field = await self._extract_custom_select_field(element, idx, page)
+            if field and _dedup(field):
+                fields.append(field)
+
+        # 策略6：data-oc-field 属性标记（用户/插件自定义字段）
+        data_fields = await page.query_selector_all('[data-oc-field]')
+        for idx, element in enumerate(data_fields):
+            field = await self._extract_data_attribute_field(element, idx, page)
+            if field and _dedup(field):
+                fields.append(field)
+
         logger.info(f"提取到 {len(fields)} 个表单字段")
-        
         return fields
+
+    async def _extract_editable_field(self, element, idx: int, page: Page) -> Optional[Dict[str, Any]]:
+        """提取 contenteditable 字段"""
+        try:
+            element_id = await element.get_attribute('id')
+            label = await self._get_field_label(element, page)
+            if not label or label == '未知字段':
+                # contenteditable 通常用 placeholder 或 data-placeholder
+                placeholder = (
+                    await element.get_attribute('data-placeholder')
+                    or await element.get_attribute('placeholder')
+                )
+                if placeholder:
+                    label = placeholder.strip()
+
+            field_id = element_id or f'editable_{idx}'
+            selector = f'#{element_id}' if element_id else f'[contenteditable]:nth-of-type({idx+1})'
+
+            field_type_inferred = self._infer_field_type(label, element_id, 'textarea')
+
+            return {
+                'id': field_id,
+                'label': label,
+                'type': 'contenteditable',
+                'tag': 'div',
+                'required': False,
+                'selector': selector,
+                'field_type_inferred': field_type_inferred,
+            }
+        except Exception as e:
+            logger.error(f"提取 contenteditable 字段失败: {e}")
+            return None
+
+    async def _extract_custom_select_field(self, element, idx: int, page: Page) -> Optional[Dict[str, Any]]:
+        """提取自定义下拉组件字段"""
+        try:
+            element_id = await element.get_attribute('id')
+
+            # 标签：找最近的 label 或前置文本
+            label = await self._get_field_label(element, page)
+            if not label or label == '未知字段':
+                # 尝试从父容器的前置文本推断
+                try:
+                    parent_text = await element.evaluate(
+                        """el => {
+                            const wrap = el.closest('.ant-form-item, .el-form-item, .form-group, .field') || el.parentElement;
+                            if (!wrap) return '';
+                            const lbl = wrap.querySelector('label, .label, .ant-form-item-label, .el-form-item__label');
+                            return lbl ? lbl.textContent.trim() : '';
+                        }"""
+                    )
+                    if parent_text:
+                        label = parent_text
+                except Exception:
+                    pass
+
+            if not label or label == '未知字段':
+                label = f'自定义下拉 {idx+1}'
+
+            field_id = element_id or f'custom_select_{idx}'
+
+            # selector 优先用 class 组合（更稳定）
+            cls = await element.get_attribute('class') or ''
+            if cls:
+                first_cls = cls.split()[0]
+                selector = f'.{first_cls}'
+            elif element_id:
+                selector = f'#{element_id}'
+            else:
+                selector = f'[role="combobox"]:nth-of-type({idx+1})'
+
+            field_type_inferred = self._infer_field_type(label, element_id, 'select')
+
+            return {
+                'id': field_id,
+                'label': label,
+                'type': 'custom-select',
+                'tag': 'div',
+                'required': False,
+                'options': [],  # 选项需点击展开才能获取
+                'selector': selector,
+                'field_type_inferred': field_type_inferred,
+            }
+        except Exception as e:
+            logger.error(f"提取自定义下拉失败: {e}")
+            return None
+
+    async def _extract_data_attribute_field(self, element, idx: int, page: Page) -> Optional[Dict[str, Any]]:
+        """提取通过 data-oc-field 标记的自定义字段"""
+        try:
+            field_name = await element.get_attribute('data-oc-field') or f'data_field_{idx}'
+            label = (
+                await element.get_attribute('data-oc-label')
+                or await self._get_field_label(element, page)
+                or field_name
+            )
+            field_type_attr = await element.get_attribute('data-oc-type') or 'text'
+
+            tag = (await element.evaluate('el => el.tagName.toLowerCase()')) or 'input'
+            element_id = await element.get_attribute('id')
+            field_id = element_id or field_name
+
+            if element_id:
+                selector = f'#{element_id}'
+            else:
+                selector = f'[data-oc-field="{field_name}"]'
+
+            field_type_inferred = self._infer_field_type(label, field_name, field_type_attr)
+
+            return {
+                'id': field_id,
+                'label': label,
+                'type': field_type_attr,
+                'tag': tag,
+                'required': (await element.get_attribute('data-oc-required')) == 'true',
+                'selector': selector,
+                'field_type_inferred': field_type_inferred,
+            }
+        except Exception as e:
+            logger.error(f"提取 data-* 字段失败: {e}")
+            return None
     
     async def _extract_input_field(self, element, idx: int, page: Page) -> Optional[Dict[str, Any]]:
         """提取 input 字段"""

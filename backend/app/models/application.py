@@ -2,7 +2,7 @@
 投递记录模型
 """
 
-from sqlalchemy import Column, String, DateTime, Text, Integer
+from sqlalchemy import Column, String, DateTime, Text, Integer, JSON
 from sqlalchemy.sql import func
 import uuid
 
@@ -72,6 +72,10 @@ class Application(Base):
 
     # 排序
     sort_order = Column(Integer, default=0)
+
+    # 状态变更历史（JSON 数组，记录每次状态变更的时间/旧状态/新状态/备注）
+    # 示例: [{"at":"2026-07-22T10:00:00Z","from":"applied","to":"assessment","note":"收到笔试通知"}]
+    status_history = Column(JSON, nullable=True, default=list)
 
 
 class AgentSession(Base):

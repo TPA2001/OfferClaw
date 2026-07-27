@@ -497,7 +497,10 @@
             <button class="tab active" data-tab="basic">👤 基本信息</button>
             <button class="tab" data-tab="education">🎓 教育 <span class="tab-badge" id="eduCount">0</span></button>
             <button class="tab" data-tab="experience">💼 经历 <span class="tab-badge" id="expCount">0</span></button>
+            <button class="tab" data-tab="projects">📦 项目 <span class="tab-badge" id="projCount">0</span></button>
             <button class="tab" data-tab="skills">⚡ 技能 <span class="tab-badge" id="skillCount">0</span></button>
+            <button class="tab" data-tab="summary">📝 自我评价</button>
+            <button class="tab" data-tab="certs">🏅 证书 <span class="tab-badge" id="certCount">0</span></button>
             <button class="tab" data-tab="intent">🎯 求职意向</button>
         </div>
 
@@ -568,12 +571,48 @@
             </div>
         </div>
 
+        <!-- 项目经历 -->
+        <div class="panel" id="panel-projects">
+            <div id="projectsList"></div>
+            <button class="add-btn" onclick="addProject()">＋ 添加项目经历</button>
+        </div>
+
+        <!-- 自我评价 -->
+        <div class="panel" id="panel-summary">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">自我评价 / 个人简介</h3>
+                    <span class="card-index">V</span>
+                </div>
+                <div class="form-grid">
+                    <div class="form-field full">
+                        <label>自我评价</label>
+                        <textarea id="summary_self_eval" placeholder="5 年后端开发经验，熟悉分布式系统设计..." style="min-height:100px;"></textarea>
+                    </div>
+                    <div class="form-field full">
+                        <label>个人优势 / 核心竞争力</label>
+                        <textarea id="summary_advantage" placeholder="主导过百万级 QPS 系统的架构设计..." style="min-height:80px;"></textarea>
+                    </div>
+                    <div class="form-field full">
+                        <label>职业目标</label>
+                        <textarea id="summary_career_goal" placeholder="希望成长为技术专家..." style="min-height:70px;"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 证书 -->
+        <div class="panel" id="panel-certs">
+            <div id="certsList"></div>
+            <button class="add-btn" onclick="addCert()">＋ 添加证书 / 荣誉</button>
+        </div>
+
         <!-- 求职意向 -->
         <div class="panel" id="panel-intent">
             <div class="card">
                 <div class="card-header">
                     <h3 class="card-title">求职意向</h3>
-                    <span class="card-index">V</span>
+                    <span class="card-index">VI</span>
                 </div>
                 <div class="form-grid">
                     <div class="form-field">
@@ -605,6 +644,22 @@
                 </div>
             </div>
         </div>
+
+        <!-- 工具栏：导入/导出 JSON -->
+        <div class="card" style="margin-top:1.5rem;">
+            <div class="card-header">
+                <h3 class="card-title">数据备份</h3>
+                <span class="card-index">VII</span>
+            </div>
+            <p style="font-size:0.8rem;color:var(--ink-soft);margin-bottom:0.8rem;">
+                导出画像 JSON 用于备份；导入 JSON 可恢复或迁移画像数据。
+            </p>
+            <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+                <button class="btn btn-ghost btn-sm" onclick="exportJSON()">⬇ 导出 JSON</button>
+                <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importFile').click()">⬆ 导入 JSON</button>
+                <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importJSON(event)">
+            </div>
+        </div>
     </div>
 
     <div class="toast-container" id="toastContainer"></div>
@@ -618,6 +673,9 @@
             education: [],
             experience: [],
             skills: [],
+            projects: [],
+            summary: {},
+            certifications: [],
             job_intent: {},
             extra_fields: {},
         };
@@ -682,7 +740,10 @@
             renderBasic();
             renderEducation();
             renderExperience();
+            renderProjects();
             renderSkills();
+            renderSummary();
+            renderCerts();
             renderIntent();
             updateCompletion();
         }
@@ -788,6 +849,99 @@
             });
         }
 
+        function renderProjects() {
+            const list = document.getElementById('projectsList');
+            list.innerHTML = '';
+            const projs = profile.projects || [];
+            document.getElementById('projCount').textContent = projs.length;
+            if (projs.length === 0) {
+                list.innerHTML = '<div class="empty-card"><div class="empty-icon">📦</div><p>还没有项目经历</p><p>点击下方按钮添加</p></div>';
+                return;
+            }
+            projs.forEach((p, i) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                const stack = (p.tech_stack || []).join('、');
+                card.innerHTML = `
+                    <div class="card-header">
+                        <h3 class="card-title">${esc(p.name || '项目经历')} ${p.role ? '· ' + esc(p.role) : ''}</h3>
+                        <span class="card-index">${roman(i + 1)}</span>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-field"><label>项目名称</label><input type="text" value="${esc(p.name || '')}" data-field="name" data-idx="${i}"></div>
+                        <div class="form-field"><label>担任角色</label><input type="text" value="${esc(p.role || '')}" data-field="role" data-idx="${i}"></div>
+                        <div class="form-field full"><label>起止时间</label>
+                            <div style="display:flex;gap:0.5rem;align-items:center;">
+                                <input type="month" value="${esc(p.start_date || '')}" data-field="start_date" data-idx="${i}" style="flex:1">
+                                <span style="color:var(--ink-faint);">→</span>
+                                <input type="month" value="${esc(p.end_date || '')}" data-field="end_date" data-idx="${i}" style="flex:1">
+                            </div>
+                        </div>
+                        <div class="form-field full"><label>技术栈（逗号分隔）</label><input type="text" value="${esc(stack)}" data-field="tech_stack_str" data-idx="${i}" placeholder="Python, FastAPI, Vue"></div>
+                        <div class="form-field full"><label>项目描述</label><textarea data-field="description" data-idx="${i}">${esc(p.description || '')}</textarea></div>
+                    </div>
+                    <div class="row-actions">
+                        <button class="btn btn-danger btn-sm" onclick="removeProject(${i})">删除</button>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+            list.querySelectorAll('input,select,textarea').forEach(el => {
+                el.addEventListener('change', () => {
+                    const idx = +el.dataset.idx;
+                    const field = el.dataset.field;
+                    if (field === 'tech_stack_str') {
+                        profile.projects[idx].tech_stack = el.value.split(/[,，、]/).map(s => s.trim()).filter(Boolean);
+                    } else {
+                        profile.projects[idx][field] = el.value;
+                    }
+                });
+            });
+        }
+
+        function renderSummary() {
+            const s = profile.summary || {};
+            document.getElementById('summary_self_eval').value = s.self_eval || '';
+            document.getElementById('summary_advantage').value = s.advantage || '';
+            document.getElementById('summary_career_goal').value = s.career_goal || '';
+        }
+
+        function renderCerts() {
+            const list = document.getElementById('certsList');
+            list.innerHTML = '';
+            const certs = profile.certifications || [];
+            document.getElementById('certCount').textContent = certs.length;
+            if (certs.length === 0) {
+                list.innerHTML = '<div class="empty-card"><div class="empty-icon">🏅</div><p>还没有证书 / 荣誉</p><p>点击下方按钮添加</p></div>';
+                return;
+            }
+            certs.forEach((c, i) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <div class="card-header">
+                        <h3 class="card-title">${esc(c.name || '证书 / 荣誉')}</h3>
+                        <span class="card-index">${roman(i + 1)}</span>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-field"><label>证书 / 荣誉名称</label><input type="text" value="${esc(c.name || '')}" data-field="name" data-idx="${i}"></div>
+                        <div class="form-field"><label>颁发机构</label><input type="text" value="${esc(c.issuer || '')}" data-field="issuer" data-idx="${i}"></div>
+                        <div class="form-field"><label>获得日期</label><input type="month" value="${esc(c.date || '')}" data-field="date" data-idx="${i}"></div>
+                        <div class="form-field"><label>成绩 / 分数</label><input type="text" value="${esc(c.score || '')}" data-field="score" data-idx="${i}"></div>
+                    </div>
+                    <div class="row-actions">
+                        <button class="btn btn-danger btn-sm" onclick="removeCert(${i})">删除</button>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+            list.querySelectorAll('input,select,textarea').forEach(el => {
+                el.addEventListener('change', () => {
+                    profile.certifications[+el.dataset.idx][el.dataset.field] = el.value;
+                });
+            });
+        }
+
         function renderSkills() {
             const editor = document.getElementById('skillsEditor');
             const input = document.getElementById('skillInput');
@@ -822,13 +976,31 @@
         }
 
         // ============ 完成度 ============
-        function updateCompletion() {
+        async function updateCompletion() {
+            // 调用后端 /completion 获取精确完成度（失败时降级本地计算）
+            try {
+                const res = await apiGet('/api/v1/profiles/completion');
+                if (res.code === 0 && res.data) {
+                    const pct = res.data.percentage || 0;
+                    document.getElementById('completionFill').style.width = pct + '%';
+                    document.getElementById('completionPct').textContent = pct + '%';
+                    return;
+                }
+            } catch (e) { /* 降级 */ }
+            // 本地降级计算
+            localCompletion();
+        }
+        function localCompletion() {
             let filled = 0, total = 0;
             const b = profile.basic_info || {};
             ['name','phone','email','gender','birth'].forEach(k => { total++; if (b[k]) filled++; });
             total++; if ((profile.education || []).length > 0) filled++;
             total++; if ((profile.experience || []).length > 0) filled++;
-            total++; if ((profile.skills || []).length > 0) filled++;
+            total++; if ((profile.projects || []).length > 0) filled++;
+            total++; if ((profile.skills || []).length >= 3) filled++;
+            const s = profile.summary || {};
+            total++; if (s.self_eval) filled++;
+            total++; if ((profile.certifications || []).length > 0) filled++;
             const j = profile.job_intent || {};
             ['role','cities'].forEach(k => { total++; if (j[k] && (Array.isArray(j[k]) ? j[k].length : j[k])) filled++; });
             const pct = total ? Math.round(filled / total * 100) : 0;
@@ -857,6 +1029,28 @@
         function removeExperience(i) {
             profile.experience.splice(i, 1);
             renderExperience();
+            updateCompletion();
+        }
+        function addProject() {
+            profile.projects = profile.projects || [];
+            profile.projects.push({ name: '', role: '', start_date: '', end_date: '', description: '', tech_stack: [] });
+            renderProjects();
+            updateCompletion();
+        }
+        function removeProject(i) {
+            profile.projects.splice(i, 1);
+            renderProjects();
+            updateCompletion();
+        }
+        function addCert() {
+            profile.certifications = profile.certifications || [];
+            profile.certifications.push({ name: '', issuer: '', date: '', score: '' });
+            renderCerts();
+            updateCompletion();
+        }
+        function removeCert(i) {
+            profile.certifications.splice(i, 1);
+            renderCerts();
             updateCompletion();
         }
         function removeSkill(i) {
@@ -922,6 +1116,53 @@
                 updateCompletion();
             });
         });
+        // 自我评价实时同步
+        ['self_eval','advantage','career_goal'].forEach(k => {
+            const el = document.getElementById('summary_' + k);
+            if (el) el.addEventListener('change', (e) => {
+                profile.summary = profile.summary || {};
+                profile.summary[k] = e.target.value;
+                updateCompletion();
+            });
+        });
+
+        // ============ 导入 / 导出 JSON ============
+        function exportJSON() {
+            const data = JSON.stringify(profile, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `offerclaw-profile-${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast('JSON 已导出', 'success');
+        }
+        async function importJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+                // 合并到 profile（保留未导入的字段）
+                profile = {
+                    basic_info: data.basic_info || profile.basic_info,
+                    education: data.education || profile.education,
+                    experience: data.experience || profile.experience,
+                    skills: data.skills || profile.skills,
+                    projects: data.projects || profile.projects,
+                    summary: data.summary || profile.summary,
+                    certifications: data.certifications || profile.certifications,
+                    job_intent: data.job_intent || profile.job_intent,
+                    extra_fields: data.extra_fields || profile.extra_fields,
+                };
+                renderAll();
+                toast('JSON 导入成功，记得点击「保存全部」', 'success');
+            } catch (e) {
+                toast('导入失败：' + e.message, 'error');
+            }
+            event.target.value = '';
+        }
 
         // ============ 保存 ============
         async function saveAll() {

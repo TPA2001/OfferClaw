@@ -179,6 +179,7 @@ def _to_dict(a: Application) -> dict:
         "applied_at": a.applied_at.isoformat() if a.applied_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
         "sort_order": a.sort_order or 0,
+        "status_history": a.status_history or [],
     }
 
 
@@ -198,11 +199,32 @@ def _parse_dt(val: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def _validate_sub_fields(status: str, body_dict: dict, is_create: bool = False):
-    """校验细化字段与 status 的对应关系（软校验，不抛异常只清理）"""
-    # 非 rejected 状态清空 rejection_stage（除非用户显式传了，那也接受）
-    # 这里采用宽松策略：只在创建时清理，更新时尊重用户输入
-    pass
+def _cleanup_status_fields(app: Application, status: str) -> None:
+    """根据状态清理不相关的子字段（用于状态切换时保持数据一致性）"""
+    if status != "rejected":
+        app.rejection_stage = None
+    if status != "interview":
+        app.interview_round = None
+        app.next_interview_at = None
+    if status != "assessment":
+        app.assessment_deadline = None
+    if status != "offer":
+        app.offer_status = None
+        app.offer_salary = None
+        app.offer_location = None
+        app.offer_deadline = None
+
+
+def _append_status_history(app: Application, old_status: Optional[str], new_status: str, note: Optional[str] = None) -> None:
+    """追加一条状态变更记录到 status_history"""
+    history = list(app.status_history or [])
+    history.append({
+        "at": datetime.now(timezone.utc).isoformat(),
+        "from": old_status,
+        "to": new_status,
+        "note": note,
+    })
+    app.status_history = history
 
 
 # ============ 路由 ============
@@ -245,13 +267,226 @@ async def list_applications(
     }
 
 
+@router.get("/search")
+async def search_applications(
+    q: str = Query(..., min_length=1, description="搜索关键字（公司/职位/备注/标签）"),
+    limit: int = Query(50, le=200),
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """全文搜索投递记录（公司/职位/备注/标签）
+
+    投递记录变多后必备能力：快速定位某公司/某岗位/某标签的历史投递。
+    """
+    kw = f"%{q.strip()}%"
+    query = db.query(Application).filter(
+        Application.user_id == user_id,
+        or_(
+            Application.company.like(kw),
+            Application.position.like(kw),
+            Application.notes.like(kw),
+            Application.tags.like(kw),
+        ),
+    ).order_by(Application.updated_at.desc().nullslast()).limit(limit)
+
+    apps = query.all()
+    return {
+        "code": 0,
+        "data": [_to_dict(a) for a in apps],
+        "total": len(apps),
+        "query": q,
+    }
+
+
+@router.get("/export/csv")
+async def export_csv(
+    status_filter: Optional[str] = Query(None, alias="status"),
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """导出投递记录为 CSV（UTF-8 BOM，Excel 友好）
+
+    数据可移植刚需：用户可能要在 Excel 里二次分析，或迁移到其他工具。
+    """
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+
+    query = db.query(Application).filter(Application.user_id == user_id)
+    if status_filter:
+        if status_filter not in VALID_STATUSES:
+            raise HTTPException(status_code=400, detail=f"非法状态: {status_filter}")
+        query = query.filter(Application.status == status_filter)
+    apps = query.order_by(Application.applied_at.desc().nullslast()).all()
+
+    output = io.StringIO()
+    output.write("\ufeff")  # UTF-8 BOM，确保 Excel 正确识别中文
+    writer = csv.writer(output)
+    writer.writerow([
+        "公司", "职位", "状态", "拒绝环节", "面试轮次", "下一面试时间",
+        "笔试截止", "Offer状态", "薪资", "地点", "Offer截止", "HR联系方式",
+        "优先级", "来源", "标签", "投递时间", "更新时间", "备注", "链接",
+    ])
+    for a in apps:
+        writer.writerow([
+            a.company, a.position,
+            VALID_STATUSES.get(a.status, a.status),
+            REJECTION_STAGES.get(a.rejection_stage, a.rejection_stage or "") if a.rejection_stage else "",
+            INTERVIEW_ROUND_LABELS.get(a.interview_round, str(a.interview_round)) if a.interview_round else "",
+            a.next_interview_at.isoformat() if a.next_interview_at else "",
+            a.assessment_deadline.isoformat() if a.assessment_deadline else "",
+            OFFER_STATUSES.get(a.offer_status, a.offer_status or "") if a.offer_status else "",
+            a.offer_salary or "", a.offer_location or "",
+            a.offer_deadline.isoformat() if a.offer_deadline else "",
+            a.hr_contact or "",
+            PRIORITIES.get(a.priority or "medium", a.priority or ""),
+            a.source or "", a.tags or "",
+            a.applied_at.isoformat() if a.applied_at else "",
+            a.updated_at.isoformat() if a.updated_at else "",
+            a.notes or "", a.job_url or "",
+        ])
+
+    content = output.getvalue().encode("utf-8")
+    filename = f"offerclaw_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/stats/timeline")
+async def get_timeline(
+    days: int = Query(30, ge=1, le=365, description="统计最近 N 天"),
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """投递时间趋势（按日聚合，近 N 天）
+
+    用于复盘求职节奏：是否持续投递、周末是否懈怠、哪天集中投递。
+    """
+    start = datetime.now(timezone.utc) - timedelta(days=days)
+    apps = db.query(Application).filter(
+        Application.user_id == user_id,
+        Application.applied_at >= start,
+    ).all()
+
+    # 按日期聚合（用 applied_at 的日期部分）
+    daily: Dict[str, Dict[str, int]] = {}
+    replied_statuses = {"assessment", "interview", "offer", "rejected"}
+    for a in apps:
+        if not a.applied_at:
+            continue
+        dt = a.applied_at
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        day_key = dt.strftime("%Y-%m-%d")
+        if day_key not in daily:
+            daily[day_key] = {"applied": 0, "replied": 0, "offer": 0}
+        daily[day_key]["applied"] += 1
+        if a.status in replied_statuses:
+            daily[day_key]["replied"] += 1
+        if a.status == "offer":
+            daily[day_key]["offer"] += 1
+
+    # 补全空日期（连续序列，便于前端画图）
+    timeline = []
+    cursor = (datetime.now(timezone.utc) - timedelta(days=days)).date()
+    end_date = datetime.now(timezone.utc).date()
+    while cursor <= end_date:
+        key = cursor.strftime("%Y-%m-%d")
+        info = daily.get(key, {"applied": 0, "replied": 0, "offer": 0})
+        timeline.append({"date": key, **info})
+        cursor = cursor + timedelta(days=1)
+
+    total_applied = sum(d["applied"] for d in daily.values())
+    return {
+        "code": 0,
+        "data": {
+            "days": days,
+            "timeline": timeline,
+            "total_applied": total_applied,
+            "total_replied": sum(d["replied"] for d in daily.values()),
+            "total_offer": sum(d["offer"] for d in daily.values()),
+            "avg_per_day": round(total_applied / days, 1) if days else 0,
+        },
+    }
+
+
+@router.get("/stats/by-company")
+async def get_by_company(
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """公司维度统计（按公司聚合投递数/回复数/Offer数）
+
+    用于复盘：哪些公司回复积极、哪些公司石沉大海、哪些公司给了 offer。
+    """
+    apps = db.query(Application).filter(Application.user_id == user_id).all()
+
+    replied_statuses = {"assessment", "interview", "offer", "rejected"}
+    companies: Dict[str, Dict[str, Any]] = {}
+    for a in apps:
+        key = a.company or "未知公司"
+        if key not in companies:
+            companies[key] = {
+                "company": key,
+                "total": 0, "replied": 0, "offer": 0, "rejected": 0,
+                "positions": set(),
+                "latest_status": None,
+                "latest_at": None,
+            }
+        c = companies[key]
+        c["total"] += 1
+        c["positions"].add(a.position)
+        if a.status in replied_statuses:
+            c["replied"] += 1
+        if a.status == "offer":
+            c["offer"] += 1
+        if a.status == "rejected":
+            c["rejected"] += 1
+        # 更新最新状态
+        ap_dt = a.applied_at
+        if ap_dt and (c["latest_at"] is None or ap_dt > c["latest_at"]):
+            c["latest_at"] = ap_dt
+            c["latest_status"] = a.status
+
+    result = []
+    for c in companies.values():
+        positions = sorted(c.pop("positions"))
+        latest_at = c.pop("latest_at")
+        result.append({
+            **c,
+            "positions": positions,
+            "position_count": len(positions),
+            "reply_rate": f"{(c['replied'] / c['total'] * 100):.0f}%" if c["total"] else "0%",
+            "offer_rate": f"{(c['offer'] / c['total'] * 100):.0f}%" if c["total"] else "0%",
+            "latest_status_label": VALID_STATUSES.get(c["latest_status"], c["latest_status"]) if c["latest_status"] else None,
+            "latest_at": latest_at.isoformat() if latest_at else None,
+        })
+    # 按投递数降序
+    result.sort(key=lambda x: -x["total"])
+
+    return {
+        "code": 0,
+        "data": {
+            "companies": result,
+            "total_companies": len(result),
+        },
+    }
+
+
 @router.post("/")
 async def create_application(
     body: ApplicationCreate,
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """创建投递记录"""
+    """创建投递记录
+
+    重复投递检测：同公司同岗位 30 天内已有记录时返回 warning（仍创建），
+    避免求职大忌——同一岗位重复投递。前端可据此提示用户确认。
+    """
     if body.status not in VALID_STATUSES:
         raise HTTPException(status_code=400, detail=f"非法状态: {body.status}")
     if body.priority and body.priority not in PRIORITIES:
@@ -260,6 +495,26 @@ async def create_application(
         raise HTTPException(status_code=400, detail=f"非法拒绝环节: {body.rejection_stage}")
     if body.offer_status and body.offer_status not in OFFER_STATUSES:
         raise HTTPException(status_code=400, detail=f"非法 offer 状态: {body.offer_status}")
+
+    # 重复投递检测（同公司同岗位，30 天内，排除已撤回/已拒绝的）
+    dup_warning = None
+    dup_threshold = datetime.now(timezone.utc) - timedelta(days=30)
+    existing = db.query(Application).filter(
+        Application.user_id == user_id,
+        Application.company == body.company,
+        Application.position == body.position,
+        Application.status.notin_(["withdrawn"]),
+        or_(Application.applied_at >= dup_threshold, Application.applied_at.is_(None)),
+    ).first()
+    if existing:
+        dup_warning = {
+            "duplicate": True,
+            "existing_id": str(existing.id),
+            "existing_status": existing.status,
+            "existing_status_label": VALID_STATUSES.get(existing.status, existing.status),
+            "applied_at": existing.applied_at.isoformat() if existing.applied_at else None,
+            "message": f"30 天内已投递过 {body.company} - {body.position}（当前状态：{VALID_STATUSES.get(existing.status, existing.status)}），请确认是否重复",
+        }
 
     app = Application(
         id=str(uuid.uuid4()),
@@ -285,7 +540,7 @@ async def create_application(
     db.add(app)
     db.commit()
     db.refresh(app)
-    return {"code": 0, "data": _to_dict(app)}
+    return {"code": 0, "data": _to_dict(app), "warning": dup_warning}
 
 
 @router.get("/{application_id}")
@@ -311,7 +566,7 @@ async def update_application(
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """更新投递记录（支持部分更新）"""
+    """更新投递记录（支持部分更新；显式传 null 可清空对应字段）"""
     app = db.query(Application).filter(
         Application.id == application_id,
         Application.user_id == user_id,
@@ -319,65 +574,54 @@ async def update_application(
     if not app:
         raise HTTPException(status_code=404, detail="记录不存在")
 
-    if body.status is not None:
+    # Pydantic v2：通过 model_fields_set 判断字段是否被显式传入（含 None）
+    # 这样能区分「未提供」与「显式清空」
+    provided = body.model_fields_set
+
+    if "status" in provided:
         if body.status not in VALID_STATUSES:
             raise HTTPException(status_code=400, detail=f"非法状态: {body.status}")
+        old_status = app.status
         app.status = body.status
         # 状态切换时自动清理不相关字段
-        if body.status != "rejected":
-            app.rejection_stage = None
-        if body.status != "interview":
-            app.interview_round = None
-            app.next_interview_at = None
-        if body.status != "assessment":
-            app.assessment_deadline = None
-        if body.status != "offer":
-            app.offer_status = None
-            app.offer_salary = None
-            app.offer_location = None
-            app.offer_deadline = None
+        _cleanup_status_fields(app, body.status)
+        # 追加状态变更历史
+        _append_status_history(app, old_status, body.status)
 
-    if body.rejection_stage is not None:
-        if body.rejection_stage not in REJECTION_STAGES:
+    # 拒绝环节（显式传 null 可清空）
+    if "rejection_stage" in provided:
+        if body.rejection_stage is not None and body.rejection_stage not in REJECTION_STAGES:
             raise HTTPException(status_code=400, detail=f"非法拒绝环节: {body.rejection_stage}")
         app.rejection_stage = body.rejection_stage
-    if body.interview_round is not None:
-        if body.interview_round < 1 or body.interview_round > 5:
+    if "interview_round" in provided:
+        if body.interview_round is not None and (body.interview_round < 1 or body.interview_round > 5):
             raise HTTPException(status_code=400, detail="面试轮次必须在 1-5 之间")
         app.interview_round = body.interview_round
-    if body.next_interview_at is not None:
+    if "next_interview_at" in provided:
         app.next_interview_at = _parse_dt(body.next_interview_at)
-    if body.assessment_deadline is not None:
+    if "assessment_deadline" in provided:
         app.assessment_deadline = _parse_dt(body.assessment_deadline)
-    if body.offer_status is not None:
-        if body.offer_status not in OFFER_STATUSES:
+    if "offer_status" in provided:
+        if body.offer_status is not None and body.offer_status not in OFFER_STATUSES:
             raise HTTPException(status_code=400, detail=f"非法 offer 状态: {body.offer_status}")
         app.offer_status = body.offer_status
-    if body.offer_salary is not None:
+    if "offer_salary" in provided:
         app.offer_salary = body.offer_salary
-    if body.offer_location is not None:
+    if "offer_location" in provided:
         app.offer_location = body.offer_location
-    if body.offer_deadline is not None:
+    if "offer_deadline" in provided:
         app.offer_deadline = _parse_dt(body.offer_deadline)
-    if body.hr_contact is not None:
+    if "hr_contact" in provided:
         app.hr_contact = body.hr_contact
-    if body.priority is not None:
-        if body.priority not in PRIORITIES:
+    if "priority" in provided:
+        if body.priority is not None and body.priority not in PRIORITIES:
             raise HTTPException(status_code=400, detail=f"非法优先级: {body.priority}")
         app.priority = body.priority
 
-    if body.company is not None:
-        app.company = body.company
-    if body.position is not None:
-        app.position = body.position
-    if body.job_url is not None:
-        app.job_url = body.job_url
-    if body.source is not None:
-        app.source = body.source
-    if body.notes is not None:
-        app.notes = body.notes
-    if body.tags is not None:
-        app.tags = body.tags
+    # 基本字段（None 清空）
+    for field in ("company", "position", "job_url", "source", "notes", "tags"):
+        if field in provided:
+            setattr(app, field, getattr(body, field))
 
     db.commit()
     db.refresh(app)
@@ -405,18 +649,9 @@ async def update_status(
     old_status = app.status
     app.status = new_status
     # 切换状态时清理不相关字段
-    if new_status != "rejected":
-        app.rejection_stage = None
-    if new_status != "interview":
-        app.interview_round = None
-        app.next_interview_at = None
-    if new_status != "assessment":
-        app.assessment_deadline = None
-    if new_status != "offer":
-        app.offer_status = None
-        app.offer_salary = None
-        app.offer_location = None
-        app.offer_deadline = None
+    _cleanup_status_fields(app, new_status)
+    # 追加状态变更历史
+    _append_status_history(app, old_status, new_status)
 
     db.commit()
     db.refresh(app)
