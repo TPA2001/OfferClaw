@@ -3,13 +3,14 @@
 提供用户画像的增删改查接口
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
+from app.core.response import ok, NotFoundError
 from app.models.profile import Profile
 
 router = APIRouter(prefix="/api/v1/profiles", tags=["profiles"])
@@ -93,10 +94,8 @@ async def get_profile(
         db.commit()
         db.refresh(profile)
     
-    return {
-        "code": 0,
-        "message": "获取成功",
-        "data": {
+    return ok(
+        {
             "basic_info": profile.basic_info or {},
             "education": profile.education or [],
             "experience": profile.experience or [],
@@ -106,8 +105,9 @@ async def get_profile(
             "certifications": profile.certifications or [],
             "job_intent": profile.job_intent or {},
             "extra_fields": profile.extra_fields or {}
-        }
-    }
+        },
+        message="获取成功",
+    )
 
 
 @router.post("/")
@@ -118,7 +118,7 @@ async def create_or_update_profile(
 ):
     """创建或更新用户画像"""
     profile = db.query(Profile).filter(Profile.user_id == user_id).first()
-    
+
     if not profile:
         # 创建新画像
         profile = Profile(
@@ -154,17 +154,14 @@ async def create_or_update_profile(
             profile.job_intent = profile_data.job_intent
         if profile_data.extra_fields is not None:
             profile.extra_fields = profile_data.extra_fields
-    
+
     db.commit()
     db.refresh(profile)
-    
-    return {
-        "code": 0,
-        "message": "保存成功",
-        "data": {
-            "user_id": str(profile.user_id)
-        }
-    }
+
+    return ok(
+        {"user_id": str(profile.user_id)},
+        message="保存成功",
+    )
 
 
 @router.delete("/")
@@ -174,20 +171,14 @@ async def delete_profile(
 ):
     """删除用户画像"""
     profile = db.query(Profile).filter(Profile.user_id == user_id).first()
-    
+
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="用户画像不存在"
-        )
-    
+        raise NotFoundError("用户画像不存在")
+
     db.delete(profile)
     db.commit()
-    
-    return {
-        "code": 0,
-        "message": "删除成功"
-    }
+
+    return ok(None, message="删除成功")
 
 
 @router.get("/completion")
@@ -202,11 +193,10 @@ async def get_profile_completion(
     """
     profile = db.query(Profile).filter(Profile.user_id == user_id).first()
     if not profile:
-        return {
-            "code": 0,
-            "message": "画像为空",
-            "data": {"percentage": 0, "sections": {}, "missing": ["all"]}
-        }
+        return ok(
+            {"percentage": 0, "sections": {}, "missing": ["all"]},
+            message="画像为空",
+        )
 
     sections = {}
     missing = []
@@ -303,15 +293,14 @@ async def get_profile_completion(
     total_pct = sum(sections[k]["percentage"] * weights[k] / 100 for k in weights)
     total_pct = round(total_pct)
 
-    return {
-        "code": 0,
-        "message": "获取完成度成功",
-        "data": {
+    return ok(
+        {
             "percentage": total_pct,
             "sections": sections,
             "missing": missing,
-        }
-    }
+        },
+        message="获取完成度成功",
+    )
 
 
 @router.get("/flatten")
@@ -326,7 +315,7 @@ async def get_profile_flatten(
     """
     profile = db.query(Profile).filter(Profile.user_id == user_id).first()
     if not profile:
-        return {"code": 0, "message": "画像为空", "data": {}}
+        return ok({}, message="画像为空")
 
     flat: Dict[str, Any] = {}
 
@@ -422,7 +411,7 @@ async def get_profile_flatten(
     for k, v in extra.items():
         flat[f"extra_{k}"] = v
 
-    return {"code": 0, "message": "获取成功", "data": flat}
+    return ok(flat, message="获取成功")
 
 
 def _calc_exp_years(exps: list) -> str:

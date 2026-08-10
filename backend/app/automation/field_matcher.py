@@ -236,19 +236,80 @@ class FieldMatcher:
     """字段语义匹配服务"""
 
     MATCH_PROMPT = """你是表单填写助手。给定表单字段列表和用户画像，输出 JSON 映射数组：
-[{
+[{{
   "field_id": "字段ID",
   "value": "填写值或 null",
   "confidence": 0.0-1.0,
   "source": "profile|local_sensitive|file_upload",
   "reason": "匹配理由(低置信度时必填)"
-}]
+}}]
 
-规则:
-- 下拉/单选：从 options 中选最匹配项的原文
-- 文件字段：value 填 "FILE:resume"，source 填 "file_upload"
-- 身份证/家庭住址等敏感字段：value 填 null，source 填 "local_sensitive"(扩展本地填值)
-- 无法确定的字段：value 填 null，reason 说明原因
+# 规则
+
+## 字段类型处理
+- **文本类**（input/textarea）：直接填画像值
+- **下拉/单选**（select/radio）：从 options 中选最匹配项的「value」原文；若无匹配则 value=null，reason 说明
+- **复选框**（checkbox）：true/false/'是'/'否'，按画像语义判断
+- **文件字段**（type=file 或 label 含「简历/附件/上传」）：value 填 "FILE:resume"，source 填 "file_upload"
+- **contenteditable/富文本**：填画像对应字段的纯文本
+
+## 敏感字段（不填值，标记 local_sensitive）
+- 身份证号、护照号、银行卡号、家庭住址、社保号
+- value=null，source="local_sensitive"，reason 注明「敏感字段，本地填值」
+
+## 置信度建议
+- 0.95：字段标签与画像字段精确对应（如 "姓名" → name）
+- 0.85：语义匹配但表述不同（如 "毕业院校" → latest_school）
+- 0.70：模糊推断（如 "过往经历" → 工作描述）
+- 0.50：select 选项无精确匹配但选了最接近的
+- 0.00：完全无法匹配
+
+## 注意事项
+- 字段标签含「账号/用户名」时不要填真实姓名
+- 「期望薪资」填 "20-40K" 格式（带单位）
+- 列表型字段（如技能）用顿号「、」拼接
+- 画像字段为空时 value=null，reason 注明「画像无此字段」
+
+# 示例
+
+## 示例 1：基本信息 + select
+表单字段: [
+  {{"id":"name","label":"姓名","type":"text"}},
+  {{"id":"gender","label":"性别","type":"select","options":[{{"value":"M","label":"男"}},{{"value":"F","label":"女"}}]}},
+  {{"id":"resume","label":"上传简历","type":"file"}}
+]
+用户画像: {{"name":"张三","gender":"男"}}
+
+输出:
+[
+  {{"field_id":"name","value":"张三","confidence":0.95,"source":"profile","reason":null}},
+  {{"field_id":"gender","value":"M","confidence":0.95,"source":"profile","reason":"从选项中匹配 男"}},
+  {{"field_id":"resume","value":"FILE:resume","confidence":0.9,"source":"file_upload","reason":null}}
+]
+
+## 示例 2：敏感字段 + 无匹配选项
+表单字段: [
+  {{"id":"id_card","label":"身份证号","type":"text"}},
+  {{"id":"degree","label":"学历","type":"select","options":[{{"value":"1","label":"高中"}},{{"value":"2","label":"初中"}}]}}
+]
+用户画像: {{"latest_degree":"本科"}}
+
+输出:
+[
+  {{"field_id":"id_card","value":null,"confidence":0.5,"source":"local_sensitive","reason":"敏感字段，本地填值"}},
+  {{"field_id":"degree","value":null,"confidence":0.3,"source":"profile","reason":"画像为本科，但选项只有高中/初中，无匹配"}}
+]
+
+## 示例 3：无法匹配
+表单字段: [{{"id":"referral","label":"推荐人姓名","type":"text"}}]
+用户画像: {{"name":"张三"}}
+
+输出:
+[
+  {{"field_id":"referral","value":null,"confidence":0.0,"source":null,"reason":"画像无推荐人信息"}}
+]
+
+# 实际任务
 
 表单字段: {fields}
 用户画像: {profile}"""
@@ -462,20 +523,55 @@ class FieldMatcher:
         return flat
 
     def _match_by_rules(self, field_text: str, flat: dict) -> Optional[Dict[str, Any]]:
-        """按 KEYWORD_RULES 顺序匹配，返回第一个匹配成功的"""
+        """
+        按 KEYWORD_RULES 顺序匹配，使用 rapidfuzz 模糊匹配
+
+        匹配策略：
+        - 短关键词（≤2 字符）用精确包含匹配，避免误命中（例如 "id" 不应匹配 "candidate"）
+        - 长关键词用 WRatio 模糊匹配（阈值 82），同时保留精确包含的快速路径
+        - 多个候选时取分数最高的
+        """
+        try:
+            from rapidfuzz import fuzz
+        except ImportError:
+            fuzz = None
+
+        candidates: List[tuple] = []  # [(score, rule, value), ...]
+
         for rule in KEYWORD_RULES:
             for key in rule["keys"]:
-                if key.lower() in field_text:
-                    profile_field = rule["profile_field"]
-                    value = self._extract_value(flat, profile_field, rule)
-                    if value:  # 画像中要有值才算匹配成功
-                        return {
-                            "value": value,
-                            "confidence": rule["confidence"],
-                            "category": rule["category"],
-                            "profile_field": profile_field,
-                        }
-        return None
+                key_lower = key.lower()
+                # 1. 精确包含（仍是最可靠信号，得分 100）
+                if key_lower in field_text:
+                    score = 100.0
+                elif fuzz is not None and len(key_lower) > 2:
+                    # 2. 模糊匹配（仅对长关键词，避免 "id"/"sex" 等误匹配）
+                    #    WRatio 对中英混合、长度差异都有较好容错
+                    score = fuzz.WRatio(key_lower, field_text, score_cutoff=80)
+                    if score < 82:
+                        continue
+                else:
+                    continue
+
+                profile_field = rule["profile_field"]
+                value = self._extract_value(flat, profile_field, rule)
+                if value:  # 画像中要有值才算匹配成功
+                    candidates.append((score, rule, value, profile_field))
+
+        if not candidates:
+            return None
+
+        # 取分数最高的；同分时保留原 KEYWORD_RULES 顺序（stable sort）
+        candidates.sort(key=lambda x: -x[0])
+        best_score, best_rule, best_value, best_field = candidates[0]
+        # 置信度：基础置信度 × 模糊分数比例，但不超过规则定义的 confidence
+        adjusted_conf = min(best_rule["confidence"], best_rule["confidence"] * (best_score / 100.0) + 0.1)
+        return {
+            "value": best_value,
+            "confidence": round(adjusted_conf, 3),
+            "category": best_rule["category"],
+            "profile_field": best_field,
+        }
 
     def _extract_value(self, flat: dict, profile_field: str, rule: Dict) -> Any:
         """从扁平化画像中提取值，支持动态字段"""
@@ -562,27 +658,54 @@ class FieldMatcher:
         return ""
 
     def _is_sensitive_field(self, field_text: str) -> bool:
-        """判断是否为敏感字段（身份证 / 家庭住址 / 银行卡等）"""
+        """
+        判断是否为敏感字段（身份证 / 家庭住址 / 银行卡等）
+
+        匹配策略：
+        - 精确包含优先（"身份证" in field_text）
+        - 模糊匹配兜底（rapidfuzz WRatio ≥ 85），用于捕捉 "身份证据" 等 OCR/拼写变体
+        - 短关键词（≤3 字符）仅用精确包含，避免误判
+        """
         sensitive_keys = [
             "id_number", "id_card", "身份证", "身份号", "身份证明",
             "home_address", "住址", "家庭住址", "地址",
             "bank_card", "银行卡", "银行账号",
             "idcard", "identity",
         ]
-        return any(k in field_text for k in sensitive_keys)
+        # 1. 精确包含
+        if any(k in field_text for k in sensitive_keys):
+            return True
+        # 2. 模糊匹配兜底
+        try:
+            from rapidfuzz import fuzz
+        except ImportError:
+            return False
+        for k in sensitive_keys:
+            if len(k) <= 3:
+                continue
+            if fuzz.WRatio(k, field_text, score_cutoff=85) >= 85:
+                return True
+        return False
 
     def _match_option(self, value: str, options: list) -> Optional[str]:
-        """从 select/radio 的选项中找最匹配的"""
+        """
+        从 select/radio 的选项中找最匹配的
+
+        匹配策略（按优先级）：
+        1. 精确匹配（value 或 label 完全相等）
+        2. 包含匹配（双向 substring）
+        3. 模糊匹配（rapidfuzz WRatio ≥ 82），用于捕捉 "本科/学士" 等同义变体
+        """
         if not value:
             return None
         value_lower = str(value).lower().strip()
-        # 精确匹配
+        # 1. 精确匹配
         for opt in options:
             opt_val = str(opt.get("value", "")).strip()
             opt_label = str(opt.get("label", opt.get("text", ""))).strip()
             if opt_val == value or opt_label == value:
                 return opt_val or opt_label
-        # 包含匹配
+        # 2. 包含匹配（双向）
         for opt in options:
             opt_val = str(opt.get("value", "")).strip()
             opt_label = str(opt.get("label", opt.get("text", ""))).strip()
@@ -590,6 +713,26 @@ class FieldMatcher:
                 return opt_val or opt_label
             if opt_val.lower() in value_lower or opt_label.lower() in value_lower:
                 return opt_val or opt_label
+        # 3. 模糊匹配兜底
+        try:
+            from rapidfuzz import fuzz, process
+        except ImportError:
+            return None
+        opt_strs = []
+        opt_map = {}  # (val,label) -> return value
+        for opt in options:
+            opt_val = str(opt.get("value", "")).strip()
+            opt_label = str(opt.get("label", opt.get("text", ""))).strip()
+            for s in (opt_val, opt_label):
+                if s:
+                    opt_strs.append(s)
+                    opt_map[s] = opt_val or opt_label
+        if not opt_strs:
+            return None
+        best = process.extractOne(value, opt_strs, scorer=fuzz.WRatio, score_cutoff=82)
+        if best:
+            matched_str = best[0]
+            return opt_map.get(matched_str)
         return None
 
     def _extract_from_profile(self, profile: dict, path: str):
@@ -605,7 +748,8 @@ class FieldMatcher:
                 else:
                     value = value[part]
             return value
-        except:
+        except (KeyError, IndexError, TypeError, ValueError) as e:
+            logger.debug(f"按路径提取字段值失败: {e}")
             return None
 
 

@@ -119,9 +119,12 @@
             content: '▾';
             color: var(--ink-soft);
             font-size: 0.7rem;
+            transition: transform 0.22s var(--ease);
+        }
+        .custom-select.trigger-open .custom-select-trigger::after {
+            transform: rotate(180deg);
         }
         .custom-select-dropdown {
-            display: none;
             position: absolute;
             top: calc(100% + 4px);
             left: 0; right: 0;
@@ -132,16 +135,31 @@
             z-index: 10;
             max-height: 200px;
             overflow-y: auto;
+            /* Slide + fade instead of display swap */
+            opacity: 0;
+            transform: translateY(-6px) scaleY(0.96);
+            transform-origin: top center;
+            pointer-events: none;
+            transition:
+                opacity 0.22s var(--ease-out),
+                transform 0.22s var(--ease-out);
         }
-        .custom-select-dropdown.open { display: block; }
+        .custom-select-dropdown.open {
+            opacity: 1;
+            transform: translateY(0) scaleY(1);
+            pointer-events: auto;
+        }
         .custom-select-option {
             padding: 0.5rem 0.75rem;
             cursor: pointer;
             font-size: 0.85rem;
             color: var(--ink);
-            transition: background 0.15s;
+            transition: background 0.15s var(--ease), padding-left 0.15s var(--ease);
         }
-        .custom-select-option:hover { background: var(--olive-soft); }
+        .custom-select-option:hover {
+            background: var(--olive-soft);
+            padding-left: 0.95rem;
+        }
 
         .submit-bar {
             display: flex;
@@ -170,12 +188,30 @@
             position: fixed;
             inset: 0;
             background: rgba(45, 42, 38, 0.6);
-            display: none;
+            display: flex;
             align-items: center;
             justify-content: center;
             z-index: 999;
+            /* Fade instead of display swap so transitions work */
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+            transition:
+                opacity 0.25s var(--ease-out),
+                visibility 0s linear 0.25s,
+                backdrop-filter 0.25s var(--ease-out);
         }
-        .result-overlay.show { display: flex; }
+        .result-overlay.show {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+            transition:
+                opacity 0.25s var(--ease-out),
+                visibility 0s linear 0s,
+                backdrop-filter 0.25s var(--ease-out);
+        }
         .result-box {
             background: var(--card);
             padding: 1.8rem 2rem;
@@ -184,6 +220,27 @@
             width: 90%;
             max-height: 80vh;
             overflow-y: auto;
+            /* Scale-in from 92% with a slight upward drift */
+            transform: scale(0.92) translateY(8px);
+            opacity: 0;
+            transition:
+                transform 0.32s var(--ease-out),
+                opacity 0.28s var(--ease-out);
+            box-shadow: 0 24px 60px -20px rgba(45, 42, 38, 0.45);
+        }
+        .result-overlay.show .result-box {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+            transition-delay: 0.04s;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .result-overlay,
+            .result-box,
+            .custom-select-dropdown {
+                transition-duration: 0.01ms !important;
+            }
+            .result-box { transform: none; }
+            .custom-select-dropdown { transform: none; }
         }
         .result-box h3 { font-family: var(--font-serif); margin-bottom: 1rem; }
         .result-box pre {
@@ -197,6 +254,30 @@
             overflow-x: auto;
             white-space: pre-wrap;
         }
+
+        /* Submit button success burst */
+        @keyframes submitBurst {
+            0%   { box-shadow: 0 0 0 0 rgba(90, 122, 58, 0.55); }
+            70%  { box-shadow: 0 0 0 14px rgba(90, 122, 58, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(90, 122, 58, 0); }
+        }
+        .submit-bar .btn-primary.burst {
+            animation: submitBurst 0.6s var(--ease-out);
+        }
+
+        /* Stagger dropdown options when opened */
+        @keyframes optionIn {
+            from { opacity: 0; transform: translateX(-6px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        .custom-select-dropdown.open .custom-select-option {
+            animation: optionIn 0.22s var(--ease-out) backwards;
+        }
+        .custom-select-dropdown.open .custom-select-option:nth-child(1) { animation-delay: 0.02s; }
+        .custom-select-dropdown.open .custom-select-option:nth-child(2) { animation-delay: 0.06s; }
+        .custom-select-dropdown.open .custom-select-option:nth-child(3) { animation-delay: 0.10s; }
+        .custom-select-dropdown.open .custom-select-option:nth-child(4) { animation-delay: 0.14s; }
+        .custom-select-dropdown.open .custom-select-option:nth-child(n+5) { animation-delay: 0.18s; }
     </style>
 </head>
 <body>
@@ -349,23 +430,40 @@
         const trigger = document.getElementById('salaryTrigger');
         const dropdown = document.getElementById('salaryDropdown');
         const valueSpan = trigger.querySelector('.custom-select-value');
+        const selectWrap = trigger.closest('.custom-select');
 
-        trigger.addEventListener('click', () => dropdown.classList.toggle('open'));
+        function openDropdown() {
+            dropdown.classList.add('open');
+            if (selectWrap) selectWrap.classList.add('trigger-open');
+        }
+        function closeDropdown() {
+            dropdown.classList.remove('open');
+            if (selectWrap) selectWrap.classList.remove('trigger-open');
+        }
+        function toggleDropdown() {
+            if (dropdown.classList.contains('open')) closeDropdown();
+            else openDropdown();
+        }
+
+        trigger.addEventListener('click', toggleDropdown);
         trigger.addEventListener('keydown', e => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                dropdown.classList.toggle('open');
+                toggleDropdown();
+            } else if (e.key === 'Escape' && dropdown.classList.contains('open')) {
+                closeDropdown();
             }
         });
         dropdown.querySelectorAll('.custom-select-option').forEach(opt => {
             opt.addEventListener('click', () => {
                 valueSpan.textContent = opt.dataset.value;
                 valueSpan.dataset.value = opt.dataset.value;
-                dropdown.classList.remove('open');
+                closeDropdown();
+                trigger.focus();
             });
         });
         document.addEventListener('click', e => {
-            if (!e.target.closest('.custom-select')) dropdown.classList.remove('open');
+            if (!e.target.closest('.custom-select')) closeDropdown();
         });
 
         function submitForm(e) {
@@ -384,15 +482,33 @@
                 github_url: document.querySelector('[data-oc-field="github_url"]').value,
             };
             document.getElementById('resultPre').textContent = JSON.stringify(data, null, 2);
+
+            // Submit burst on the button
+            const btn = e.submitter || document.querySelector('.submit-bar .btn-primary');
+            if (btn) {
+                btn.classList.remove('burst');
+                void btn.offsetWidth;
+                btn.classList.add('burst');
+            }
+
             document.getElementById('resultOverlay').classList.add('show');
             return false;
         }
+
+        // ESC closes the result modal
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                document.getElementById('resultOverlay').classList.remove('show');
+                closeDropdown();
+            }
+        });
 
         function clearForm() {
             document.getElementById('testForm').reset();
             projectExp.innerText = '';
             valueSpan.textContent = '请选择';
             delete valueSpan.dataset.value;
+            closeDropdown();
         }
     </script>
 </body>

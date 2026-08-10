@@ -198,6 +198,10 @@
         .panel { display: none; animation: fadeIn 0.3s ease; }
         .panel.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes cardInPanel {
+            from { opacity: 0; transform: translateY(10px) scale(0.98); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
 
         .card {
             background: var(--card);
@@ -205,9 +209,13 @@
             border-radius: 10px;
             padding: 1.5rem;
             margin-bottom: 1rem;
-            transition: box-shadow 0.2s;
+            transition: box-shadow 0.3s var(--ease), transform 0.3s var(--ease), border-color 0.3s var(--ease);
         }
-        .card:hover { box-shadow: 0 2px 12px rgba(45,42,38,0.06); }
+        .card:hover {
+            box-shadow: 0 6px 20px rgba(45,42,38,0.08);
+            transform: translateY(-2px);
+            border-color: var(--olive);
+        }
 
         .card-header {
             display: flex;
@@ -371,7 +379,23 @@
             height: 100%;
             background: linear-gradient(90deg, var(--olive), var(--olive-dark));
             border-radius: 3px;
-            transition: width 0.5s ease;
+            transition: width 1s var(--ease-out);
+            position: relative;
+            overflow: hidden;
+        }
+        .completion-fill::after {
+            content: '';
+            position: absolute;
+            top: 0; bottom: 0;
+            left: -50%; width: 40%;
+            background: linear-gradient(90deg, transparent, rgba(255,253,245,0.55), transparent);
+            animation: completionShimmer 3.5s var(--ease) infinite;
+            pointer-events: none;
+        }
+        @keyframes completionShimmer {
+            0% { left: -50%; }
+            60% { left: 110%; }
+            100% { left: 110%; }
         }
         .completion-text {
             font-size: 0.8rem;
@@ -476,7 +500,7 @@
     </nav>
 
     <div class="container">
-        <div class="page-header">
+        <div class="page-header reveal-scale">
             <div>
                 <h2 class="page-title">个人画像</h2>
                 <p class="page-subtitle">维护你的求职信息，Agent 和智能填写会自动读取这些数据</p>
@@ -487,13 +511,13 @@
             </div>
         </div>
 
-        <div class="completion-bar">
+        <div class="completion-bar reveal" style="--reveal-delay:80ms">
             <span class="completion-text">画像完成度</span>
             <div class="completion-track"><div class="completion-fill" id="completionFill" style="width:0%"></div></div>
             <span class="completion-text"><strong id="completionPct">0%</strong></span>
         </div>
 
-        <div class="tabs">
+        <div class="tabs reveal" style="--reveal-delay:140ms">
             <button class="tab active" data-tab="basic">👤 基本信息</button>
             <button class="tab" data-tab="education">🎓 教育 <span class="tab-badge" id="eduCount">0</span></button>
             <button class="tab" data-tab="experience">💼 经历 <span class="tab-badge" id="expCount">0</span></button>
@@ -664,9 +688,11 @@
 
     <div class="toast-container" id="toastContainer"></div>
 
+    <script src="config.js"></script>
+    <script src="motion.js"></script>
     <script>
-        const API_BASE = "http://localhost:8000";
-        const TOKEN = "demo-token";
+        const API_BASE = window.OFFERCLAW_CONFIG.API_BASE;
+        const TOKEN = window.OFFERCLAW_CONFIG.TOKEN;
 
         let profile = {
             basic_info: {},
@@ -717,7 +743,18 @@
                 document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
                 tab.classList.add('active');
-                document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+                const panel = document.getElementById('panel-' + tab.dataset.tab);
+                panel.classList.add('active');
+                // Directional reveal + staggered children for a livelier switch
+                if (window.OfferClawMotion) {
+                    window.OfferClawMotion.tabEnter(panel);
+                    panel.querySelectorAll('.card').forEach((c, i) => {
+                        c.style.animation = 'none';
+                        void c.offsetWidth;
+                        c.style.animation = `cardInPanel 0.45s var(--ease-out) backwards`;
+                        c.style.animationDelay = (i * 60) + 'ms';
+                    });
+                }
             });
         });
 
@@ -982,13 +1019,26 @@
                 const res = await apiGet('/api/v1/profiles/completion');
                 if (res.code === 0 && res.data) {
                     const pct = res.data.percentage || 0;
-                    document.getElementById('completionFill').style.width = pct + '%';
-                    document.getElementById('completionPct').textContent = pct + '%';
+                    setCompletion(pct);
                     return;
                 }
             } catch (e) { /* 降级 */ }
             // 本地降级计算
             localCompletion();
+        }
+        function setCompletion(pct) {
+            // Reset to 0 first so the fill animates from the left
+            const fill = document.getElementById('completionFill');
+            fill.style.width = '0%';
+            void fill.offsetWidth;
+            fill.style.width = pct + '%';
+            // Count up the percentage label
+            const pctEl = document.getElementById('completionPct');
+            if (window.OfferClawMotion) {
+                window.OfferClawMotion.countUp(pctEl, pct, { duration: 1000, suffix: '%' });
+            } else {
+                pctEl.textContent = pct + '%';
+            }
         }
         function localCompletion() {
             let filled = 0, total = 0;
@@ -1004,8 +1054,7 @@
             const j = profile.job_intent || {};
             ['role','cities'].forEach(k => { total++; if (j[k] && (Array.isArray(j[k]) ? j[k].length : j[k])) filled++; });
             const pct = total ? Math.round(filled / total * 100) : 0;
-            document.getElementById('completionFill').style.width = pct + '%';
-            document.getElementById('completionPct').textContent = pct + '%';
+            setCompletion(pct);
         }
 
         // ============ 添加/删除 ============

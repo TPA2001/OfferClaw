@@ -71,6 +71,45 @@ class MockProvider(LLMProvider):
         try:
             data = json.loads(content)
             if isinstance(data, dict):
+                if data.get("error") and not data.get("message"):
+                    return f"操作失败：{data['error']}"
+                if name == "search_jobs":
+                    jobs = data.get("jobs", [])
+                    total = data.get("total", len(jobs))
+                    source = data.get("source", "unknown")
+                    need_login = data.get("need_login", False)
+                    keyword = data.get("keyword", "")
+                    city = data.get("city", "全国")
+
+                    if need_login:
+                        return data.get("message", f"Boss 直聘需要登录后才能搜索「{keyword}」。请先在「智能填写」页面点击「登录 Boss」按钮完成登录。")
+
+                    source_label = {"real": "真实数据", "html": "公开页", "mock": "模拟数据"}.get(source, source)
+                    if not jobs:
+                        return f"搜索「{keyword}」{city or '全国'}：未找到岗位（数据来源：{source_label}）。"
+
+                    lines = [f"搜索「{keyword}」{city or '全国'}：找到 {total} 个岗位（数据来源：{source_label}）\n"]
+                    for i, j in enumerate(jobs[:8], 1):
+                        title = j.get("title", "?")
+                        company = j.get("company", "?")
+                        salary = j.get("salary", "")
+                        job_city = j.get("city", "")
+                        line = f"{i}. **{company}** - {title}"
+                        if salary:
+                            line += f" | {salary}"
+                        if job_city:
+                            line += f" | {job_city}"
+                        lines.append(line)
+                    if total > 8:
+                        lines.append(f"\n...共 {total} 个岗位，如需查看更多请翻页。")
+                    return "\n".join(lines)
+
+                if name == "verify_job_authenticity":
+                    return data.get("message", "真实性评估完成。")
+
+                if name == "evaluate_job":
+                    return data.get("message", "岗位综合评估完成。")
+
                 if data.get("message"):
                     return data["message"]
                 if data.get("error"):
@@ -111,6 +150,73 @@ class MockProvider(LLMProvider):
     def _detect_tool_call(self, text: str, tools: list[ToolSchema]) -> Optional[ToolCall]:
         """基于关键词识别用户意图，触发对应工具"""
         text_lower = text.lower()
+
+        # 岗位搜索（优先匹配，避免被"查看"等关键词截胡）
+        # 匹配模式：搜XX岗位 / 搜索XX / 找XX工作 / 找找XX的岗位
+        if any(kw in text for kw in ["搜索", "搜一下", "搜下", "找找", "找工作", "找岗位", "有哪些岗位", "帮我搜"]):
+            if self._has_tool(tools, "search_jobs"):
+                # 尝试提取关键词和城市
+                keyword = ""
+                city = None
+
+                # 提取城市
+                city_patterns = [
+                    r"(北京|上海|广州|深圳|杭州|成都|武汉|南京|西安|苏州|天津|重庆|长沙|青岛|大连|厦门|全国)",
+                ]
+                for cp in city_patterns:
+                    cm = re.search(cp, text)
+                    if cm:
+                        city = cm.group(1)
+                        break
+
+                # 提取搜索关键词：去掉"搜/搜索/找/岗位/工作/北京等城市名"后的剩余内容
+                kw_text = re.sub(r"(帮我|请|帮忙)?\s*(搜一下|搜下|搜索|找找|找|找工作|找岗位|有哪些岗位|帮我搜)", "", text)
+                kw_text = re.sub(r"(北京|上海|广州|深圳|杭州|成都|武汉|南京|西安|苏州|天津|重庆|长沙|青岛|大连|厦门|全国)", "", kw_text)
+                kw_text = re.sub(r"(的|地)?\s*(岗位|工作|职位|job)", "", kw_text, flags=re.IGNORECASE)
+                kw_text = kw_text.strip(" ，。、？?")
+
+                if kw_text and len(kw_text) >= 1:
+                    keyword = kw_text
+                else:
+                    keyword = "Java"  # 默认兜底
+
+                return ToolCall(
+                    id=f"call_{uuid.uuid4().hex[:8]}",
+                    name="search_jobs",
+                    arguments={"keyword": keyword, **({"city": city} if city else {})},
+                )
+
+        # 岗位真实性判断
+        if any(kw in text for kw in ["靠谱吗", "是不是中介", "真假", "可信", "骗", "皮包", "培训贷", "这个公司怎么样"]):
+            if self._has_tool(tools, "verify_job_authenticity"):
+                # 尝试提取 URL
+                url_match = re.search(r'(https?://[^\s，。]+)', text)
+                args = {}
+                if url_match:
+                    args["jd_url"] = url_match.group(1)
+                else:
+                    # 无 URL 时把文本作为 jd_text
+                    args["jd_text"] = text
+                return ToolCall(
+                    id=f"call_{uuid.uuid4().hex[:8]}",
+                    name="verify_job_authenticity",
+                    arguments=args,
+                )
+
+        # 岗位综合评估
+        if any(kw in text for kw in ["评估", "综合分析", "值不值得投", "怎么样", "能投吗", "可以投吗", "分析一下"]):
+            if self._has_tool(tools, "evaluate_job"):
+                url_match = re.search(r'(https?://[^\s，。]+)', text)
+                args = {}
+                if url_match:
+                    args["jd_url"] = url_match.group(1)
+                else:
+                    args["jd_text"] = text
+                return ToolCall(
+                    id=f"call_{uuid.uuid4().hex[:8]}",
+                    name="evaluate_job",
+                    arguments=args,
+                )
 
         # 查询投递记录
         if any(kw in text for kw in ["查询", "查看", "列出", "有哪些投递", "投递记录", "看板"]):
@@ -192,10 +298,13 @@ class MockProvider(LLMProvider):
     def _default_reply(self, user_text: str) -> str:
         return (
             "我是 OfferClaw 求职助手，可以帮你：\n"
-            "- 管理投递记录（如：'记录我投递了腾讯的后端岗位'）\n"
-            "- 查询投递状态（如：'查看我的投递记录'）\n"
-            "- 更新状态（如：'腾讯进入面试'）\n"
-            "- 查看统计（如：'我的投递统计'）\n"
-            "- 维护个人画像\n\n"
+            "- 🔍 **搜索岗位**（如：'帮我搜北京Java岗位'）\n"
+            "- 🛡️ **判断岗位真实性**（如：'这个岗位靠谱吗'）\n"
+            "- 📊 **综合评估岗位**（如：'帮我评估这个岗位'）\n"
+            "- 📝 **管理投递记录**（如：'记录我投递了腾讯的后端岗位'）\n"
+            "- 📋 **查询投递状态**（如：'查看我的投递记录'）\n"
+            "- 🔄 **更新状态**（如：'腾讯进入面试'）\n"
+            "- 📈 **查看统计**（如：'我的投递统计'）\n"
+            "- 👤 **维护个人画像**\n\n"
             "请告诉我你想做什么？"
         )

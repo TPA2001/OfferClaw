@@ -2,11 +2,15 @@
 工具基类
 """
 
+import json
+import logging
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from app.core.llm import ToolSchema
+
+logger = logging.getLogger("offerclaw.agent.tool")
 
 
 class ToolResult(BaseModel):
@@ -19,14 +23,14 @@ class ToolResult(BaseModel):
 
     def to_message_content(self) -> str:
         """转换为 tool 消息的 content 字符串"""
-        import json
         if not self.success:
             return f"工具执行失败: {self.error}"
         if self.requires_confirmation:
             return f"操作待确认（action_id={self.pending_action_id}）"
         try:
             return json.dumps(self.data, ensure_ascii=False, default=str)
-        except Exception:
+        except (TypeError, ValueError) as e:
+            logger.warning(f"ToolResult 数据序列化失败，降级为 str: {e}")
             return str(self.data)
 
 
@@ -56,4 +60,5 @@ class BaseTool(ABC):
         try:
             return await self.execute(**kwargs)
         except Exception as e:
-            return ToolResult(success=False, error=str(e))
+            logger.exception(f"工具 {self.name} 执行异常: {e}")
+            return ToolResult(success=False, error=f"工具执行异常: {type(e).__name__}: {e}")

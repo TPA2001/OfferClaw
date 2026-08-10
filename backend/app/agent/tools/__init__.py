@@ -14,6 +14,14 @@ from .followup_tools import (
     GetTimelineStatsTool, GetCompanyStatsTool,
 )
 from .smart_fill_tools import ExtractFormFieldsTool, MatchFieldsTool
+from .job_tools import (
+    ExtractJobDescriptionTool, ScoreJobMatchTool,
+    GenerateResumeTool, GenerateCoverLetterTool,
+    PrepareInterviewTool, GetApplicationAdviceTool,
+)
+from .job_eval_tools import (
+    VerifyJobAuthenticityTool, SearchJobsTool, EvaluateJobTool,
+)
 
 __all__ = [
     "GetProfileTool", "UpdateProfileTool",
@@ -23,4 +31,10 @@ __all__ = [
     "GetFollowupsTool", "SearchApplicationsTool",
     "GetTimelineStatsTool", "GetCompanyStatsTool",
     "ExtractFormFieldsTool", "MatchFieldsTool",
+    # 投递前准备能力（吸取 ai-job-search 优势）
+    "ExtractJobDescriptionTool", "ScoreJobMatchTool",
+    "GenerateResumeTool", "GenerateCoverLetterTool",
+    "PrepareInterviewTool", "GetApplicationAdviceTool",
+    # 岗位分析与搜索能力
+    "VerifyJobAuthenticityTool", "SearchJobsTool", "EvaluateJobTool",
 ]

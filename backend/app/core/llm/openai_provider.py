@@ -27,11 +27,12 @@ class OpenAIProvider(LLMProvider):
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        model: str = "gpt-4o-mini",
+        model: Optional[str] = None,
     ):
+        # 显式传入的参数优先于环境变量，支持多 provider 实例用不同模型
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "")
         self.base_url = (base_url or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
-        self.model = os.getenv("OPENAI_MODEL", model)
+        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self.timeout = 60.0
 
         if not self.api_key:

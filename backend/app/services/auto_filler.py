@@ -89,6 +89,8 @@ class AutoFillerService:
                 "tag": (meta.get("tag") or "input").lower(),
                 "type": (meta.get("type") or "text").lower(),
                 "selector": meta.get("selector") or "",
+                # 新增：多重备选选择器数组（按优先级尝试）
+                "selectors": meta.get("selectors") or [],
                 "label": meta.get("label") or fid,
                 "options": meta.get("options") or [],
             })
@@ -248,14 +250,27 @@ class AutoFillerService:
         async (task) => {
             const val = task.value;
 
-            // 多重选择器定位
+            // 多重选择器定位（按优先级尝试 selectors 数组，再降级到原 selector）
             function findField(entry) {
+                // 1. 优先尝试 selectors 数组（来自 FormExtractor 的多重备选）
+                const selectors = entry.selectors || [];
+                for (const s of selectors) {
+                    if (!s || !s.value) continue;
+                    try {
+                        // label-for 是占位语法，跳过由后续兜底处理
+                        if (s.type === 'label-for') continue;
+                        const el = document.querySelector(s.value);
+                        if (el) return el;
+                    } catch (e) {}
+                }
+                // 2. 降级到旧版单 selector
                 if (entry.selector) {
                     try {
                         const el = document.querySelector(entry.selector);
                         if (el) return el;
                     } catch (e) {}
                 }
+                // 3. 旧版多重兜底（兼容未升级的 fields 数据）
                 if (entry.id) {
                     const el = document.getElementById(entry.id);
                     if (el) return el;
@@ -269,7 +284,7 @@ class AutoFillerService:
                     const byData = document.querySelector(`[data-oc-field="${entry.id}"]`);
                     if (byData) return byData;
                 }
-                // label[for] 关联（精确匹配 + 包含匹配）
+                // 4. label[for] 关联（精确匹配 + 包含匹配）
                 const labelEls = Array.from(document.querySelectorAll('label'));
                 for (const l of labelEls) {
                     const lt = l.textContent.trim();
@@ -278,7 +293,7 @@ class AutoFillerService:
                         if (el) return el;
                     }
                 }
-                // 兜底：按 label 文本找最近的 input/textarea/select
+                // 5. 兜底：按 label 文本找最近的 input/textarea/select
                 if (entry.label) {
                     const allLabels = Array.from(document.querySelectorAll('label, .form-label, .label, .field-label, .ant-form-item-label, .el-form-item__label'));
                     for (const l of allLabels) {
@@ -415,7 +430,14 @@ class AutoFillerService:
 
     async def _fill_file(self, page, task: Dict[str, Any]) -> bool:
         """
-        填写文件上传字段
+        填写文件上传字段（增强版）
+
+        定位策略（按优先级）：
+        1. 用 selectors 数组（来自 FormExtractor 多重备选）定位 input[type=file]
+        2. 用 selector / id / name 定位 input[type=file]
+        3. 按 accept 属性匹配（简历场景优先 .pdf / .doc）
+        4. 自定义上传按钮兜底：点击 label 含「上传简历/上传附件/选择文件」的按钮，
+           触发隐藏的 input[type=file] 后再设置文件
 
         支持的 value 格式：
         - "FILE:resume"        → 使用默认简历路径（user_data_dir/resume.pdf 等）
@@ -461,26 +483,29 @@ class AutoFillerService:
             )
             return False
 
-        # 定位 input[type=file] 元素
+        # 推断期望的 accept 扩展名（用于按 accept 属性匹配）
+        file_ext = os.path.splitext(file_path)[1].lower().lstrip(".")
+        accept_hints = []
+        if file_ext in ("pdf", "doc", "docx"):
+            accept_hints = [f".{file_ext}", "pdf", "doc", "docx", "resume", "简历"]
+        elif file_ext in ("png", "jpg", "jpeg", "gif"):
+            accept_hints = [f".{file_ext}", "image/*"]
+
         try:
-            # 优先用 selector
-            selector = task.get("selector") or ""
-            file_input = None
-            if selector:
-                try:
-                    file_input = await page.query_selector(selector)
-                except Exception:
-                    pass
+            file_input = await self._locate_file_input(page, task, accept_hints)
+
             if not file_input:
-                # 按 id / name 定位
-                fid = task.get("id", "")
-                if fid:
-                    file_input = await page.query_selector(f'input[type="file"]#{fid}')
-                if not file_input and fid:
-                    file_input = await page.query_selector(f'input[type="file"][name="{fid}"]')
-            if not file_input:
-                # 兜底：取页面上所有 input[type=file] 的第一个
-                file_input = await page.query_selector('input[type="file"]')
+                # 兜底：尝试点击自定义上传按钮触发隐藏的 input[type=file]
+                triggered = await self._trigger_custom_upload_button(page, task)
+                if triggered:
+                    # 等待 input[type=file] 出现
+                    try:
+                        await page.wait_for_selector(
+                            'input[type="file"]', timeout=2000
+                        )
+                        file_input = await page.query_selector('input[type="file"]')
+                    except Exception:
+                        pass
 
             if not file_input:
                 logger.warning(f"未找到 input[type=file] 元素: {task.get('id')}")
@@ -489,13 +514,134 @@ class AutoFillerService:
             await file_input.set_input_files(file_path)
             logger.info(f"文件上传成功: {task.get('id')} ← {file_path}")
             # 视觉反馈
-            await page.evaluate(
-                """(el) => { if (el) el.classList.add('oc-filled'); }""",
-                file_input,
-            )
+            try:
+                await page.evaluate(
+                    """(el) => { if (el) el.classList.add('oc-filled'); }""",
+                    file_input,
+                )
+            except Exception:
+                pass
             return True
         except Exception as e:
             logger.warning(f"文件上传异常 {task.get('id')}: {e}")
+            return False
+
+    async def _locate_file_input(
+        self, page, task: Dict[str, Any], accept_hints: List[str]
+    ) -> Optional[Any]:
+        """
+        多策略定位 input[type=file] 元素
+
+        优先级：
+        1. selectors 数组（来自 FormExtractor）
+        2. selector 字段
+        3. id / name 属性
+        4. 按 accept 属性匹配（如果 accept_hints 非空）
+        5. 页面上第一个 input[type=file]
+        """
+        # 1. selectors 数组
+        selectors = task.get("selectors") or []
+        for s in selectors:
+            if not s or not s.get("value"):
+                continue
+            try:
+                # 给 selector 附加 input[type=file] 约束
+                sel = s["value"]
+                # 如果 selector 本身不是 input[type=file]，尝试叠加
+                if 'input[type="file"]' not in sel and not sel.startswith("#"):
+                    el = await page.query_selector(f'{sel} input[type="file"]')
+                    if el:
+                        return el
+                el = await page.query_selector(sel)
+                if el:
+                    tag = await el.evaluate("e => e.tagName.toLowerCase()")
+                    if tag == "input" and await el.get_attribute("type") == "file":
+                        return el
+            except Exception:
+                continue
+
+        # 2. selector 字段
+        selector = task.get("selector") or ""
+        if selector:
+            try:
+                el = await page.query_selector(selector)
+                if el:
+                    return el
+            except Exception:
+                pass
+
+        # 3. id / name
+        fid = task.get("id", "")
+        if fid:
+            try:
+                el = await page.query_selector(f'input[type="file"]#{fid}')
+                if el:
+                    return el
+            except Exception:
+                pass
+            try:
+                el = await page.query_selector(f'input[type="file"][name="{fid}"]')
+                if el:
+                    return el
+            except Exception:
+                pass
+
+        # 4. 按 accept 属性匹配
+        if accept_hints:
+            for hint in accept_hints:
+                try:
+                    el = await page.query_selector(
+                        f'input[type="file"][accept*="{hint}"]'
+                    )
+                    if el:
+                        return el
+                except Exception:
+                    continue
+
+        # 5. 兜底：页面上第一个 input[type=file]
+        try:
+            el = await page.query_selector('input[type="file"]')
+            return el
+        except Exception:
+            return None
+
+    async def _trigger_custom_upload_button(
+        self, page, task: Dict[str, Any]
+    ) -> bool:
+        """
+        点击自定义上传按钮，触发隐藏的 input[type=file]
+
+        识别策略：
+        - 按钮文本含「上传简历/上传附件/选择文件/选择简历/上传文件」
+        - label 关联的上传区域（.upload-area / .upload-btn / [class*="upload"]）
+        - 任务标签或 label 含「简历/附件」关键词时优先匹配
+        """
+        label = (task.get("label") or "").lower()
+        # 根据字段类型选择关键词
+        if "简历" in label or "resume" in label or "cv" in label:
+            keywords = ["上传简历", "选择简历", "上传附件", "选择文件", "上传文件", "点击上传"]
+        else:
+            keywords = ["上传", "选择文件", "点击上传", "上传附件", "browse", "upload"]
+
+        try:
+            for kw in keywords:
+                # 优先匹配 button / [role=button] / .upload-btn
+                btn = page.locator(
+                    f'button:has-text("{kw}"), '
+                    f'[role="button"]:has-text("{kw}"), '
+                    f'.upload-btn:has-text("{kw}"), '
+                    f'[class*="upload"]:has-text("{kw}")'
+                ).first
+                if await btn.count() > 0:
+                    try:
+                        await btn.click()
+                        logger.info(f"已点击自定义上传按钮: {kw}")
+                        return True
+                    except Exception:
+                        continue
+            return False
+        except Exception as e:
+            logger.debug(f"自定义上传按钮触发失败: {e}")
             return False
 
     def _build_fill_js(self, tasks: List[Dict[str, Any]]) -> str:

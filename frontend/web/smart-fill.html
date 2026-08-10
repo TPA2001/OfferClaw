@@ -54,6 +54,8 @@
             background: #fdf6e3;
             color: #6b4f1d;
             font-size: 0.85rem;
+            transition: background 0.35s var(--ease), border-color 0.35s var(--ease), color 0.35s var(--ease);
+            animation: slideDown 0.3s var(--ease-out);
         }
         .login-banner.ok {
             border-color: var(--olive);
@@ -239,6 +241,10 @@
             padding: 1.4rem 1.6rem;
             margin-bottom: 1rem;
             animation: fadeIn 0.3s var(--ease);
+        }
+        @keyframes stepFieldIn {
+            from { opacity: 0; transform: translateX(-8px); }
+            to   { opacity: 1; transform: translateX(0); }
         }
         .fill-section h3 {
             font-family: var(--font-serif);
@@ -469,7 +475,7 @@
     </nav>
 
     <div class="container">
-        <div class="page-header">
+        <div class="page-header reveal-scale">
             <div class="page-title-group">
                 <div class="eyebrow">AUTOMATION · 自动化</div>
                 <h2 class="page-title">智能填写 &amp; Boss 岗位搜索</h2>
@@ -485,7 +491,7 @@
         </div>
 
         <!-- Tab 切换 -->
-        <div class="oc-tabs">
+        <div class="oc-tabs reveal" style="--reveal-delay:80ms">
             <button class="oc-tab active" data-tab="boss" onclick="switchTab('boss')">
                 <span class="tab-num">A</span>Boss 岗位搜索
             </button>
@@ -501,7 +507,7 @@
             <!-- 登录态提醒条 -->
             <div class="login-banner" id="bossLoginBanner" style="display:none;"></div>
 
-            <div class="boss-search-bar">
+            <div class="boss-search-bar reveal" style="--reveal-delay:140ms">
                 <div class="form-field">
                     <label>关键字 / 岗位名</label>
                     <input type="text" id="bossKeyword" placeholder="例如：Java 后端 / 前端 / 算法" value="Java 后端">
@@ -674,9 +680,11 @@
 
     <div class="toast-container" id="toastContainer"></div>
 
+    <script src="config.js"></script>
+    <script src="motion.js"></script>
     <script>
-        const API_BASE = 'http://localhost:8000/api/v1';
-        const AUTH_HEADER = { 'Authorization': 'Bearer demo-token', 'Content-Type': 'application/json' };
+        const API_BASE = window.OFFERCLAW_CONFIG.API_BASE + '/api/v1';
+        const AUTH_HEADER = { 'Authorization': 'Bearer ' + window.OFFERCLAW_CONFIG.TOKEN, 'Content-Type': 'application/json' };
 
         let extractedFields = [];
         let matchedMappings = [];
@@ -711,7 +719,7 @@
 
             try {
                 const resp = await fetch(`${API_BASE}/automation/login-status?site=boss`, {
-                    headers: { 'Authorization': 'Bearer demo-token' }
+                    headers: { 'Authorization': 'Bearer ' + window.OFFERCLAW_CONFIG.TOKEN }
                 });
                 const result = await resp.json();
                 if (result.code === 0) {
@@ -883,7 +891,7 @@
                 return;
             }
 
-            container.innerHTML = '<div class="job-list">' + data.jobs.map(j => `
+            container.innerHTML = '<div class="job-list stagger">' + data.jobs.map(j => `
                 <div class="job-card">
                     <div class="job-card-head">
                         <div>
@@ -1212,11 +1220,28 @@
 
         function goToStep(n) {
             for (let i = 1; i <= 4; i++) {
-                document.getElementById(`section${i}`).style.display = i === n ? 'block' : 'none';
+                const section = document.getElementById(`section${i}`);
+                const isTarget = i === n;
+                section.style.display = isTarget ? 'block' : 'none';
                 const pill = document.getElementById(`sp${i}`);
                 pill.classList.remove('active', 'done');
                 if (i < n) pill.classList.add('done');
                 else if (i === n) pill.classList.add('active');
+                // Re-trigger entrance animation on the step being shown
+                if (isTarget) {
+                    section.classList.remove('tab-panel-enter');
+                    void section.offsetWidth;
+                    section.classList.add('tab-panel-enter');
+                    // Stagger inner cards/fields if motion lib present
+                    if (window.OfferClawMotion) {
+                        section.querySelectorAll('.field-row, .mapping-row').forEach((el, idx) => {
+                            el.style.animation = 'none';
+                            void el.offsetWidth;
+                            el.style.animation = `stepFieldIn 0.4s var(--ease-out) backwards`;
+                            el.style.animationDelay = (idx * 50) + 'ms';
+                        });
+                    }
+                }
             }
         }
 

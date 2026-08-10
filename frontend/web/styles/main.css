@@ -720,3 +720,286 @@ body::before {
     font-family: var(--font-mono);
     letter-spacing: 0.5px;
 }
+
+/* ============================================
+   MOTION SYSTEM v2 — Editorial Paper Archive
+   Choreographed entrances, live indicators,
+   count-up numerics, animated bars, refined hover.
+   Keeps the calm paper aesthetic; adds intentionality.
+   ============================================ */
+
+/* --- Reveal: hidden initial state, .in triggers entrance --- */
+.reveal {
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+        opacity 0.6s var(--ease-out),
+        transform 0.6s var(--ease-out);
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+    /* Safety net: if JS never adds .in, reveal after 3s */
+    animation: revealSafety 0s 3s forwards;
+}
+.reveal.in {
+    opacity: 1;
+    transform: translateY(0);
+}
+/* Horizontal variant for sidebar-style elements */
+.reveal-x {
+    opacity: 0;
+    transform: translateX(-14px);
+    transition: opacity 0.5s var(--ease-out), transform 0.5s var(--ease-out);
+    transition-delay: var(--reveal-delay, 0ms);
+    animation: revealSafety 0s 3s forwards;
+}
+.reveal-x.in { opacity: 1; transform: translateX(0); }
+/* Scale variant for hero/feature blocks */
+.reveal-scale {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+    transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-out);
+    transition-delay: var(--reveal-delay, 0ms);
+    animation: revealSafety 0s 3s forwards;
+}
+.reveal-scale.in { opacity: 1; transform: scale(1) translateY(0); }
+@keyframes revealSafety {
+    to { opacity: 1; transform: none; }
+}
+
+/* --- Staggered children: apply to parent, kids animate in sequence --- */
+.stagger > * {
+    animation: staggerIn 0.55s var(--ease-out) backwards;
+}
+.stagger > *:nth-child(1) { animation-delay: 0.04s; }
+.stagger > *:nth-child(2) { animation-delay: 0.10s; }
+.stagger > *:nth-child(3) { animation-delay: 0.16s; }
+.stagger > *:nth-child(4) { animation-delay: 0.22s; }
+.stagger > *:nth-child(5) { animation-delay: 0.28s; }
+.stagger > *:nth-child(6) { animation-delay: 0.34s; }
+.stagger > *:nth-child(7) { animation-delay: 0.40s; }
+.stagger > *:nth-child(8) { animation-delay: 0.46s; }
+.stagger > *:nth-child(n+9) { animation-delay: 0.52s; }
+@keyframes staggerIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Pulse: live status indicators breathe --- */
+.pulse-dot {
+    position: relative;
+}
+.pulse-dot::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    opacity: 0;
+    animation: pulseRing 2.2s var(--ease) infinite;
+}
+.pulse-dot.ok { color: var(--success); }
+.pulse-dot.err { color: var(--danger); }
+.pulse-dot.warn { color: var(--warn); }
+.pulse-dot.pending { color: var(--ink-faint); }
+.pulse-dot.pending::after { animation-duration: 3s; opacity: 0.4; }
+@keyframes pulseRing {
+    0%   { transform: scale(0.6); opacity: 0.8; }
+    70%  { transform: scale(1.8); opacity: 0; }
+    100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* --- Shimmer: moving light sweep along accent bars --- */
+.shimmer-line {
+    position: relative;
+    overflow: hidden;
+}
+.shimmer-line::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    left: -50%;
+    width: 50%;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 253, 245, 0.55) 50%,
+        transparent 100%
+    );
+    animation: shimmerSweep 3.5s var(--ease) infinite;
+    animation-delay: var(--shimmer-delay, 0s);
+    pointer-events: none;
+}
+@keyframes shimmerSweep {
+    0%   { left: -50%; }
+    60%  { left: 100%; }
+    100% { left: 100%; }
+}
+
+/* --- Bar fill: animate width from 0 to target --- */
+.bar-fill-animate {
+    width: 0 !important;
+    transition: width 0.9s var(--ease-out);
+    transition-delay: var(--fill-delay, 0ms);
+}
+.bar-fill-animate.filled {
+    width: var(--target-width, 0) !important;
+}
+
+/* --- Count-up: numerics get a subtle blur settle --- */
+.count-up {
+    display: inline-block;
+    transition: filter 0.3s var(--ease);
+}
+.count-up.counting {
+    filter: blur(0.4px);
+}
+
+/* --- Refined card hover: lift + accent edge --- */
+.card.lift-hover {
+    transition:
+        box-shadow 0.3s var(--ease),
+        transform 0.3s var(--ease),
+        border-color 0.3s var(--ease);
+}
+.card.lift-hover:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--olive);
+}
+
+/* --- Modal: fade + scale entrance (overrides display swap) --- */
+.modal-overlay {
+    opacity: 0;
+    transition: opacity 0.25s var(--ease);
+}
+.modal-overlay.show {
+    opacity: 1;
+}
+.modal-overlay .modal {
+    transform: scale(0.94) translateY(8px);
+    opacity: 0;
+    transition:
+        transform 0.32s var(--ease-out),
+        opacity 0.22s var(--ease);
+}
+.modal-overlay.show .modal {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+}
+
+/* --- Dropdown slide: for custom selects / menus --- */
+.slide-down {
+    transform-origin: top;
+    animation: slideDown 0.22s var(--ease-out);
+}
+@keyframes slideDown {
+    from { opacity: 0; transform: scaleY(0.85) translateY(-4px); }
+    to   { opacity: 1; transform: scaleY(1) translateY(0); }
+}
+
+/* --- Tab panel transition: directional reveal on switch --- */
+.tab-panel-enter {
+    animation: tabPanelIn 0.35s var(--ease-out);
+}
+@keyframes tabPanelIn {
+    from { opacity: 0; transform: translateX(8px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+/* --- Accent underline grow (for nav + section titles) --- */
+.underline-grow::after {
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.5s var(--ease-out);
+}
+.underline-grow.in::after,
+.underline-grow:hover::after {
+    transform: scaleX(1);
+}
+
+/* --- Focusable ring breathe (subtle, for primary CTAs at rest) --- */
+.breathe-ring {
+    animation: breatheRing 3s var(--ease) infinite;
+}
+@keyframes breatheRing {
+    0%, 100% { box-shadow: 0 0 0 0 var(--olive-glow); }
+    50%      { box-shadow: 0 0 0 6px transparent; }
+}
+
+/* --- Spinner upgrade: dual-ring with olive accent --- */
+.spinner.dual {
+    border-color: var(--line);
+    border-top-color: var(--olive);
+    border-right-color: var(--olive-soft);
+    animation: spin 0.9s linear infinite;
+}
+
+/* --- Skeleton shimmer for loading states --- */
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--paper-deep) 0%,
+        var(--line-soft) 50%,
+        var(--paper-deep) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.4s var(--ease) infinite;
+    border-radius: 4px;
+    color: transparent;
+}
+@keyframes skeletonShimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* --- Floating ink dot: ambient background motion --- */
+.ink-drift {
+    position: fixed;
+    pointer-events: none;
+    z-index: 0;
+    border-radius: 50%;
+    filter: blur(40px);
+    opacity: 0.4;
+    animation: drift 18s var(--ease) infinite alternate;
+}
+@keyframes drift {
+    from { transform: translate(0, 0) scale(1); }
+    to   { transform: translate(40px, -30px) scale(1.15); }
+}
+
+/* --- Success burst: tiny radiating checkmark (for confirm actions) --- */
+.success-burst {
+    animation: successBurst 0.5s var(--ease-out);
+}
+@keyframes successBurst {
+    0%   { transform: scale(0.5); opacity: 0; }
+    60%  { transform: scale(1.12); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* --- Reduced motion: kill all non-essential animation --- */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    .reveal, .reveal-x, .reveal-scale {
+        opacity: 1 !important;
+        transform: none !important;
+    }
+    .shimmer-line::after,
+    .pulse-dot::after,
+    .breathe-ring,
+    .ink-drift,
+    .skeleton {
+        animation: none !important;
+    }
+    .bar-fill-animate {
+        width: var(--target-width, 0) !important;
+        transition: none !important;
+    }
+}

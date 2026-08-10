@@ -73,9 +73,28 @@
             position: absolute;
             top: 0; left: 0; right: 0;
             height: 2px;
-            background: var(--olive);
+            background: linear-gradient(90deg,
+                var(--olive) 0%,
+                var(--olive-dark) 50%,
+                var(--olive) 100%);
             border-radius: 10px 10px 0 0;
-            opacity: 0.4;
+            opacity: 0.5;
+            overflow: hidden;
+        }
+        .chat-area::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -30%;
+            width: 30%; height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(255,253,245,0.9), transparent);
+            animation: chatAccentSweep 4s var(--ease) infinite;
+            pointer-events: none;
+            border-radius: 10px 10px 0 0;
+        }
+        @keyframes chatAccentSweep {
+            0% { left: -30%; }
+            60% { left: 100%; }
+            100% { left: 100%; }
         }
 
         /* Empty state */
@@ -94,6 +113,16 @@
         @keyframes bobble {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-6px); }
+        }
+        .empty-state h3,
+        .empty-state > p {
+            animation: emptyFadeIn 0.6s var(--ease-out) backwards;
+        }
+        .empty-state h3 { animation-delay: 0.1s; }
+        .empty-state > p { animation-delay: 0.2s; }
+        @keyframes emptyFadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
         .empty-state h3 {
             font-family: var(--font-serif);
@@ -120,17 +149,27 @@
             border-radius: 8px;
             padding: 0.7rem 0.9rem;
             cursor: pointer;
-            transition: all 0.2s var(--ease);
+            transition: transform 0.22s var(--ease), background 0.22s var(--ease), border-color 0.22s var(--ease), color 0.22s var(--ease), box-shadow 0.22s var(--ease);
             font-size: 0.82rem;
             color: var(--ink-soft);
             text-align: left;
             font-family: inherit;
+            animation: suggestionIn 0.5s var(--ease-out) backwards;
+        }
+        .suggestion:nth-child(1) { animation-delay: 0.28s; }
+        .suggestion:nth-child(2) { animation-delay: 0.36s; }
+        .suggestion:nth-child(3) { animation-delay: 0.44s; }
+        .suggestion:nth-child(4) { animation-delay: 0.52s; }
+        @keyframes suggestionIn {
+            from { opacity: 0; transform: translateY(10px) scale(0.97); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
         }
         .suggestion:hover {
             background: var(--olive-soft);
             border-color: var(--olive);
             color: var(--olive-dark);
-            transform: translateX(2px);
+            transform: translateX(3px) translateY(-1px);
+            box-shadow: var(--shadow-md);
         }
 
         /* Messages */
@@ -174,6 +213,7 @@
             white-space: pre-wrap;
             word-break: break-word;
         }
+        .msg.assistant .msg-bubble { white-space: normal; }
         .msg.user .msg-bubble {
             background: var(--ink);
             color: var(--paper-light);
@@ -329,6 +369,26 @@
             30% { transform: translateY(-4px); opacity: 1; }
         }
 
+        /* Markdown 渲染样式（简历/求职信/面试准备包等） */
+        .md-h1 { font-size: 1.25rem; font-weight: 700; margin: 0.6em 0 0.35em; color: var(--ink); font-family: var(--font-serif); }
+        .md-h2 { font-size: 1.1rem; font-weight: 700; margin: 0.6em 0 0.35em; color: var(--ink); border-bottom: 1px solid var(--line); padding-bottom: 0.2em; }
+        .md-h3 { font-size: 1rem; font-weight: 600; margin: 0.5em 0 0.3em; color: var(--ink); }
+        .md-h4 { font-size: 0.92rem; font-weight: 600; margin: 0.5em 0 0.3em; color: var(--ink-soft); }
+        .md-p { margin: 0.4em 0; }
+        .md-ul, .md-ol { margin: 0.4em 0; padding-left: 1.4em; }
+        .md-ul { list-style: disc; }
+        .md-ol { list-style: decimal; }
+        .md-ul li, .md-ol li { margin: 0.15em 0; }
+        .md-hr { border: none; border-top: 1px solid var(--line); margin: 0.7em 0; }
+        .md-code-inline { background: rgba(0,0,0,0.06); padding: 0.1rem 0.35rem; border-radius: 3px; font-family: var(--font-mono); font-size: 0.8em; }
+        .md-code-block { background: var(--ink); color: var(--paper-light); padding: 0.7rem 0.9rem; border-radius: 6px; overflow-x: auto; margin: 0.5em 0; font-size: 0.8rem; }
+        .md-code-block code { font-family: var(--font-mono); white-space: pre; }
+        .md-table { border-collapse: collapse; width: 100%; margin: 0.5em 0; font-size: 0.82rem; }
+        .md-table th, .md-table td { border: 1px solid var(--line); padding: 0.35rem 0.55rem; text-align: left; }
+        .md-table th { background: var(--paper-light); font-weight: 600; }
+        .md-table tr:nth-child(even) td { background: var(--paper-light); }
+        .md-strong { font-weight: 700; }
+
         @media (max-width: 640px) {
             .agent-layout { padding: 1rem; height: auto; min-height: calc(100vh - 70px); }
             .suggestions { grid-template-columns: 1fr; }
@@ -356,7 +416,7 @@
 
     <div class="agent-layout">
         <!-- Session bar -->
-        <div class="session-bar">
+        <div class="session-bar reveal-x" style="--reveal-delay:40ms">
             <div class="session-bar-left">
                 <span style="font-family:var(--font-mono);font-size:0.72rem;letter-spacing:1px;color:var(--olive);">SESSION</span>
                 <select id="sessionSelect">
@@ -370,30 +430,32 @@
         </div>
 
         <!-- Chat area -->
-        <div class="chat-area" id="chatArea">
+        <div class="chat-area reveal-scale" style="--reveal-delay:120ms" id="chatArea">
             <div class="empty-state" id="emptyState">
                 <div class="empty-icon">🤖</div>
                 <h3>你好，我是 OfferClaw Agent</h3>
                 <p>对话式求职助手 — 管理投递、查询状态、复盘进度</p>
                 <div class="suggestions">
-                    <button class="suggestion" onclick="sendSuggestion('记录我投递了腾讯的后端开发岗位')">📝 记录我投递了腾讯的后端开发岗位</button>
-                    <button class="suggestion" onclick="sendSuggestion('查看我的投递记录')">📊 查看我的投递记录</button>
-                    <button class="suggestion" onclick="sendSuggestion('我的投递统计概览')">📈 我的投递统计概览</button>
-                    <button class="suggestion" onclick="sendSuggestion('腾讯进入面试了')">🔄 腾讯进入面试了</button>
+                    <button class="suggestion" onclick="sendSuggestion('帮我分析这个岗位 https://')">🔍 分析岗位 JD</button>
+                    <button class="suggestion" onclick="sendSuggestion('根据我的画像生成一份简历')">📄 帮我生成简历</button>
+                    <button class="suggestion" onclick="sendSuggestion('今天有什么要跟进的')">⏰ 今日跟进提醒</button>
+                    <button class="suggestion" onclick="sendSuggestion('帮我复盘一下投递策略')">📊 复盘投递策略</button>
                 </div>
             </div>
         </div>
 
         <!-- Input -->
-        <div class="input-area">
+        <div class="input-area reveal" style="--reveal-delay:200ms">
             <textarea id="msgInput" placeholder="输入消息，Enter 发送，Shift+Enter 换行..." rows="1"></textarea>
             <button id="sendBtn" onclick="sendMessage()">发送</button>
         </div>
     </div>
 
+    <script src="config.js"></script>
+    <script src="motion.js"></script>
     <script>
-        const TOKEN = "demo-token";
-        const API_BASE = "http://localhost:8000";
+        const TOKEN = window.OFFERCLAW_CONFIG.TOKEN;
+        const API_BASE = window.OFFERCLAW_CONFIG.API_BASE;
 
         let currentSessionId = null;
         let isStreaming = false;
@@ -478,6 +540,75 @@
             return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
         }
 
+        /**
+         * 轻量级 Markdown 渲染（支持标题/列表/粗体/行内代码/代码块/表格/分割线/段落）
+         * 用于展示 Agent 生成的简历、求职信、面试准备包等长内容
+         */
+        function renderMarkdown(text) {
+            if (!text) return '';
+            // 1. 先提取代码块（保留原始内容，稍后转义插入）
+            const codeBlocks = [];
+            let processed = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (m, lang, code) => {
+                const idx = codeBlocks.length;
+                codeBlocks.push(escapeHtml(code.trim()));
+                return `\n__CODEBLOCK_${idx}__\n`;
+            });
+            // 2. 转义 HTML 防止 XSS
+            processed = escapeHtml(processed);
+            // 3. 行内代码
+            processed = processed.replace(/`([^`]+)`/g, '<code class="md-code-inline">$1</code>');
+            // 4. 标题
+            processed = processed.replace(/^#### (.+)$/gm, '<h4 class="md-h4">$1</h4>');
+            processed = processed.replace(/^### (.+)$/gm, '<h3 class="md-h3">$1</h3>');
+            processed = processed.replace(/^## (.+)$/gm, '<h2 class="md-h2">$1</h2>');
+            processed = processed.replace(/^# (.+)$/gm, '<h1 class="md-h1">$1</h1>');
+            // 5. 粗体
+            processed = processed.replace(/\*\*([^*]+)\*\*/g, '<strong class="md-strong">$1</strong>');
+            // 6. 分割线
+            processed = processed.replace(/^---+$/gm, '<hr class="md-hr">');
+            // 7. 表格
+            processed = processed.replace(/((?:^\|.*\|\s*\n)+)/gm, (block) => {
+                const lines = block.trim().split('\n');
+                if (lines.length < 2) return block;
+                if (!lines[1].match(/^\|[\s:-]+\|/)) return block;
+                const headers = lines[0].split('|').slice(1, -1).map(s => s.trim());
+                const rows = lines.slice(2).map(line => line.split('|').slice(1, -1).map(s => s.trim()));
+                let table = '<table class="md-table"><thead><tr>';
+                headers.forEach(h => table += `<th>${h}</th>`);
+                table += '</tr></thead><tbody>';
+                rows.forEach(row => {
+                    table += '<tr>';
+                    row.forEach(cell => table += `<td>${cell}</td>`);
+                    table += '</tr>';
+                });
+                table += '</tbody></table>';
+                return table;
+            });
+            // 8. 无序列表
+            processed = processed.replace(/(?:^[-*] (.+)(?:\n|$))+/gm, (block) => {
+                const items = block.trim().split('\n').map(line => line.replace(/^[-*] /, '').trim()).filter(Boolean);
+                return '<ul class="md-ul">' + items.map(i => `<li>${i}</li>`).join('') + '</ul>';
+            });
+            // 9. 有序列表
+            processed = processed.replace(/(?:^\d+\. (.+)(?:\n|$))+/gm, (block) => {
+                const items = block.trim().split('\n').map(line => line.replace(/^\d+\. /, '').trim()).filter(Boolean);
+                return '<ol class="md-ol">' + items.map(i => `<li>${i}</li>`).join('') + '</ol>';
+            });
+            // 10. 段落（把剩余连续纯文本包成 <p>）
+            processed = processed.split(/\n\n+/).map(para => {
+                para = para.trim();
+                if (!para) return '';
+                if (/^<(h[1-4]|ul|ol|pre|hr|table)/.test(para)) return para;
+                if (/^__CODEBLOCK_\d+__$/.test(para.trim())) return para;
+                return `<p class="md-p">${para.replace(/\n/g, '<br>')}</p>`;
+            }).join('\n');
+            // 11. 还原代码块
+            codeBlocks.forEach((code, i) => {
+                processed = processed.replace(`__CODEBLOCK_${i}__`, `<pre class="md-code-block"><code>${code}</code></pre>`);
+            });
+            return processed;
+        }
+
         function scrollToBottom() {
             chatArea.scrollTop = chatArea.scrollHeight;
         }
@@ -553,11 +684,11 @@
 
                         if (evt.type === 'content_delta') {
                             if (firstDelta) {
-                                assistantBubble.textContent = '';
+                                assistantBubble.innerHTML = '';
                                 firstDelta = false;
                             }
                             contentBuffer += evt.delta;
-                            assistantBubble.textContent = contentBuffer;
+                            assistantBubble.innerHTML = renderMarkdown(contentBuffer);
                             scrollToBottom();
                         } else if (evt.type === 'tool_result') {
                             appendToolEvent(evt.tool_name, evt.success ? 'success' : 'error', {
@@ -635,7 +766,7 @@
                             appendUserMsg(m.content);
                         } else if (m.role === 'assistant' && m.content) {
                             const bubble = appendAssistantMsg();
-                            bubble.textContent = m.content;
+                            bubble.innerHTML = renderMarkdown(m.content);
                         }
                     }
                     scrollToBottom();

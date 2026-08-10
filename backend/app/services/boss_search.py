@@ -40,6 +40,13 @@ from app.services.playwright_runtime import (
     stop_chrome,
     BOSS_LOGIN_URL,
 )
+from app.services.boss_utils import (
+    CITY_CODES,
+    decode_degree,
+    get_city_code,
+    parse_salary,
+    normalize_city,
+)
 
 logger = logging.getLogger("offerclaw.boss_search")
 
@@ -79,51 +86,8 @@ BROWSER_HEADERS = {
 # 必需 Cookie（用于判断登录态）
 REQUIRED_COOKIES = {"__zp_stoken__", "wt2", "wbg", "zp_at"}
 
-# 城市编号（参考 boss-cli/constants.py）
-CITY_CODES: Dict[str, str] = {
-    "全国": "100010000",
-    "北京": "101010100",
-    "上海": "101020100",
-    "广州": "101280100",
-    "深圳": "101280600",
-    "杭州": "101210100",
-    "成都": "101270100",
-    "南京": "101190100",
-    "武汉": "101200100",
-    "西安": "101110100",
-    "苏州": "101190400",
-    "长沙": "101250100",
-    "天津": "101030100",
-    "重庆": "101040100",
-    "郑州": "101180100",
-    "东莞": "101281600",
-    "佛山": "101280800",
-    "合肥": "101220100",
-    "青岛": "101120200",
-    "宁波": "101210400",
-    "沈阳": "101070100",
-    "昆明": "101290100",
-    "大连": "101070200",
-    "厦门": "101230200",
-    "珠海": "101280700",
-    "无锡": "101190200",
-    "福州": "101230100",
-    "济南": "101120100",
-    "哈尔滨": "101050100",
-    "长春": "101060100",
-    "南昌": "101240100",
-    "贵阳": "101260100",
-    "南宁": "101300100",
-    "石家庄": "101090100",
-    "太原": "101100100",
-    "兰州": "101160100",
-    "海口": "101310100",
-    "常州": "101191100",
-    "温州": "101210700",
-    "嘉兴": "101210300",
-    "徐州": "101190800",
-    "香港": "101320100",
-}
+# 城市编码表已迁移到 app.services.boss_utils.CITY_CODES
+# 此处保留 re-export 以兼容外部导入（如 boss_html_search.py 通过此模块间接引用）
 
 
 # ============================================================================
@@ -487,6 +451,9 @@ class BossSearchService:
         """
         搜索 Boss 直聘岗位
 
+        降级链：
+            wapi 真实搜索 → HTML 公开页解析 → mock 数据
+
         Args:
             keyword: 搜索关键字（如 "Java 后端"）
             city: 城市名（如 "北京" / "上海" / "杭州"），可选
@@ -498,7 +465,7 @@ class BossSearchService:
             dict: {
                 "keyword": "关键字",
                 "city": "城市",
-                "source": "real" | "mock" | "need_login",
+                "source": "real" | "html" | "mock" | "need_login",
                 "total": 数量,
                 "jobs": [岗位列表],
                 "need_login": bool,
@@ -513,10 +480,28 @@ class BossSearchService:
         )
 
         if use_real:
+            # 优先尝试 wapi（需要登录态）
             try:
                 result = await self._fetch_real(keyword, city, page, user_id)
                 # 检测登录墙
                 if result.get("need_login"):
+                    # wapi 需要登录但用户未登录 → 尝试 HTML 公开页降级
+                    logger.info("wapi 需要登录，尝试 HTML 公开页降级")
+                    html_result = await self._fetch_html(keyword, city, page, user_id)
+                    if html_result.get("jobs"):
+                        return {
+                            "keyword": keyword,
+                            "city": city,
+                            "source": "html",
+                            "total": len(html_result["jobs"]),
+                            "jobs": html_result["jobs"],
+                            "page": page,
+                            "need_login": False,
+                            "anti_crawl": False,
+                            "login_url": BOSS_LOGIN_URL,
+                            "message": "未登录，已通过公开搜索页获取岗位（数据可能不完整）",
+                        }
+                    # HTML 也失败 → 提示用户登录
                     return {
                         "keyword": keyword,
                         "city": city,
@@ -531,7 +516,23 @@ class BossSearchService:
                     }
                 # 检测反爬
                 if result.get("anti_crawl"):
-                    logger.warning("检测到反爬拦截，降级为模拟数据")
+                    logger.warning("wapi 触发反爬，降级为 HTML 公开页解析")
+                    html_result = await self._fetch_html(keyword, city, page, user_id)
+                    if html_result.get("jobs"):
+                        return {
+                            "keyword": keyword,
+                            "city": city,
+                            "source": "html",
+                            "total": len(html_result["jobs"]),
+                            "jobs": html_result["jobs"],
+                            "page": page,
+                            "need_login": False,
+                            "anti_crawl": False,
+                            "login_url": BOSS_LOGIN_URL,
+                            "message": "wapi 触发反爬，已通过公开搜索页降级获取岗位",
+                        }
+                    # HTML 也失败 → 降级为 mock
+                    logger.warning("HTML 公开页降级也失败，使用 mock 数据")
                     mock = self._mock_search(keyword, city, page)
                     mock["message"] = (
                         "⚠️ Boss 直聘触发了反爬/安全验证，已临时降级为模拟数据。"
@@ -540,7 +541,7 @@ class BossSearchService:
                     mock["anti_crawl"] = True
                     mock["login_url"] = BOSS_LOGIN_URL
                     return mock
-                # 正常返回
+                # wapi 正常返回
                 jobs = result.get("jobs", [])
                 if jobs:
                     return {
@@ -554,15 +555,56 @@ class BossSearchService:
                         "anti_crawl": False,
                         "message": "真实搜索成功（via wapi）",
                     }
-                logger.warning("真实搜索返回空，降级为模拟数据")
+                logger.warning("wapi 返回空，尝试 HTML 降级")
             except Exception as e:
-                logger.warning(f"真实搜索失败，降级模拟: {e}")
+                logger.warning(f"wapi 真实搜索失败，尝试 HTML 降级: {e}")
 
-        # 降级：模拟数据
+            # wapi 异常 → 尝试 HTML 降级
+            try:
+                html_result = await self._fetch_html(keyword, city, page, user_id)
+                if html_result.get("jobs"):
+                    return {
+                        "keyword": keyword,
+                        "city": city,
+                        "source": "html",
+                        "total": len(html_result["jobs"]),
+                        "jobs": html_result["jobs"],
+                        "page": page,
+                        "need_login": False,
+                        "anti_crawl": False,
+                        "login_url": BOSS_LOGIN_URL,
+                        "message": "wapi 异常，已通过公开搜索页降级获取岗位",
+                    }
+            except Exception as e:
+                logger.warning(f"HTML 降级也失败: {e}")
+
+        # 最终降级：mock 数据
         mock = self._mock_search(keyword, city, page)
         mock["need_login"] = False
         mock["anti_crawl"] = False
         return mock
+
+    async def _fetch_html(
+        self,
+        keyword: str,
+        city: Optional[str],
+        page: int,
+        user_id: str = "default",
+    ) -> Dict[str, Any]:
+        """HTML 公开页降级搜索（无需登录态）"""
+        from app.services.boss_html_search import fetch_jobs_via_html
+        city_code = CITY_CODES.get(city or "全国", "100010000")
+        try:
+            return await fetch_jobs_via_html(
+                keyword=keyword,
+                city_code=city_code,
+                page=page,
+                user_id=user_id,
+            )
+        except Exception as e:
+            logger.error(f"HTML 降级抓取异常: {e}", exc_info=True)
+            return {"jobs": [], "source": "html", "total": 0,
+                    "need_login": False, "anti_crawl": False, "error": str(e)}
 
     async def _fetch_real(
         self,
@@ -586,8 +628,8 @@ class BossSearchService:
             logger.warning("必需 Cookie 不完整，需要登录")
             return {"jobs": [], "need_login": True, "anti_crawl": False}
 
-        # 2. 城市编号
-        city_code = CITY_CODES.get(city or "全国", "100010000")
+        # 2. 城市编号（用 boss_utils 的归一化函数）
+        city_code = get_city_code(city)
 
         # 3. 调用 wapi
         try:
@@ -678,13 +720,18 @@ class BossSearchService:
                     if isinstance(vals, list):
                         skill_tags.extend([str(v) for v in vals if v])
 
+                # 薪资解析（结构化）
+                salary_raw = item.get("salaryDesc") or ""
+                salary_parsed = parse_salary(salary_raw)
+
                 job = {
                     "title": item.get("jobName") or "",
                     "company": item.get("brandName") or "",
-                    "salary": item.get("salaryDesc") or "",
+                    "salary": salary_raw,
+                    "salary_parsed": salary_parsed,
                     "location": location,
                     "experience": item.get("jobExperience") or "",
-                    "education": self._decode_degree(item.get("jobDegree")),
+                    "education": decode_degree(item.get("jobDegree")),
                     "hr_name": item.get("hrName") or "",
                     "hr_position": item.get("hrPosition") or "",
                     "job_url": job_url,
@@ -704,22 +751,8 @@ class BossSearchService:
         return jobs
 
     def _decode_degree(self, degree: Any) -> str:
-        """解码学历代码（Boss 用数字表示学历）"""
-        if not degree:
-            return ""
-        if isinstance(degree, str):
-            return degree
-        degree_map = {
-            0: "不限",
-            209: "初中及以下",
-            208: "中专/中技",
-            206: "高中",
-            202: "大专",
-            203: "本科",
-            204: "硕士",
-            205: "博士",
-        }
-        return degree_map.get(degree, str(degree))
+        """[已废弃] 解码学历代码，请使用 boss_utils.decode_degree"""
+        return decode_degree(degree)
 
     def _deterministic_seed(self, keyword: str, city: Optional[str], page: int) -> int:
         """根据搜索参数生成稳定的随机种子（避免内置 hash 的 PYTHONHASHSEED 随机性）"""

@@ -103,11 +103,28 @@
         }
         .dot {
             width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+            position: relative;
         }
-        .dot.ok { background: var(--success); box-shadow: 0 0 0 3px rgba(90,122,58,0.15); }
-        .dot.err { background: var(--danger); box-shadow: 0 0 0 3px rgba(185,74,58,0.15); }
-        .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(184,134,11,0.15); }
-        .dot.pending { background: var(--ink-faint); }
+        .dot.ok { background: var(--success); box-shadow: 0 0 0 3px rgba(90,122,58,0.15); animation: dotPulseOk 2.4s var(--ease) infinite; }
+        .dot.err { background: var(--danger); box-shadow: 0 0 0 3px rgba(185,74,58,0.15); animation: dotPulseErr 2s var(--ease) infinite; }
+        .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(184,134,11,0.15); animation: dotPulseWarn 2.6s var(--ease) infinite; }
+        .dot.pending { background: var(--ink-faint); animation: dotPulsePending 3s var(--ease) infinite; }
+        @keyframes dotPulseOk {
+            0%, 100% { box-shadow: 0 0 0 3px rgba(90,122,58,0.15); }
+            50%      { box-shadow: 0 0 0 6px rgba(90,122,58,0.05), 0 0 10px rgba(90,122,58,0.4); }
+        }
+        @keyframes dotPulseErr {
+            0%, 100% { box-shadow: 0 0 0 3px rgba(185,74,58,0.15); }
+            50%      { box-shadow: 0 0 0 6px rgba(185,74,58,0.08), 0 0 12px rgba(185,74,58,0.5); }
+        }
+        @keyframes dotPulseWarn {
+            0%, 100% { box-shadow: 0 0 0 3px rgba(184,134,11,0.15); }
+            50%      { box-shadow: 0 0 0 6px rgba(184,134,11,0.06), 0 0 10px rgba(184,134,11,0.45); }
+        }
+        @keyframes dotPulsePending {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.5; transform: scale(0.85); }
+        }
 
         /* 配置展示 */
         .config-row {
@@ -274,13 +291,13 @@
             <button class="btn btn-ghost btn-sm" onclick="loadAll()">↻ 刷新</button>
         </div>
 
-        <div class="info-banner">
+        <div class="info-banner reveal" style="--reveal-delay:60ms">
             <span>💡</span>
             <span><strong>提示：</strong>LLM 配置通过后端 <code>.env</code> 文件管理，修改后重启后端生效。下方可查看当前配置状态并测试连通性。</span>
         </div>
 
         <!-- 系统状态 -->
-        <div class="section">
+        <div class="section reveal" style="--reveal-delay:120ms">
             <h3 class="section-title">系统状态 <span class="num">I</span></h3>
             <div class="card">
                 <div class="status-grid" id="statusGrid">
@@ -305,7 +322,7 @@
         </div>
 
         <!-- LLM 配置 -->
-        <div class="section">
+        <div class="section reveal" style="--reveal-delay:200ms">
             <h3 class="section-title">LLM 配置 <span class="num">II</span></h3>
             <div class="card">
                 <div class="config-row">
@@ -373,7 +390,7 @@
         </div>
 
         <!-- 数据概览 -->
-        <div class="section">
+        <div class="section reveal" style="--reveal-delay:280ms">
             <h3 class="section-title">数据概览 <span class="num">III</span></h3>
             <div class="card">
                 <div class="data-grid">
@@ -394,7 +411,7 @@
         </div>
 
         <!-- 关于 -->
-        <div class="section">
+        <div class="section reveal" style="--reveal-delay:360ms">
             <h3 class="section-title">关于 <span class="num">IV</span></h3>
             <div class="card">
                 <div class="config-row">
@@ -423,9 +440,11 @@
 
     <div class="toast-container" id="toastContainer"></div>
 
+    <script src="config.js"></script>
+    <script src="motion.js"></script>
     <script>
-        const API_BASE = "http://localhost:8000";
-        const TOKEN = "demo-token";
+        const API_BASE = window.OFFERCLAW_CONFIG.API_BASE;
+        const TOKEN = window.OFFERCLAW_CONFIG.TOKEN;
 
         let selectedPreset = 'openai';
 
@@ -620,6 +639,7 @@
 
         // ============ 数据概览 ============
         async function loadDataStats() {
+            const M = window.OfferClawMotion;
             try {
                 const [appsRes, sessionsRes, profileRes] = await Promise.all([
                     fetch(`${API_BASE}/api/v1/applications/stats/overview`, { headers: { 'Authorization': `Bearer ${TOKEN}` } }),
@@ -630,8 +650,17 @@
                 const sessions = await sessionsRes.json();
                 const profile = await profileRes.json();
 
-                document.getElementById('dataApps').textContent = apps.data?.total || 0;
-                document.getElementById('dataSessions').textContent = sessions.data?.length || 0;
+                const appsTotal = apps.data?.total || 0;
+                const sessTotal = sessions.data?.length || 0;
+                document.getElementById('dataApps').textContent = '0';
+                document.getElementById('dataSessions').textContent = '0';
+                if (M) {
+                    M.countUp(document.getElementById('dataApps'), appsTotal, { duration: 900 });
+                    M.countUp(document.getElementById('dataSessions'), sessTotal, { duration: 1000 });
+                } else {
+                    document.getElementById('dataApps').textContent = appsTotal;
+                    document.getElementById('dataSessions').textContent = sessTotal;
+                }
 
                 // 画像完成度
                 if (profile.code === 0 && profile.data) {
@@ -644,7 +673,10 @@
                     total++; if ((d.skills || []).length > 0) filled++;
                     const j = d.job_intent || {};
                     ['role','cities'].forEach(k => { total++; if (j[k] && (Array.isArray(j[k]) ? j[k].length : j[k])) filled++; });
-                    document.getElementById('dataProfile').textContent = (total ? Math.round(filled / total * 100) : 0) + '%';
+                    const pct = total ? Math.round(filled / total * 100) : 0;
+                    document.getElementById('dataProfile').textContent = '0';
+                    if (M) M.countUp(document.getElementById('dataProfile'), pct, { duration: 1200, suffix: '%' });
+                    else document.getElementById('dataProfile').textContent = pct + '%';
                 }
             } catch (e) {
                 document.getElementById('dataApps').textContent = '-';

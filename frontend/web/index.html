@@ -30,6 +30,11 @@
             background: radial-gradient(circle, var(--olive-soft) 0%, transparent 60%);
             opacity: 0.6;
             pointer-events: none;
+            animation: mastheadBreathe 9s var(--ease) infinite alternate;
+        }
+        @keyframes mastheadBreathe {
+            from { opacity: 0.45; transform: scale(1); }
+            to   { opacity: 0.7; transform: scale(1.08) translate(-8px, 6px); }
         }
         .masthead::after {
             content: 'No.';
@@ -130,12 +135,41 @@
             border-radius: 8px;
             padding: 0.9rem 1.1rem;
             position: relative;
-            transition: all 0.2s var(--ease);
+            overflow: hidden;
+            transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease), border-color 0.25s var(--ease);
             cursor: pointer;
+            animation: alertIn 0.5s var(--ease-out) backwards;
+        }
+        .alert-card:nth-child(1) { animation-delay: 0.15s; }
+        .alert-card:nth-child(2) { animation-delay: 0.22s; }
+        .alert-card:nth-child(3) { animation-delay: 0.29s; }
+        .alert-card:nth-child(4) { animation-delay: 0.36s; }
+        @keyframes alertIn {
+            from { opacity: 0; transform: translateX(-8px); }
+            to   { opacity: 1; transform: translateX(0); }
         }
         .alert-card:hover {
-            transform: translateY(-1px);
+            transform: translateY(-2px);
             box-shadow: var(--shadow-md);
+        }
+        /* Pulse the left edge when alert is active (non-empty) */
+        .alert-card:not(.empty)::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 3px;
+            background: currentColor;
+            color: var(--olive);
+            box-shadow: 0 0 10px currentColor;
+            opacity: 0.55;
+            animation: alertEdgePulse 2.8s var(--ease) infinite;
+        }
+        .alert-card.alert-stale:not(.empty)::before { color: var(--warn); }
+        .alert-card.alert-interview:not(.empty)::before { color: var(--st-interview); }
+        .alert-card.alert-offer:not(.empty)::before { color: var(--st-offer); }
+        @keyframes alertEdgePulse {
+            0%, 100% { opacity: 0.35; box-shadow: 0 0 6px currentColor; }
+            50%      { opacity: 0.9; box-shadow: 0 0 14px currentColor; }
         }
         .alert-card.alert-stale { border-left-color: var(--warn); }
         .alert-card.alert-interview { border-left-color: var(--st-interview); }
@@ -328,7 +362,7 @@
             height: 100%;
             background: linear-gradient(90deg, var(--olive), var(--olive-dark));
             border-radius: 9px;
-            transition: width 0.6s var(--ease-out);
+            transition: width 0.9s var(--ease-out);
             display: flex;
             align-items: center;
             justify-content: flex-end;
@@ -337,6 +371,23 @@
             font-size: 0.72rem;
             font-weight: 600;
             font-family: var(--font-mono);
+            position: relative;
+            overflow: hidden;
+        }
+        .funnel-bar-fill::after {
+            content: '';
+            position: absolute;
+            top: 0; bottom: 0;
+            left: -50%; width: 40%;
+            background: linear-gradient(90deg, transparent, rgba(255,253,245,0.45), transparent);
+            animation: barShimmer 4s var(--ease) infinite;
+            animation-delay: var(--shimmer-delay, 0s);
+            pointer-events: none;
+        }
+        @keyframes barShimmer {
+            0% { left: -50%; }
+            55% { left: 110%; }
+            100% { left: 110%; }
         }
         .funnel-rate {
             text-align: right;
@@ -361,7 +412,7 @@
             padding: 1rem 1.2rem;
             position: relative;
             overflow: hidden;
-            transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
+            transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease), border-color 0.3s var(--ease);
             animation: statIn 0.5s var(--ease-out) backwards;
         }
         .stat-card:nth-child(1) { animation-delay: 0.05s; }
@@ -373,8 +424,9 @@
             to { opacity: 1; transform: translateY(0); }
         }
         .stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--olive);
         }
         .stat-card::before {
             content: '';
@@ -382,6 +434,27 @@
             left: 0; top: 0; bottom: 0;
             width: 3px;
             background: var(--olive);
+            box-shadow: 0 0 12px var(--olive-glow);
+        }
+        /* Subtle top-edge sweep on hover for a "live" feel */
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -60%;
+            width: 60%; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--olive), transparent);
+            opacity: 0;
+            transition: left 0.6s var(--ease), opacity 0.3s var(--ease);
+        }
+        .stat-card:hover::after {
+            left: 120%;
+            opacity: 0.7;
+        }
+        .stat-value {
+            transition: color 0.25s var(--ease);
+        }
+        .stat-card:hover .stat-value {
+            color: var(--olive-dark);
         }
         .stat-card.accent-blue::before { background: var(--st-interview); }
         .stat-card.accent-green::before { background: var(--st-offer); }
@@ -538,19 +611,23 @@
             border-radius: 8px;
             padding: 0.75rem 0.85rem;
             cursor: grab;
-            transition: all 0.2s var(--ease);
+            transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease), border-color 0.22s var(--ease);
             position: relative;
-            animation: cardIn 0.3s var(--ease-out);
+            animation: cardIn 0.4s var(--ease-out) backwards;
             overflow: hidden;
         }
         @keyframes cardIn {
-            from { opacity: 0; transform: translateY(6px); }
-            to { opacity: 1; transform: translateY(0); }
+            from { opacity: 0; transform: translateY(8px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
         }
         .app-card:hover {
             border-color: var(--olive);
-            box-shadow: var(--shadow-md);
-            transform: translateY(-1px);
+            box-shadow: var(--shadow-md), 0 0 0 1px var(--olive-glow);
+            transform: translateY(-2px);
+        }
+        .app-card:active {
+            cursor: grabbing;
+            transform: translateY(0);
         }
         .app-card.dragging {
             opacity: 0.4;
@@ -980,13 +1057,13 @@
 
     <div class="container">
         <!-- Masthead -->
-        <div class="masthead">
+        <div class="masthead reveal-scale">
             <div class="masthead-content">
                 <div class="masthead-eyebrow">Vol. 01 · 求职档案</div>
                 <h1>把每一条投递<br>都当作<em>值得归档</em>的事件</h1>
                 <p>拖拽卡片切换状态，记录每个环节的真实结果。Agent 会读取这些数据帮你起草邮件、跟进面试、复盘进度。</p>
                 <div class="masthead-cta">
-                    <button class="btn btn-primary" onclick="openCreateModal()">＋ 新增投递</button>
+                    <button class="btn btn-primary breathe-ring" onclick="openCreateModal()">＋ 新增投递</button>
                     <a href="agent.html" class="btn btn-ghost">与 Agent 对话 →</a>
                 </div>
             </div>
@@ -1046,7 +1123,7 @@
         </div>
 
         <!-- Analysis grid: funnel + rejection distribution + source effect -->
-        <div class="analysis-grid">
+        <div class="analysis-grid reveal" style="--reveal-delay:120ms">
             <div class="analysis-card">
                 <div class="funnel-title">
                     📊 转化漏斗 <span class="funnel-sub">· FUNNEL</span>
@@ -1078,7 +1155,7 @@
         </div>
 
         <!-- Filter -->
-        <div class="filter-bar">
+        <div class="filter-bar reveal" style="--reveal-delay:180ms">
             <span class="filter-label">🔍</span>
             <input type="text" id="searchInput" class="search-input" placeholder="搜索公司或岗位...">
             <span class="filter-label">来源</span>
@@ -1104,12 +1181,12 @@
             <button class="btn btn-ghost btn-sm" onclick="loadBoard()">↻ 刷新</button>
         </div>
 
-        <div class="section-divider">
+        <div class="section-divider reveal" style="--reveal-delay:240ms">
             <span>看板</span> · 拖拽切换状态
         </div>
 
         <!-- Board -->
-        <div class="board" id="board">
+        <div class="board reveal" style="--reveal-delay:280ms" id="board">
             <div class="column" data-status="applied">
                 <div class="column-header">
                     <span class="column-title">📋 已投递</span>
@@ -1316,9 +1393,11 @@
 
     <div class="toast-container" id="toastContainer"></div>
 
+    <script src="config.js"></script>
+    <script src="motion.js"></script>
     <script>
-        const API_BASE = "http://localhost:8000";
-        const TOKEN = "demo-token";
+        const API_BASE = window.OFFERCLAW_CONFIG.API_BASE;
+        const TOKEN = window.OFFERCLAW_CONFIG.TOKEN;
 
         const STATUS_LABELS = {
             applied: '已投递', assessment: '笔试中', interview: '面试中',
@@ -1397,21 +1476,35 @@
         }
 
         function renderStats(s) {
-            document.getElementById('statTotal').textContent = s.total || 0;
             const totalCount = s.total || 0;
+            const M = window.OfferClawMotion;
+            // Total — count up the integer
+            const statTotalEl = document.getElementById('statTotal');
+            statTotalEl.innerHTML = '<span class="count-up">0</span>';
+            if (M) M.countUp(statTotalEl.querySelector('.count-up'), totalCount, { duration: 900 });
+            else statTotalEl.querySelector('.count-up').textContent = totalCount;
             document.getElementById('statTotalSub').textContent = `${s.priority_breakdown?.high || 0} 心仪 · ${s.priority_breakdown?.medium || 0} 普通 · ${s.priority_breakdown?.low || 0} 备选`;
 
             const replyPct = parseFloat((s.reply_rate || '0%').replace('%',''));
-            document.getElementById('statReply').innerHTML = replyPct.toFixed(1) + '<span class="unit">%</span>';
+            const statReplyEl = document.getElementById('statReply');
+            statReplyEl.innerHTML = '<span class="count-up">0</span><span class="unit">%</span>';
+            if (M) M.countUp(statReplyEl.querySelector('.count-up'), replyPct, { duration: 1100, decimals: 1 });
+            else statReplyEl.querySelector('.count-up').textContent = replyPct.toFixed(1);
             document.getElementById('statReplySub').textContent = `共 ${s.waiting_count || 0} 条等待中`;
 
             const offerPct = parseFloat((s.offer_rate || '0%').replace('%',''));
-            document.getElementById('statOffer').innerHTML = offerPct.toFixed(1) + '<span class="unit">%</span>';
+            const statOfferEl = document.getElementById('statOffer');
+            statOfferEl.innerHTML = '<span class="count-up">0</span><span class="unit">%</span>';
+            if (M) M.countUp(statOfferEl.querySelector('.count-up'), offerPct, { duration: 1200, decimals: 1 });
+            else statOfferEl.querySelector('.count-up').textContent = offerPct.toFixed(1);
             document.getElementById('statOfferSub').textContent = `${s.offer_count || 0} 个 offer`;
 
             const rejectCount = s.rejected_count || 0;
             const rejectPct = totalCount ? (rejectCount / totalCount * 100) : 0;
-            document.getElementById('statReject').innerHTML = rejectPct.toFixed(1) + '<span class="unit">%</span>';
+            const statRejectEl = document.getElementById('statReject');
+            statRejectEl.innerHTML = '<span class="count-up">0</span><span class="unit">%</span>';
+            if (M) M.countUp(statRejectEl.querySelector('.count-up'), rejectPct, { duration: 1000, decimals: 1 });
+            else statRejectEl.querySelector('.count-up').textContent = rejectPct.toFixed(1);
             document.getElementById('statRejectSub').textContent = `${rejectCount} 条已拒绝`;
         }
 
@@ -1491,13 +1584,14 @@
                     <div class="funnel-row">
                         <div class="funnel-label">${stage.label}</div>
                         <div class="funnel-bar-track">
-                            <div class="funnel-bar-fill" style="width:${pct}%">${count}</div>
+                            <div class="funnel-bar-fill bar-fill-animate" data-target-width="${pct}%" style="--shimmer-delay:${i * 0.6}s; --fill-delay:${i * 90}ms">${count}</div>
                         </div>
                         <div class="funnel-rate ${rateClass}">${rate}</div>
                     </div>
                 `;
             });
             container.innerHTML = html;
+            if (window.OfferClawMotion) window.OfferClawMotion.fillBars(container);
         }
 
         function renderRejection(s) {
@@ -1516,17 +1610,18 @@
                 offer_collapsed: 'offer谈崩', hc_empty: 'HC没', self_withdraw: '主动放弃', other: '其他',
             };
             let html = '';
-            entries.forEach(([k, v]) => {
+            entries.forEach(([k, v], i) => {
                 const pct = max ? (v / max * 100) : 0;
                 html += `
                     <div class="rejection-row">
                         <div class="rejection-label" title="${esc(labels[k] || k)}">${esc(labels[k] || k)}</div>
-                        <div class="rejection-bar-track"><div class="rejection-bar-fill" style="width:${pct}%"></div></div>
+                        <div class="rejection-bar-track"><div class="rejection-bar-fill bar-fill-animate" data-target-width="${pct}%" style="--fill-delay:${i * 70}ms"></div></div>
                         <div class="rejection-count">${v}</div>
                     </div>
                 `;
             });
             container.innerHTML = html;
+            if (window.OfferClawMotion) window.OfferClawMotion.fillBars(container);
         }
 
         function renderSource(s) {
@@ -1539,7 +1634,7 @@
             }
             const maxTotal = Math.max(...entries.map(e => e[1].total));
             let html = '';
-            entries.forEach(([src, vals]) => {
+            entries.forEach(([src, vals], i) => {
                 const totalPct = maxTotal ? (vals.total / maxTotal * 100) : 0;
                 const offerPct = vals.total ? (vals.offer / vals.total * 100) : 0;
                 html += `
@@ -1547,10 +1642,10 @@
                         <div class="source-name" title="${esc(src)}">${esc(src)}</div>
                         <div>
                             <div class="source-bar-track">
-                                <div class="source-bar-fill" style="width:${totalPct}%"></div>
+                                <div class="source-bar-fill bar-fill-animate" data-target-width="${totalPct}%" style="--fill-delay:${i * 80}ms"></div>
                             </div>
                             <div class="source-bar-track" style="margin-top:2px;height:4px;">
-                                <div class="source-bar-fill offer-bar" style="width:${offerPct}%"></div>
+                                <div class="source-bar-fill offer-bar bar-fill-animate" data-target-width="${offerPct}%" style="--fill-delay:${i * 80 + 120}ms"></div>
                             </div>
                         </div>
                         <div>
@@ -1561,6 +1656,7 @@
                 `;
             });
             container.innerHTML = html;
+            if (window.OfferClawMotion) window.OfferClawMotion.fillBars(container);
         }
 
         function renderBoard() {
@@ -1584,7 +1680,11 @@
                     col.innerHTML = '<div class="empty-column">暂无记录</div>';
                     return;
                 }
-                items.forEach(a => col.appendChild(createCard(a)));
+                items.forEach((a, idx) => {
+                    const card = createCard(a);
+                    card.style.animationDelay = (idx * 45) + 'ms';
+                    col.appendChild(card);
+                });
             });
         }
 
@@ -1727,7 +1827,7 @@
                 ${quickActions}
                 <div class="app-actions">
                     <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditModal('${a.id}')">编辑</button>
-                    ${a.job_url ? `<a class="btn btn-ghost btn-sm" href="${esc(a.job_url)}" target="_blank">链接</a>` : ''}
+                    ${a.job_url ? `<a class="btn btn-ghost btn-sm" href="${sanitizeUrl(a.job_url) || 'javascript:void(0)'}" target="_blank" rel="noopener noreferrer">链接</a>` : ''}
                 </div>
             `;
             card.addEventListener('click', () => openEditModal(a.id));

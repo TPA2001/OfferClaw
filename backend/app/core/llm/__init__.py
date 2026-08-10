@@ -6,6 +6,7 @@ LLM 抽象层 - 对应 Pi 的 pi-ai 包
 - LLMProvider: Provider 接口
 - Message / ToolCall / ToolSchema: 标准化数据结构
 - LLMResponse: 统一响应格式
+- RetriableLLMProvider: 带指数退避重试的装饰器
 """
 
 from .base import (
@@ -19,6 +20,7 @@ from .base import (
 from .factory import create_provider, get_default_provider
 from .openai_provider import OpenAIProvider
 from .mock_provider import MockProvider
+from .retry_provider import RetriableLLMProvider
 
 __all__ = [
     "LLMProvider",
@@ -31,4 +33,5 @@ __all__ = [
     "get_default_provider",
     "OpenAIProvider",
     "MockProvider",
+    "RetriableLLMProvider",
 ]

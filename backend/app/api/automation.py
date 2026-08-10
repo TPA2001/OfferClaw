@@ -5,7 +5,7 @@
 同时提供 Boss 直聘岗位搜索能力
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import logging
@@ -13,6 +13,7 @@ import json
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.core.response import ok, BadRequestError, InternalServerError
 from app.services.smart_fill import get_smart_fill_service
 from app.services.boss_search import get_boss_search_service
 from app.services.auto_filler import get_auto_filler_service
@@ -34,6 +35,12 @@ router = APIRouter(prefix="/api/v1/automation", tags=["automation"])
 class ExtractFromURLRequest(BaseModel):
     """从 URL 提取字段请求"""
     url: str
+
+
+class ExtractAllStepsRequest(BaseModel):
+    """多步骤向导全步骤提取请求"""
+    url: str
+    max_steps: int = 10   # 最大遍历步数（防无限循环）
 
 
 class MatchRequest(BaseModel):
@@ -79,32 +86,71 @@ async def extract_from_url(
 ):
     """
     从 URL 提取表单字段（Web 版本，无需插件）
-    
+
     流程：
     1. 用户输入目标 URL
     2. 系统后台抓取页面
     3. 自动识别表单字段
-    4. 返回字段列表和页面信息
+    4. 返回字段列表和页面信息（含多步骤向导结构检测）
     """
     logger.info(f"用户 {user_id} 请求从 URL 提取字段: {request.url}")
-    
+
     try:
         # 使用智能填写服务抓取页面
         service = get_smart_fill_service()
         result = await service.extract_fields_from_url(request.url)
-        
-        return {
-            "code": 0,
-            "message": "提取成功",
-            "data": result
-        }
-        
+
+        # 如果检测到多步骤向导，附加提示
+        wizard = result.get("wizard", {})
+        if wizard.get("is_multi_step"):
+            msg = (
+                f"提取成功（检测到多步骤向导：当前第 {wizard.get('current_step', 0)} / "
+                f"{wizard.get('total_steps', 0)} 步，可调用 /extract-all-steps 获取全部字段）"
+            )
+        else:
+            msg = "提取成功"
+
+        return ok(result, message=msg)
+
     except Exception as e:
         logger.error(f"字段提取失败: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"字段提取失败: {str(e)}"
+        raise InternalServerError(f"字段提取失败: {e}")
+
+
+@router.post("/extract-all-steps")
+async def extract_all_steps(
+    request: ExtractAllStepsRequest,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    多步骤向导表单全步骤提取
+
+    自动点击「下一步」遍历所有步骤，合并所有字段。
+    适用于分步骤的招聘投递表单（如：基本信息 → 教育经历 → 工作经历 → 确认）。
+
+    - 每个字段会附加 `step` 字段标记来源步骤
+    - 返回 `steps` 数组含每步的截图和字段数
+    - 达到 max_steps 或无「下一步」按钮时停止
+    """
+    logger.info(f"用户 {user_id} 请求多步骤提取: {request.url}, max_steps={request.max_steps}")
+
+    if request.max_steps < 1 or request.max_steps > 20:
+        raise BadRequestError("max_steps 必须在 1-20 之间")
+
+    try:
+        service = get_smart_fill_service()
+        result = await service.extract_all_steps(
+            url=request.url,
+            max_steps=request.max_steps,
         )
+        msg = (
+            f"多步骤提取完成：共遍历 {result.get('total_steps_traversed', 0)} 步，"
+            f"合并 {result.get('field_count', 0)} 个字段"
+        )
+        return ok(result, message=msg)
+    except Exception as e:
+        logger.error(f"多步骤提取失败: {e}", exc_info=True)
+        raise InternalServerError(f"多步骤提取失败: {e}")
 
 
 @router.post("/match")
@@ -151,22 +197,18 @@ async def match_fields(
             use_llm=request.use_llm,
         )
 
-        return {
-            "code": 0,
-            "message": "匹配成功" if result.get("source") == "llm" else "规则匹配完成",
-            "data": {
+        return ok(
+            {
                 "mappings": result["mappings"],
                 "profile_used": result["profile_used"],
                 "source": result.get("source", "llm"),
-            }
-        }
-            
+            },
+            message="匹配成功" if result.get("source") == "llm" else "规则匹配完成",
+        )
+
     except Exception as e:
         logger.error(f"字段匹配失败: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"字段匹配失败: {str(e)}"
-        )
+        raise InternalServerError(f"字段匹配失败: {e}")
 
 
 @router.post("/generate-script")
@@ -188,21 +230,17 @@ async def generate_fill_script(
         # 生成填写脚本
         script = _generate_fill_script(request.fields, request.mappings)
         
-        return {
-            "code": 0,
-            "message": "脚本生成成功",
-            "data": {
+        return ok(
+            {
                 "script": script,
                 "usage": "请将上述脚本复制到浏览器控制台（按 F12 打开）并执行"
-            }
-        }
-        
+            },
+            message="脚本生成成功",
+        )
+
     except Exception as e:
         logger.error(f"脚本生成失败: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"脚本生成失败: {str(e)}"
-        )
+        raise InternalServerError(f"脚本生成失败: {e}")
 
 
 def _generate_fill_script(fields: List[Dict], mappings: List[Dict]) -> str:
@@ -517,10 +555,7 @@ async def boss_search(
     )
 
     if not request.keyword or not request.keyword.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="keyword 不能为空",
-        )
+        raise BadRequestError("keyword 不能为空")
 
     try:
         service = get_boss_search_service()
@@ -531,17 +566,10 @@ async def boss_search(
             use_real=request.use_real,
             user_id=user_id,
         )
-        return {
-            "code": 0,
-            "message": result.get("message", "搜索成功"),
-            "data": result,
-        }
+        return ok(result, message=result.get("message", "搜索成功"))
     except Exception as e:
         logger.error(f"Boss 搜索失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Boss 搜索失败: {str(e)}",
-        )
+        raise InternalServerError(f"Boss 搜索失败: {e}")
 
 
 @router.get("/login-status")
@@ -563,23 +591,13 @@ async def login_status(
     """
     logger.info(f"用户 {user_id} 检查 {site} 登录态")
     if site != "boss":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"暂不支持站点 {site}，当前仅支持 boss",
-        )
+        raise BadRequestError(f"暂不支持站点 {site}，当前仅支持 boss")
     try:
         result = await check_boss_login(user_id=user_id)
-        return {
-            "code": 0,
-            "message": result["message"],
-            "data": result,
-        }
+        return ok(result, message=result["message"])
     except Exception as e:
         logger.error(f"登录态检查失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
-        )
+        raise InternalServerError(str(e))
 
 
 @router.post("/open-login")
@@ -597,25 +615,15 @@ async def open_login(
     """
     logger.info(f"用户 {user_id} 请求打开 {request.site} 登录页（headless={request.headless}）")
     if request.site != "boss":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"暂不支持站点 {request.site}，当前仅支持 boss",
-        )
+        raise BadRequestError(f"暂不支持站点 {request.site}，当前仅支持 boss")
     try:
         # headless 参数当前未改变 open_boss_login 行为（登录需 headful 让用户操作），
         # 保留参数以兼容前端请求体，后续可扩展为 headless 模式下复用已登录态
         result = await open_boss_login(user_id=user_id)
-        return {
-            "code": 0,
-            "message": result["message"],
-            "data": result,
-        }
+        return ok(result, message=result["message"])
     except Exception as e:
         logger.error(f"打开登录页失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
-        )
+        raise InternalServerError(str(e))
 
 
 @router.post("/auto-fill")
@@ -640,10 +648,7 @@ async def auto_fill(
         f"headless={request.headless}, auto_submit={request.auto_submit}"
     )
     if not request.url:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="url 不能为空",
-        )
+        raise BadRequestError("url 不能为空")
     try:
         service = get_auto_filler_service()
         result = await service.auto_fill(
@@ -655,31 +660,23 @@ async def auto_fill(
             auto_submit=request.auto_submit,
             submit_selector=request.submit_selector,
         )
-        return {
-            "code": 0,
-            "message": result["message"],
-            "data": result,
-        }
+        return ok(result, message=result["message"])
     except Exception as e:
         logger.error(f"自动填表失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"自动填表失败: {str(e)}",
-        )
+        raise InternalServerError(f"自动填表失败: {e}")
 
 
 @router.get("/status")
 async def get_automation_status():
     """获取智能填写模块状态"""
-    return {
-        "code": 0,
-        "message": "智能填写模块运行正常",
-        "data": {
+    return ok(
+        {
             "smart_fill": "available",
             "field_matcher": "available",
             "script_generator": "available",
             "boss_search": "available",
             "auto_filler": "available",
             "login_check": "available",
-        }
-    }
+        },
+        message="智能填写模块运行正常",
+    )

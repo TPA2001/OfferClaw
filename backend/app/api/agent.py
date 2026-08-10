@@ -12,20 +12,22 @@ import logging
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.core.llm import get_default_provider
+from app.core.response import ok, BadRequestError, NotFoundError
 from app.agent.apps import create_job_agent
 from app.agent.runtime.events import (
     ContentDelta, ToolCallStart, ToolResultEvent,
     DoneEvent, ConfirmRequiredEvent, ErrorEvent,
 )
 from app.models.application import AgentSession
+from app.core.log_utils import sanitize_for_log
 
 logger = logging.getLogger("offerclaw.api.agent")
 
@@ -63,7 +65,6 @@ def _event_to_sse(event) -> str:
 async def agent_chat(
     req: ChatRequest,
     user_id: str = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
     """
     Agent 对话接口（SSE 流式响应）
@@ -75,24 +76,34 @@ async def agent_chat(
     - confirm_required: 需要用户确认
     - done: 完成
     - error: 错误
-    """
-    logger.info(f"用户 {user_id} 对话: {req.message[:80]}")
 
-    llm = get_default_provider()
-    agent = create_job_agent(
-        llm=llm,
-        db=db,
-        user_id=user_id,
-        session_id=req.session_id,
-    )
+    Session 生命周期策略：
+    - 不使用 Depends(get_db)（会在 SSE 长连接期间独占 session）
+    - 在流内部为每次 agent 运行创建独立短 session，结束后立即关闭
+    - 工具调用内部按需另开 session，避免长连接独占
+    """
+    logger.info(f"用户 {user_id} 发起对话，消息长度={len(req.message)}，session_id={req.session_id or 'new'}")
+    logger.debug(f"对话内容预览: {sanitize_for_log(req.message[:80])}")
 
     async def event_stream():
+        # 为本次 agent 运行创建独立 session，流结束后立即关闭
+        db = SessionLocal()
         try:
-            async for event in agent.run_stream(req.message):
-                yield _event_to_sse(event)
-        except Exception as e:
-            logger.exception(f"Agent 流式异常: {e}")
-            yield _event_to_sse(ErrorEvent(message=str(e)))
+            llm = get_default_provider()
+            agent = create_job_agent(
+                llm=llm,
+                db=db,
+                user_id=user_id,
+                session_id=req.session_id,
+            )
+            try:
+                async for event in agent.run_stream(req.message):
+                    yield _event_to_sse(event)
+            except Exception as e:
+                logger.exception(f"Agent 流式异常: {e}")
+                yield _event_to_sse(ErrorEvent(message=str(e)))
+        finally:
+            db.close()
 
     return StreamingResponse(
         event_stream(),
@@ -109,7 +120,6 @@ async def agent_chat(
 async def confirm_action(
     req: ConfirmRequest,
     user_id: str = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
     """
     确认敏感操作后恢复执行（SSE 流式）
@@ -118,22 +128,24 @@ async def confirm_action(
     """
     logger.info(f"用户 {user_id} 确认操作 action_id={req.action_id} approved={req.approved}")
 
-    # 重新加载 agent state
-    llm = get_default_provider()
-    agent = create_job_agent(
-        llm=llm,
-        db=db,
-        user_id=user_id,
-        session_id=req.session_id,
-    )
-
     async def event_stream():
+        db = SessionLocal()
         try:
-            async for event in agent.resume_after_confirm(req.action_id, req.approved):
-                yield _event_to_sse(event)
-        except Exception as e:
-            logger.exception(f"Agent 恢复异常: {e}")
-            yield _event_to_sse(ErrorEvent(message=str(e)))
+            llm = get_default_provider()
+            agent = create_job_agent(
+                llm=llm,
+                db=db,
+                user_id=user_id,
+                session_id=req.session_id,
+            )
+            try:
+                async for event in agent.resume_after_confirm(req.action_id, req.approved):
+                    yield _event_to_sse(event)
+            except Exception as e:
+                logger.exception(f"Agent 恢复异常: {e}")
+                yield _event_to_sse(ErrorEvent(message=str(e)))
+        finally:
+            db.close()
 
     return StreamingResponse(
         event_stream(),
@@ -158,7 +170,8 @@ async def list_sessions(
         messages = []
         try:
             messages = json.loads(s.messages or "[]")
-        except Exception:
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning(f"会话 {s.id} 消息解析失败: {e}")
             messages = []
 
         # 取最后一条用户/助手消息的文本作为预览
@@ -183,7 +196,7 @@ async def list_sessions(
             "updated_at": s.updated_at.isoformat() if s.updated_at else None,
         })
 
-    return {"code": 0, "data": data}
+    return ok(data, message="获取会话列表成功")
 
 
 @router.patch("/sessions/{session_id}")
@@ -196,21 +209,20 @@ async def rename_session(
     """重命名会话标题"""
     title = body.title.strip()
     if not title:
-        raise HTTPException(status_code=400, detail="标题不能为空")
+        raise BadRequestError("标题不能为空")
     if len(title) > 100:
-        raise HTTPException(status_code=400, detail="标题过长（最多 100 字符）")
+        raise BadRequestError("标题过长（最多 100 字符）")
 
     sess = db.query(AgentSession).filter(
         AgentSession.id == session_id,
         AgentSession.user_id == user_id,
     ).first()
     if not sess:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise NotFoundError("会话不存在")
 
     sess.title = title
     db.commit()
-    return {"code": 0, "data": {"id": str(sess.id), "title": sess.title}}
-
+    return ok({"id": str(sess.id), "title": sess.title}, message="重命名成功")
 
 @router.get("/sessions/{session_id}")
 async def get_session(
@@ -224,19 +236,20 @@ async def get_session(
         AgentSession.user_id == user_id,
     ).first()
     if not sess:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise NotFoundError("会话不存在")
 
-    messages = json.loads(sess.messages or "[]")
-    return {
-        "code": 0,
-        "data": {
-            "id": str(sess.id),
-            "title": sess.title,
-            "messages": messages,
-            "created_at": sess.created_at.isoformat() if sess.created_at else None,
-            "updated_at": sess.updated_at.isoformat() if sess.updated_at else None,
-        },
-    }
+    try:
+        messages = json.loads(sess.messages or "[]")
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.warning(f"会话 {session_id} 消息解析失败: {e}")
+        messages = []
+    return ok({
+        "id": str(sess.id),
+        "title": sess.title,
+        "messages": messages,
+        "created_at": sess.created_at.isoformat() if sess.created_at else None,
+        "updated_at": sess.updated_at.isoformat() if sess.updated_at else None,
+    }, message="获取会话详情成功")
 
 
 @router.delete("/sessions/{session_id}")
@@ -251,8 +264,8 @@ async def delete_session(
         AgentSession.user_id == user_id,
     ).first()
     if not sess:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise NotFoundError("会话不存在")
 
     db.delete(sess)
     db.commit()
-    return {"code": 0, "message": "会话已删除"}
+    return ok(None, message="会话已删除")

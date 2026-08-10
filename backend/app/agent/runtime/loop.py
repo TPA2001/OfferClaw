@@ -116,9 +116,11 @@ class AgentLoop:
                     # 需要确认的工具：触发确认事件，挂起等待
                     if tool.requires_confirmation:
                         action_id = f"action_{uuid.uuid4().hex[:12]}"
+                        # 保留原始 tool_call_id，确认后用它关联 tool 结果
                         self.state.register_pending_action(action_id, {
                             "tool_name": tc.name,
                             "arguments": tc.arguments,
+                            "tool_call_id": tc.id,
                         })
                         yield ConfirmRequiredEvent(
                             action_id=action_id,
@@ -135,7 +137,7 @@ class AgentLoop:
                     else:
                         result = await tool.arun(**tc.arguments)
 
-                # 把工具结果加入 state
+                # 把工具结果加入 state（用原始 tool_call_id 关联）
                 self.state.add_tool_result(
                     tool_call_id=tc.id,
                     name=tc.name,
@@ -165,15 +167,18 @@ class AgentLoop:
             yield ErrorEvent(message=f"无效的 action_id: {action_id}")
             return
 
+        # 使用原始 tool_call_id，让模型能正确关联 tool 结果
+        original_tool_call_id = info.get("tool_call_id", f"call_{action_id}")
+
         if not approved:
-            # 用户拒绝，加入 tool 结果说明
+            # 用户拒绝，加入 tool 结果说明（保留原 tool_call_id）
             self.state.add_tool_result(
-                tool_call_id=f"rejected_{action_id}",
+                tool_call_id=original_tool_call_id,
                 name=info["tool_name"],
                 content=f"用户拒绝了 {info['tool_name']} 操作",
             )
             yield ToolResultEvent(
-                tool_call_id=f"rejected_{action_id}",
+                tool_call_id=original_tool_call_id,
                 tool_name=info["tool_name"],
                 success=False,
                 error="用户拒绝操作",
@@ -184,12 +189,12 @@ class AgentLoop:
             if tool:
                 result = await tool.arun(**info["arguments"])
                 self.state.add_tool_result(
-                    tool_call_id=f"approved_{action_id}",
+                    tool_call_id=original_tool_call_id,
                     name=info["tool_name"],
                     content=result.to_message_content(),
                 )
                 yield ToolResultEvent(
-                    tool_call_id=f"approved_{action_id}",
+                    tool_call_id=original_tool_call_id,
                     tool_name=info["tool_name"],
                     success=result.success,
                     data=result.data,

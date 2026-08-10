@@ -13,13 +13,14 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.core.response import ok, BadRequestError, NotFoundError
 from app.models.application import Application
 
 
@@ -243,13 +244,13 @@ async def list_applications(
     q = db.query(Application).filter(Application.user_id == user_id)
     if status_filter:
         if status_filter not in VALID_STATUSES:
-            raise HTTPException(status_code=400, detail=f"非法状态: {status_filter}")
+            raise BadRequestError(f"非法状态: {status_filter}")
         q = q.filter(Application.status == status_filter)
     if company:
         q = q.filter(Application.company.like(f"%{company}%"))
     if priority:
         if priority not in PRIORITIES:
-            raise HTTPException(status_code=400, detail=f"非法优先级: {priority}")
+            raise BadRequestError(f"非法优先级: {priority}")
         q = q.filter(Application.priority == priority)
 
     total = q.count()
@@ -260,11 +261,11 @@ async def list_applications(
         Application.updated_at.desc().nullslast(),
     ).offset(offset).limit(limit).all()
 
-    return {
-        "code": 0,
-        "data": [_to_dict(a) for a in apps],
-        "total": total,
-    }
+    return ok(
+        [_to_dict(a) for a in apps],
+        message="获取投递列表成功",
+        extra={"total": total},
+    )
 
 
 @router.get("/search")
@@ -290,12 +291,11 @@ async def search_applications(
     ).order_by(Application.updated_at.desc().nullslast()).limit(limit)
 
     apps = query.all()
-    return {
-        "code": 0,
-        "data": [_to_dict(a) for a in apps],
-        "total": len(apps),
-        "query": q,
-    }
+    return ok(
+        [_to_dict(a) for a in apps],
+        message="搜索成功",
+        extra={"total": len(apps), "query": q},
+    )
 
 
 @router.get("/export/csv")
@@ -315,7 +315,7 @@ async def export_csv(
     query = db.query(Application).filter(Application.user_id == user_id)
     if status_filter:
         if status_filter not in VALID_STATUSES:
-            raise HTTPException(status_code=400, detail=f"非法状态: {status_filter}")
+            raise BadRequestError(f"非法状态: {status_filter}")
         query = query.filter(Application.status == status_filter)
     apps = query.order_by(Application.applied_at.desc().nullslast()).all()
 
@@ -400,17 +400,14 @@ async def get_timeline(
         cursor = cursor + timedelta(days=1)
 
     total_applied = sum(d["applied"] for d in daily.values())
-    return {
-        "code": 0,
-        "data": {
-            "days": days,
-            "timeline": timeline,
-            "total_applied": total_applied,
-            "total_replied": sum(d["replied"] for d in daily.values()),
-            "total_offer": sum(d["offer"] for d in daily.values()),
-            "avg_per_day": round(total_applied / days, 1) if days else 0,
-        },
-    }
+    return ok({
+        "days": days,
+        "timeline": timeline,
+        "total_applied": total_applied,
+        "total_replied": sum(d["replied"] for d in daily.values()),
+        "total_offer": sum(d["offer"] for d in daily.values()),
+        "avg_per_day": round(total_applied / days, 1) if days else 0,
+    }, message="获取时间趋势成功")
 
 
 @router.get("/stats/by-company")
@@ -467,13 +464,10 @@ async def get_by_company(
     # 按投递数降序
     result.sort(key=lambda x: -x["total"])
 
-    return {
-        "code": 0,
-        "data": {
-            "companies": result,
-            "total_companies": len(result),
-        },
-    }
+    return ok({
+        "companies": result,
+        "total_companies": len(result),
+    }, message="获取公司统计成功")
 
 
 @router.post("/")
@@ -488,13 +482,13 @@ async def create_application(
     避免求职大忌——同一岗位重复投递。前端可据此提示用户确认。
     """
     if body.status not in VALID_STATUSES:
-        raise HTTPException(status_code=400, detail=f"非法状态: {body.status}")
+        raise BadRequestError(f"非法状态: {body.status}")
     if body.priority and body.priority not in PRIORITIES:
-        raise HTTPException(status_code=400, detail=f"非法优先级: {body.priority}")
+        raise BadRequestError(f"非法优先级: {body.priority}")
     if body.rejection_stage and body.rejection_stage not in REJECTION_STAGES:
-        raise HTTPException(status_code=400, detail=f"非法拒绝环节: {body.rejection_stage}")
+        raise BadRequestError(f"非法拒绝环节: {body.rejection_stage}")
     if body.offer_status and body.offer_status not in OFFER_STATUSES:
-        raise HTTPException(status_code=400, detail=f"非法 offer 状态: {body.offer_status}")
+        raise BadRequestError(f"非法 offer 状态: {body.offer_status}")
 
     # 重复投递检测（同公司同岗位，30 天内，排除已撤回/已拒绝的）
     dup_warning = None
@@ -540,7 +534,11 @@ async def create_application(
     db.add(app)
     db.commit()
     db.refresh(app)
-    return {"code": 0, "data": _to_dict(app), "warning": dup_warning}
+    return ok(
+        _to_dict(app),
+        message="创建成功",
+        extra={"warning": dup_warning},
+    )
 
 
 @router.get("/{application_id}")
@@ -555,8 +553,8 @@ async def get_application(
         Application.user_id == user_id,
     ).first()
     if not app:
-        raise HTTPException(status_code=404, detail="记录不存在")
-    return {"code": 0, "data": _to_dict(app)}
+        raise NotFoundError("记录不存在")
+    return ok(_to_dict(app))
 
 
 @router.put("/{application_id}")
@@ -572,7 +570,7 @@ async def update_application(
         Application.user_id == user_id,
     ).first()
     if not app:
-        raise HTTPException(status_code=404, detail="记录不存在")
+        raise NotFoundError("记录不存在")
 
     # Pydantic v2：通过 model_fields_set 判断字段是否被显式传入（含 None）
     # 这样能区分「未提供」与「显式清空」
@@ -580,7 +578,7 @@ async def update_application(
 
     if "status" in provided:
         if body.status not in VALID_STATUSES:
-            raise HTTPException(status_code=400, detail=f"非法状态: {body.status}")
+            raise BadRequestError(f"非法状态: {body.status}")
         old_status = app.status
         app.status = body.status
         # 状态切换时自动清理不相关字段
@@ -591,11 +589,11 @@ async def update_application(
     # 拒绝环节（显式传 null 可清空）
     if "rejection_stage" in provided:
         if body.rejection_stage is not None and body.rejection_stage not in REJECTION_STAGES:
-            raise HTTPException(status_code=400, detail=f"非法拒绝环节: {body.rejection_stage}")
+            raise BadRequestError(f"非法拒绝环节: {body.rejection_stage}")
         app.rejection_stage = body.rejection_stage
     if "interview_round" in provided:
         if body.interview_round is not None and (body.interview_round < 1 or body.interview_round > 5):
-            raise HTTPException(status_code=400, detail="面试轮次必须在 1-5 之间")
+            raise BadRequestError("面试轮次必须在 1-5 之间")
         app.interview_round = body.interview_round
     if "next_interview_at" in provided:
         app.next_interview_at = _parse_dt(body.next_interview_at)
@@ -603,7 +601,7 @@ async def update_application(
         app.assessment_deadline = _parse_dt(body.assessment_deadline)
     if "offer_status" in provided:
         if body.offer_status is not None and body.offer_status not in OFFER_STATUSES:
-            raise HTTPException(status_code=400, detail=f"非法 offer 状态: {body.offer_status}")
+            raise BadRequestError(f"非法 offer 状态: {body.offer_status}")
         app.offer_status = body.offer_status
     if "offer_salary" in provided:
         app.offer_salary = body.offer_salary
@@ -615,7 +613,7 @@ async def update_application(
         app.hr_contact = body.hr_contact
     if "priority" in provided:
         if body.priority is not None and body.priority not in PRIORITIES:
-            raise HTTPException(status_code=400, detail=f"非法优先级: {body.priority}")
+            raise BadRequestError(f"非法优先级: {body.priority}")
         app.priority = body.priority
 
     # 基本字段（None 清空）
@@ -625,7 +623,7 @@ async def update_application(
 
     db.commit()
     db.refresh(app)
-    return {"code": 0, "data": _to_dict(app)}
+    return ok(_to_dict(app), message="更新成功")
 
 
 @router.patch("/{application_id}/status")
@@ -637,14 +635,14 @@ async def update_status(
 ):
     """快速更新状态（看板拖拽用，允许任意状态切换）"""
     if new_status not in VALID_STATUSES:
-        raise HTTPException(status_code=400, detail=f"非法状态: {new_status}")
+        raise BadRequestError(f"非法状态: {new_status}")
 
     app = db.query(Application).filter(
         Application.id == application_id,
         Application.user_id == user_id,
     ).first()
     if not app:
-        raise HTTPException(status_code=404, detail="记录不存在")
+        raise NotFoundError("记录不存在")
 
     old_status = app.status
     app.status = new_status
@@ -655,11 +653,11 @@ async def update_status(
 
     db.commit()
     db.refresh(app)
-    return {
-        "code": 0,
-        "data": _to_dict(app),
-        "old_status": old_status,
-    }
+    return ok(
+        _to_dict(app),
+        message="状态已更新",
+        extra={"old_status": old_status},
+    )
 
 
 @router.delete("/{application_id}")
@@ -674,11 +672,11 @@ async def delete_application(
         Application.user_id == user_id,
     ).first()
     if not app:
-        raise HTTPException(status_code=404, detail="记录不存在")
+        raise NotFoundError("记录不存在")
 
     db.delete(app)
     db.commit()
-    return {"code": 0, "message": "已删除"}
+    return ok(None, message="已删除")
 
 
 @router.post("/batch")
@@ -716,7 +714,7 @@ async def batch_import(
         db.add(app)
         created.append(app)
     db.commit()
-    return {"code": 0, "data": {"imported": len(created)}}
+    return ok({"imported": len(created)}, message="批量导入完成")
 
 
 @router.get("/stats/overview")
@@ -733,25 +731,22 @@ async def get_stats(
 
     total = len(apps)
     if total == 0:
-        return {
-            "code": 0,
-            "data": {
-                "total": 0,
-                "by_status": {},
-                "by_status_raw": {},
-                "by_rejection_stage": {},
-                "by_source": {},
-                "funnel": {},
-                "reply_rate": "0%",
-                "offer_rate": "0%",
-                "avg_wait_days": 0,
-                "waiting_count": 0,
-                "stale_count": 0,
-                "upcoming_interviews": 0,
-                "pending_assessments": 0,
-                "priority_breakdown": {"high": 0, "medium": 0, "low": 0},
-            },
-        }
+        return ok({
+            "total": 0,
+            "by_status": {},
+            "by_status_raw": {},
+            "by_rejection_stage": {},
+            "by_source": {},
+            "funnel": {},
+            "reply_rate": "0%",
+            "offer_rate": "0%",
+            "avg_wait_days": 0,
+            "waiting_count": 0,
+            "stale_count": 0,
+            "upcoming_interviews": 0,
+            "pending_assessments": 0,
+            "priority_breakdown": {"high": 0, "medium": 0, "low": 0},
+        }, message="暂无投递记录")
 
     status_counter = Counter(a.status for a in apps)
     offer_count = status_counter.get("offer", 0)
@@ -847,34 +842,31 @@ async def get_stats(
     # 优先级分布
     priority_counter = Counter(a.priority or "medium" for a in apps)
 
-    return {
-        "code": 0,
-        "data": {
-            "total": total,
-            "by_status": {VALID_STATUSES.get(k, k): v for k, v in status_counter.items()},
-            "by_status_raw": dict(status_counter),
-            "by_rejection_stage": {
-                REJECTION_STAGES.get(k, k): v for k, v in rejection_counter.items()
-            },
-            "by_rejection_stage_raw": dict(rejection_counter),
-            "by_source": by_source,
-            "funnel": funnel,
-            "offer_count": offer_count,
-            "rejected_count": status_counter.get("rejected", 0),
-            "reply_rate": f"{reply_rate * 100:.1f}%",
-            "offer_rate": f"{offer_rate * 100:.1f}%",
-            "avg_wait_days": round(avg_wait, 1),
-            "waiting_count": len(waiting_days),
-            "stale_count": stale_count,
-            "upcoming_interviews": upcoming_interviews,
-            "pending_assessments": pending_assessments,
-            "priority_breakdown": {
-                "high": priority_counter.get("high", 0),
-                "medium": priority_counter.get("medium", 0),
-                "low": priority_counter.get("low", 0),
-            },
+    return ok({
+        "total": total,
+        "by_status": {VALID_STATUSES.get(k, k): v for k, v in status_counter.items()},
+        "by_status_raw": dict(status_counter),
+        "by_rejection_stage": {
+            REJECTION_STAGES.get(k, k): v for k, v in rejection_counter.items()
         },
-    }
+        "by_rejection_stage_raw": dict(rejection_counter),
+        "by_source": by_source,
+        "funnel": funnel,
+        "offer_count": offer_count,
+        "rejected_count": status_counter.get("rejected", 0),
+        "reply_rate": f"{reply_rate * 100:.1f}%",
+        "offer_rate": f"{offer_rate * 100:.1f}%",
+        "avg_wait_days": round(avg_wait, 1),
+        "waiting_count": len(waiting_days),
+        "stale_count": stale_count,
+        "upcoming_interviews": upcoming_interviews,
+        "pending_assessments": pending_assessments,
+        "priority_breakdown": {
+            "high": priority_counter.get("high", 0),
+            "medium": priority_counter.get("medium", 0),
+            "low": priority_counter.get("low", 0),
+        },
+    }, message="获取看板统计成功")
 
 
 @router.get("/stats/followups")
@@ -946,13 +938,10 @@ async def get_followups(
     pending_assessments.sort(key=lambda x: x["hours_until"])
     upcoming.sort(key=lambda x: x["hours_until"])
 
-    return {
-        "code": 0,
-        "data": {
-            "stale": stale_apps,
-            "pending_assessments": pending_assessments,
-            "upcoming_interviews": upcoming,
-            "pending_offers": pending_offers,
-            "total_alerts": len(stale_apps) + len(pending_assessments) + len(upcoming) + len(pending_offers),
-        },
-    }
+    return ok({
+        "stale": stale_apps,
+        "pending_assessments": pending_assessments,
+        "upcoming_interviews": upcoming,
+        "pending_offers": pending_offers,
+        "total_alerts": len(stale_apps) + len(pending_assessments) + len(upcoming) + len(pending_offers),
+    }, message="获取跟进提醒成功")
