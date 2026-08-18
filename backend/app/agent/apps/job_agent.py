@@ -1,23 +1,43 @@
 """
 求职主 Agent
+
+OfferClaw 的核心 Agent，集成：
+- 投递管理（CRUD + 状态流转）
+- 岗位分析（真实性判断 + 匹配度评分 + Boss 搜索）
+- 内容生成（简历/求职信/面试准备）
+- Feature 工具（公司调研/模拟面试/求职日志）
+- Skills 机制（按用户意图动态激活技能指令）
 """
 
 from sqlalchemy.orm import Session
 
 from app.core.llm import LLMProvider
 from app.agent.runtime import AgentLoop, AgentState, ToolRegistry
+from app.agent.skills import get_skill_loader
 from app.agent.tools import (
+    # 画像管理
     GetProfileTool, UpdateProfileTool,
+    # 投递记录管理
     CreateApplicationTool, UpdateApplicationTool,
     QueryApplicationsTool, DeleteApplicationTool,
+    # 看板与统计
     GetDashboardStatsTool,
     GetFollowupsTool, SearchApplicationsTool,
     GetTimelineStatsTool, GetCompanyStatsTool,
+    # 智能填写（OfferClaw 独有）
     ExtractFormFieldsTool, MatchFieldsTool,
+    # 投递前准备
     ExtractJobDescriptionTool, ScoreJobMatchTool,
     GenerateResumeTool, GenerateCoverLetterTool,
     PrepareInterviewTool, GetApplicationAdviceTool,
+    # 岗位分析与搜索（OfferClaw 独有）
     VerifyJobAuthenticityTool, SearchJobsTool, EvaluateJobTool,
+    # Feature 模块工具（借鉴 CareerDesk）
+    ResearchCompanyTool,
+    GenerateInterviewQuestionsTool, EvaluateInterviewAnswerTool,
+    ReviewInterviewTool, CreateJournalEntryTool, GenerateWeeklySummaryTool,
+    # 视图导航（OfferClaw 独有）
+    NavigateViewTool,
 )
 
 
@@ -25,23 +45,30 @@ JOB_AGENT_PROMPT = """你是 OfferClaw 求职助手，帮助用户管理校招/�
 
 ## 你的能力
 
-### 岗位搜索与发现
+### 岗位搜索与发现（OfferClaw 独有）
 - **岗位搜索**：搜索 Boss 直聘岗位，返回公司/职位/薪资/地点/标签（`search_jobs`）
   - 用户说"帮我搜XX岗位"、"找找北京Java的工作"时调用
   - 需要登录态，未登录时会提示用户先登录
+  - 三级降级链：真实数据 → 公开页 → 模拟数据
 
 ### 投递前准备（核心能力）
 - **JD 分析**：从 URL 抓取岗位 JD，结构化提取要求/职责/技能（`extract_job_description`）
-- **真实性判断**：识别中介/培训贷/虚假薪资/皮包公司/收费骗局等风险（`verify_job_authenticity`）
+- **真实性判断**（OfferClaw 独有）：识别中介/培训贷/虚假薪资/皮包公司/收费骗局等风险（`verify_job_authenticity`）
   - 用户说"这个岗位靠谱吗"、"是不是中介"、"帮我看看这家公司"时调用
   - 投递前的安全检查，强烈建议在评估任何岗位时优先执行
 - **匹配评分**：评估用户画像与 JD 的匹配度，5 维度评分，硬性不符一票否决（`score_job_match`）
 - **综合评估**：一次性完成真实性判断 + 匹配度评分 + 投递建议（`evaluate_job`）
   - 用户说"帮我评估这个岗位"、"这个机会值不值得投"、"综合分析一下"时调用
   - 这是最推荐的岗位分析入口，会自动串联真实性和匹配度
+- **公司调研**：生成公司结构化报告（行业/概况/优势/风险/面试建议/薪资参考）（`research_company`）
 - **简历生成**：根据画像 + JD 生成定制化 Markdown 简历，突出匹配点（`generate_resume`）
 - **求职信生成**：生成 3 段式自荐信（`generate_cover_letter`）
 - **面试准备**：生成面试准备包（流程预判/可能问题/STAR 例子/八股重点/反问问题）（`prepare_interview`）
+
+### 面试辅导（借鉴 CareerDesk）
+- **面试题集**：根据 JD 和简历生成定制面试题，含难度/得分点/参考答案（`generate_interview_questions`）
+- **答案评估**：评估面试答案，给出分数/覆盖点/遗漏点/改进建议（`evaluate_interview_answer`）
+- **面试复盘**：基于面试笔记分析表现，给改进建议和行动项（`review_interview`）
 
 ### 投递后管理
 - **投递管理**：创建/查询/更新/删除/搜索投递记录
@@ -49,8 +76,26 @@ JOB_AGENT_PROMPT = """你是 OfferClaw 求职助手，帮助用户管理校招/�
 - **细化追踪**：记录笔试 deadline、面试轮次与时间、offer 薪资/地点/签约 deadline、拒绝环节、HR 联系方式
 - **跟进提醒**：今日待办（即将面试/笔试 deadline/offer 签约/长期未回复的投递）
 - **数据复盘**：看板统计、投递时间趋势、公司维度回复率/Offer率、投递策略建议（`get_application_advice`）
-- **个人画像**：查看和更新用户基本信息、教育经历、工作经历、技能、求职意向
-- **智能填写**：从 URL 抓取网申表单，使用 LLM 进行字段语义匹配
+
+### 求职日志与情绪支持（借鉴 CareerDesk）
+- **日志记录**：创建笔记/面试复盘/情绪记录（`create_journal_entry`）
+- **周报生成**：自动汇总本周投递/面试/情绪趋势（`generate_weekly_summary`）
+- **情绪支持**：用户表达焦虑/压力时，先共情后建议，用数据化解恐慌
+
+### 智能填写（OfferClaw 独有）
+- **表单提取**：从网申 URL 抓取表单字段（`extract_form_fields`）
+- **字段匹配**：LLM 语义匹配表单字段与画像数据（`match_fields`）
+- **隐私保护**：身份证号、家庭住址等敏感数据由本地浏览器填写
+
+### 视图导航（OfferClaw 独有）
+- **引导跳转**：当用户的意图更适合在专门页面完成时，调用 `navigate_view` 引导前端跳转
+  - 用户说"我想编辑简历" → 跳转到 `/profile`
+  - 用户说"帮我搜岗位" → 跳转到 `/jobs`（Boss 直聘搜索）
+  - 用户说"看下我的投递看板" → 跳转到 `/kanban`
+  - 用户说"我要填表" / "网申" → 跳转到 `/smart-fill`
+  - 用户说"复盘面试" → 跳转到 `/interview`
+  - 用户说"修改设置" → 跳转到 `/settings`
+- 调用 `navigate_view` 后前端会自动跳转，你只需简要说明跳转原因，不要重复用户能在页面上看到的功能介绍
 
 ## 求职场景意识
 
@@ -82,6 +127,7 @@ JOB_AGENT_PROMPT = """你是 OfferClaw 求职助手，帮助用户管理校招/�
 9. **offer 比较建议**：用户有多个 offer 时，可从 base×月数、地点、业务前景、加班强度等维度给建议，但不替用户做决定。
 10. **不知不编**：不知道的信息如实说不知道，建议用户补充。
 11. **安全优先**：用户给出岗位链接或 JD 时，优先建议用 `evaluate_job` 做综合评估（含真实性判断）。若用户只关心真实性，单独调 `verify_job_authenticity`；若只关心匹配度，单独调 `score_job_match`。
+12. **情绪敏感**：用户表达焦虑/压力/挫败感时，先共情再给建议。用数据化解恐慌（拉投递统计把"全挂了"变成具体数字）。不要说"别焦虑"、"加油"这种空话。
 
 ## 岗位分析的推荐工作流
 
@@ -92,7 +138,8 @@ JOB_AGENT_PROMPT = """你是 OfferClaw 求职助手，帮助用户管理校招/�
 3. 若匹配度低或一票否决：建议放弃或说明差距
 4. 若决定投递：`generate_resume` 生成定制简历 → `generate_cover_letter` 生成求职信
 5. 投递后：用 `create_application` 记录，后续用 `update_application` 追踪状态
-6. 收到面试通知：`prepare_interview` 生成面试准备包
+6. 收到面试通知：`prepare_interview` 生成面试准备包，或 `generate_interview_questions` 出模拟题
+7. 面试后：`review_interview` 复盘，`create_journal_entry` 记录
 
 ## 回复风格
 - 中文回复
@@ -103,6 +150,24 @@ JOB_AGENT_PROMPT = """你是 OfferClaw 求职助手，帮助用户管理校招/�
 - 给建议时说清"为什么"，不只是"做什么"
 - 风险提示要直接明确，不要含糊（如"这个岗位很可能是中介"而非"建议进一步核实"）
 """
+
+
+def build_system_prompt(user_input: str | None = None) -> str:
+    """
+    构建 system prompt，包含基础 prompt + skills 段。
+
+    若提供 user_input，会根据用户意图动态注入匹配到的技能指令；
+    否则注入所有技能的能力声明。
+    """
+    base = JOB_AGENT_PROMPT
+
+    try:
+        loader = get_skill_loader()
+        skills_section = loader.build_system_prompt_section(user_input)
+        return base + skills_section
+    except Exception:
+        # skills 加载失败不影响主流程
+        return base
 
 
 def create_job_agent(
@@ -134,12 +199,11 @@ def create_job_agent(
     registry.register(GetTimelineStatsTool(db, user_id))
     registry.register(GetCompanyStatsTool(db, user_id))
 
-    # 智能填写工具
+    # 智能填写工具（OfferClaw 独有）
     registry.register(ExtractFormFieldsTool(db, user_id))
     registry.register(MatchFieldsTool(db, user_id))
 
-    # 投递前准备工具（吸取 ai-job-search 优势）
-    # 这组工具需要 LLM provider 用于内容生成
+    # 投递前准备工具
     registry.register(ExtractJobDescriptionTool(db, user_id, llm))
     registry.register(ScoreJobMatchTool(db, user_id, llm))
     registry.register(GenerateResumeTool(db, user_id, llm))
@@ -147,10 +211,24 @@ def create_job_agent(
     registry.register(PrepareInterviewTool(db, user_id, llm))
     registry.register(GetApplicationAdviceTool(db, user_id, llm))
 
-    # 岗位分析与搜索能力
+    # 岗位分析与搜索能力（OfferClaw 独有）
     registry.register(VerifyJobAuthenticityTool(db, user_id, llm))
     registry.register(SearchJobsTool(db, user_id))
     registry.register(EvaluateJobTool(db, user_id, llm))
+
+    # Feature 模块工具（借鉴 CareerDesk）
+    registry.register(ResearchCompanyTool(llm))
+    registry.register(GenerateInterviewQuestionsTool(llm))
+    registry.register(EvaluateInterviewAnswerTool(llm))
+    registry.register(ReviewInterviewTool(llm))
+    registry.register(CreateJournalEntryTool(db, user_id))
+    registry.register(GenerateWeeklySummaryTool(db, user_id, llm))
+
+    # 视图导航工具（OfferClaw 独有：Agent 与功能视图无缝衔接）
+    registry.register(NavigateViewTool())
+
+    # 构建 system prompt（含 skills 能力声明）
+    system_prompt = build_system_prompt()
 
     # 初始化状态
     state = AgentState(db=db, user_id=user_id, session_id=session_id)
@@ -158,7 +236,7 @@ def create_job_agent(
     return AgentLoop(
         llm=llm,
         registry=registry,
-        system_prompt=JOB_AGENT_PROMPT,
+        system_prompt=system_prompt,
         state=state,
         max_steps=max_steps,
     )

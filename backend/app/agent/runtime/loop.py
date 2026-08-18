@@ -7,19 +7,31 @@ Agent 循环引擎 - 核心运行时
 3. 若 LLM 返回 tool_calls → 执行工具 → 结果加入 state → 回到第 2 步
 4. 若 LLM 返回 content（无 tool_calls）→ 任务完成，返回
 5. 全程流式输出事件
+
+LLM 流式事件适配：
+- LLM 层返回类型化 StreamEvent（TextDelta/ToolCallStart/.../StreamEnd）
+- Loop 层转换为 AgentEvent（Pydantic）输出给 API 层
+- 推理过程（ReasoningDelta/ReasoningComplete）当前不转发给前端，仅记录日志
 """
 
 import uuid
 import logging
 from typing import AsyncIterator, Optional
 
-from app.core.llm import LLMProvider, Message
+from app.core.llm import LLMProvider, Message, ToolCall
+from app.core.llm.events import (
+    TextDelta as LLMTextDelta,
+    ReasoningDelta, ReasoningComplete,
+    ToolCallStart as LLMToolCallStart,
+    ToolCallDelta, ToolCallComplete,
+    StreamEnd,
+)
 from .base_tool import BaseTool, ToolResult
 from .registry import ToolRegistry
 from .state import AgentState
 from .events import (
     AgentEvent, ContentDelta, ToolCallStart, ToolResultEvent,
-    DoneEvent, ConfirmRequiredEvent, ErrorEvent,
+    DoneEvent, ConfirmRequiredEvent, ErrorEvent, NavigateEvent,
 )
 
 logger = logging.getLogger("offerclaw.agent.loop")
@@ -63,8 +75,6 @@ class AgentLoop:
         self.state.persist()
 
     async def _loop(self) -> AsyncIterator[AgentEvent]:
-        from app.core.llm import ToolCall
-
         tools_schema = self.registry.schemas()
         all_messages = self.state.messages   # 含 system
 
@@ -73,20 +83,54 @@ class AgentLoop:
 
             content_acc = ""
             tool_calls: list[ToolCall] = []
+            usage = None
+            finish_reason = "stop"
 
-            # 流式调用 LLM
-            async for chunk in self.llm.chat_stream(
+            # 流式调用 LLM（消费类型化 StreamEvent）
+            async for event in self.llm.chat_stream(
                 messages=all_messages,
                 tools=tools_schema if tools_schema else None,
                 temperature=self.temperature,
             ):
-                if chunk["type"] == "content":
-                    content_acc += chunk["delta"]
-                    yield ContentDelta(delta=chunk["delta"])
-                elif chunk["type"] == "tool_call":
-                    tool_calls.append(chunk["tool_call"])
-                elif chunk["type"] == "done":
-                    usage = chunk.get("usage")
+                if isinstance(event, LLMTextDelta):
+                    content_acc += event.text
+                    yield ContentDelta(delta=event.text)
+
+                elif isinstance(event, ReasoningDelta):
+                    # 推理过程增量，当前不转发给前端
+                    logger.debug(f"LLM reasoning: {event.text[:100]}")
+
+                elif isinstance(event, ReasoningComplete):
+                    # 推理完成，可记录日志
+                    logger.debug(f"LLM reasoning complete: {event.reasoning[:200]}")
+
+                elif isinstance(event, LLMToolCallStart):
+                    # 工具调用开始（参数还在 streaming，稍后在 ToolCallComplete 累积）
+                    pass
+
+                elif isinstance(event, ToolCallDelta):
+                    # 工具参数增量，当前不转发给前端
+                    pass
+
+                elif isinstance(event, ToolCallComplete):
+                    # 工具调用完成（带完整 arguments）
+                    tool_calls.append(ToolCall(
+                        id=event.tool_id,
+                        name=event.tool_name,
+                        arguments=event.arguments,
+                    ))
+
+                elif isinstance(event, StreamEnd):
+                    # 从 StreamEnd 的 int 字段构造 TokenUsage
+                    from app.core.llm import TokenUsage
+                    usage = TokenUsage(
+                        prompt_tokens=event.input_tokens,
+                        completion_tokens=event.output_tokens,
+                        total_tokens=event.input_tokens + event.output_tokens,
+                        cache_read=event.cache_read,
+                        cache_creation=event.cache_creation,
+                    )
+                    finish_reason = event.finish_reason
 
             # 把 assistant 消息加入 state
             self.state.add_assistant(
@@ -98,7 +142,8 @@ class AgentLoop:
             if not tool_calls:
                 yield DoneEvent(
                     session_id=self.state.session_id or "",
-                    finish_reason="stop",
+                    finish_reason=finish_reason,
+                    usage=usage,
                 )
                 return
 
@@ -151,6 +196,16 @@ class AgentLoop:
                     data=result.data,
                     error=result.error,
                 )
+
+                # navigate_view 工具：额外发出 NavigateEvent 通知前端跳转
+                if tc.name == "navigate_view" and result.success and isinstance(result.data, dict):
+                    target = result.data.get("target", "")
+                    if target:
+                        yield NavigateEvent(
+                            target=target,
+                            params=result.data.get("params", {}) or {},
+                            message=result.data.get("message", ""),
+                        )
 
             # 继续下一轮 LLM 调用（带 tool 结果）
 

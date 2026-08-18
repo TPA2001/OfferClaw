@@ -3,7 +3,7 @@ pytest 配置
 
 测试策略：
 - 使用 SQLite in-memory 数据库，隔离且快速
-- 测试启动时覆盖 AUTH_MODE=demo 和 SECRET_KEY，避免真实鉴权依赖
+- 内测模式：单用户，无鉴权依赖
 - 通过 fixture 提供干净的 db session 和测试 client
 """
 import os
@@ -11,10 +11,9 @@ import sys
 from pathlib import Path
 
 # 设置测试环境变量（必须在导入 app 之前）
-os.environ["AUTH_MODE"] = "demo"
-os.environ["SECRET_KEY"] = "test-secret-key-not-for-production"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["OPENAI_API_KEY"] = ""  # 强制使用 MockProvider
+os.environ["OFFERCLAW_DEV"] = "1"  # 测试绕过授权门控（开发模式）
 
 # 让 backend 目录可被导入
 backend_dir = str(Path(__file__).parent.parent)

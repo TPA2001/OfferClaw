@@ -5,16 +5,20 @@ LLM Provider 工厂
 - get_agent_provider(): Agent 编排用，强模型（function calling 稳定）
 - get_gen_provider(): 内容生成用，快模型（简历/评分/面试准备）；未配置则复用 agent provider
 
-环境变量：
-- AGENT_API_KEY / AGENT_MODEL / AGENT_BASE_URL：编排模型配置
-- GEN_API_KEY / GEN_MODEL / GEN_BASE_URL：生成模型配置（可选）
-- 兼容旧配置：OPENAI_API_KEY / OPENAI_MODEL / OPENAI_BASE_URL（当未配置 AGENT_* 时使用）
+配置优先级（高 → 低）：
+1. 运行时配置文件（config_store 管理，可通过设置 API 热更新）
+2. 环境变量：AGENT_* / GEN_* / OPENAI_*（兼容旧配置）
+3. Mock 降级
+
+隐私：
+- 日志仅记录 model / base_url，绝不记录 API Key
+- 对外暴露的配置查询走 config_store.get_masked_config()（脱敏）
 """
 
-import os
 import logging
 from typing import Optional
 
+from app.core.config_store import get_provider_config, mask_key, reset_runtime_cache
 from .base import LLMProvider
 from .openai_provider import OpenAIProvider
 from .mock_provider import MockProvider
@@ -36,6 +40,7 @@ def create_provider(
         with_retry: 是否包装重试装饰器（默认 True）
         **kwargs: provider 特定参数
     """
+    import os
     name = name or os.getenv("LLM_PROVIDER", "openai").lower()
 
     if name == "openai":
@@ -46,7 +51,8 @@ def create_provider(
         raise ValueError(f"不支持的 LLM provider: {name}")
 
     if with_retry:
-        max_retries = int(os.getenv("LLM_MAX_RETRIES", "3"))
+        import os as _os
+        max_retries = int(_os.getenv("LLM_MAX_RETRIES", "3"))
         return RetriableLLMProvider(provider, max_retries=max_retries)
     return provider
 
@@ -72,39 +78,25 @@ def get_agent_provider() -> LLMProvider:
     """
     获取 Agent 编排用 Provider（强模型，function calling 稳定）
 
-    优先级：AGENT_API_KEY > OPENAI_API_KEY > Mock 降级
+    优先级：运行时配置文件 > AGENT_* 环境变量 > OPENAI_* 环境变量 > Mock 降级
     """
-    # 优先读 AGENT_* 配置
-    agent_key = os.getenv("AGENT_API_KEY", "")
-    if agent_key:
+    cfg = get_provider_config("agent")
+
+    if cfg["api_key"]:
         provider = _build_openai(
-            agent_key,
-            model=os.getenv("AGENT_MODEL"),
-            base_url=os.getenv("AGENT_BASE_URL"),
+            cfg["api_key"],
+            model=cfg["model"] or None,
+            base_url=cfg["base_url"] or None,
         )
         if provider:
+            # 日志仅记录 model / base_url，绝不记录 api_key
             logger.info(
-                f"Agent 编排 Provider: {os.getenv('AGENT_MODEL', 'default')} "
-                f"@ {os.getenv('AGENT_BASE_URL', 'openai')}"
+                f"Agent 编排 Provider: {cfg['model'] or 'default'} "
+                f"@ {cfg['base_url'] or 'openai'}"
             )
             return provider
 
-    # 兼容旧配置：OPENAI_API_KEY
-    openai_key = os.getenv("OPENAI_API_KEY", "")
-    if openai_key:
-        provider = _build_openai(
-            openai_key,
-            model=os.getenv("OPENAI_MODEL"),
-            base_url=os.getenv("OPENAI_BASE_URL"),
-        )
-        if provider:
-            logger.info(
-                f"Agent 编排 Provider (OPENAI_*): {os.getenv('OPENAI_MODEL', 'default')} "
-                f"@ {os.getenv('OPENAI_BASE_URL', 'openai')}"
-            )
-            return provider
-
-    logger.warning("未配置 AGENT_API_KEY 或 OPENAI_API_KEY，降级使用 Mock Provider")
+    logger.warning("未配置 Agent LLM 密钥，降级使用 Mock Provider")
     return create_provider("mock", with_retry=False)
 
 
@@ -112,20 +104,20 @@ def get_gen_provider() -> LLMProvider:
     """
     获取内容生成用 Provider（快模型，用于简历/评分/面试准备等单轮生成）
 
-    优先级：GEN_API_KEY > 复用 agent provider
-    未配置 GEN_* 时复用 agent provider（单模型场景）
+    优先级：运行时配置文件 > GEN_* 环境变量 > 复用 agent provider（单模型场景）
     """
-    gen_key = os.getenv("GEN_API_KEY", "")
-    if gen_key:
+    cfg = get_provider_config("gen")
+
+    if cfg["api_key"]:
         provider = _build_openai(
-            gen_key,
-            model=os.getenv("GEN_MODEL"),
-            base_url=os.getenv("GEN_BASE_URL"),
+            cfg["api_key"],
+            model=cfg["model"] or None,
+            base_url=cfg["base_url"] or None,
         )
         if provider:
             logger.info(
-                f"内容生成 Provider: {os.getenv('GEN_MODEL', 'default')} "
-                f"@ {os.getenv('GEN_BASE_URL', 'openai')}"
+                f"内容生成 Provider: {cfg['model'] or 'default'} "
+                f"@ {cfg['base_url'] or 'openai'}"
             )
             return provider
 
@@ -138,3 +130,22 @@ def get_default_provider() -> LLMProvider:
     获取默认 Provider（兼容旧调用，等同于 get_agent_provider）
     """
     return get_agent_provider()
+
+
+def reload_llm_config() -> None:
+    """重置 LLM 相关运行时缓存，使新配置立即生效。
+
+    供设置 API 在保存配置后调用。
+    """
+    reset_runtime_cache()
+    logger.info("LLM 运行时缓存已重置，新配置将立即生效")
+
+
+__all__ = [
+    "create_provider",
+    "get_default_provider",
+    "get_agent_provider",
+    "get_gen_provider",
+    "reload_llm_config",
+    "mask_key",
+]

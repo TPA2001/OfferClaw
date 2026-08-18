@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OfferClaw — 授权激活</title>
+    <link rel="stylesheet" href="styles/main.css?v=4">
+    <script>
+        // 主题引导（与 index.html 一致，避免 FOUC）
+        (function () {
+            try {
+                var t = localStorage.getItem('oc_theme') || 'paper';
+                var dark = { ink: 1, forest: 1, ocean: 1 };
+                document.documentElement.setAttribute('data-theme', t);
+                if (dark[t]) document.documentElement.classList.add('is-dark-pending');
+            } catch (e) {}
+        })();
+    </script>
+    <style>
+        /* 激活页局部样式 */
+        .lic-wrap { max-width: 640px; margin: 4rem auto; padding: 0 1.2rem; }
+        .lic-card {
+            background: var(--paper, #f5f1e8); color: var(--ink, #2d2a26);
+            border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+            border-radius: 14px; padding: 2rem 2.2rem; box-shadow: 0 8px 30px rgba(0,0,0,.06);
+        }
+        .lic-title { font-size: 1.5rem; font-weight: 700; margin: 0 0 .3rem; display:flex; align-items:center; gap:.6rem;}
+        .lic-sub { color: color-mix(in srgb, var(--ink) 62%, transparent); font-size: .9rem; margin: 0 0 1.4rem; }
+        .lic-field { margin-bottom: 1.1rem; }
+        .lic-label { display:block; font-size: .8rem; font-weight: 600; margin-bottom: .4rem; color: color-mix(in srgb, var(--ink) 75%, transparent);}
+        .lic-fp {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .95rem; letter-spacing: .12em;
+            background: color-mix(in srgb, var(--ink) 8%, transparent); padding: .55rem .7rem; border-radius: 8px;
+            display:flex; align-items:center; justify-content:space-between; gap:.5rem;
+        }
+        .lic-fp code { font-size: .95rem; }
+        .lic-copy { font-size:.75rem; padding:.25rem .55rem; border-radius:6px; border:1px solid color-mix(in srgb,var(--ink) 25%,transparent); background:transparent; color:inherit; cursor:pointer; }
+        .lic-copy:hover { background: color-mix(in srgb,var(--ink) 12%,transparent); }
+        .lic-input {
+            width: 100%; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: .82rem; padding: .7rem; border-radius: 8px; border: 1px solid color-mix(in srgb,var(--ink) 25%,transparent);
+            background: color-mix(in srgb,var(--ink) 4%,transparent); color: inherit; min-height: 90px; resize: vertical;
+        }
+        .lic-input:focus { outline: none; border-color: var(--olive, #6b7d0a); }
+        .lic-btn {
+            width:100%; padding:.8rem; border:none; border-radius:9px; font-size:1rem; font-weight:600; cursor:pointer;
+            background: var(--olive, #6b7d0a); color:#fff; transition: transform .15s, filter .15s;
+        }
+        .lic-btn:hover { filter: brightness(1.08); }
+        .lic-btn:active { transform: translateY(1px); }
+        .lic-btn:disabled { opacity:.55; cursor:not-allowed; }
+        .lic-btn-ghost { background: transparent; color: var(--ink); border:1px solid color-mix(in srgb,var(--ink) 30%,transparent); }
+        .lic-status { margin-top:1rem; padding:.9rem 1rem; border-radius:10px; font-size:.88rem; }
+        .lic-status.ok { background: color-mix(in srgb,#3a7d2a 16%,transparent); border:1px solid color-mix(in srgb,#3a7d2a 35%,transparent);}
+        .lic-status.err { background: color-mix(in srgb,#a33 14%,transparent); border:1px solid color-mix(in srgb,#a33 35%,transparent);}
+        .lic-chips { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.5rem; }
+        .lic-chip { font-size:.72rem; padding:.18rem .5rem; border-radius:99px; background: color-mix(in srgb,var(--ink) 12%,transparent); }
+        .lic-row { display:flex; gap:.7rem; }
+        .lic-row > * { flex:1; }
+        .lic-hint { font-size:.78rem; color: color-mix(in srgb,var(--ink) 55%,transparent); margin-top:1rem; line-height:1.6; }
+    </style>
+</head>
+<body>
+    <div class="lic-wrap">
+        <div class="lic-card">
+            <h1 class="lic-title">
+                <span class="brand-mark" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:var(--olive,#6b7d0a);color:#fff;font-size:.8rem;">OC</span>
+                授权激活
+            </h1>
+            <p class="lic-sub">输入开发者签发的授权密钥以激活本机使用。激活态离线保存在本机，无需联网。</p>
+
+            <!-- 本机指纹 -->
+            <div class="lic-field">
+                <label class="lic-label">本机授权指纹（机器绑定密钥需此指纹）</label>
+                <div class="lic-fp">
+                    <code id="fp">读取中…</code>
+                    <button class="lic-copy" id="btn-copy-fp">复制</button>
+                </div>
+            </div>
+
+            <!-- 密钥输入 -->
+            <div class="lic-field">
+                <label class="lic-label">授权密钥</label>
+                <textarea id="key" class="lic-input" placeholder="粘贴开发者签发的授权密钥（形如 eyJhbGc...）"></textarea>
+            </div>
+
+            <button id="btn-activate" class="lic-btn">激活</button>
+
+            <div id="status" class="lic-status" style="display:none;"></div>
+
+            <div class="lic-hint">
+                提示：若密钥绑定机器，需开发者用上述指纹签发。开发模式（OFFERCLAW_DEV=1）下无需激活即可使用，仅供开发测试。
+            </div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app/api.js"></script>
+    <script>
+        (function () {
+            const api = window.OfferClawAPI;
+            const $fp = document.getElementById('fp');
+            const $key = document.getElementById('key');
+            const $btn = document.getElementById('btn-activate');
+            const $status = document.getElementById('status');
+
+            // 查询参数 ?reason=expired → 提示已过期
+            const reason = new URLSearchParams(location.search).get('reason');
+            if (reason === 'expired') {
+                showStatus('err', '授权已过期，请重新输入密钥激活。');
+            }
+
+            // 加载本机指纹 + 当前激活态
+            (async function init() {
+                try {
+                    const m = await api.license.machine();
+                    $fp.textContent = m.fingerprint;
+                } catch (e) { $fp.textContent = '（读取失败）'; }
+                try {
+                    const s = await api.license.status();
+                    if (s && s.activated) renderActive(s, false);
+                    if (s && s.dev_mode) showStatus('ok', '开发模式（OFFERCLAW_DEV=1）：无需激活，直接使用。');
+                } catch (e) { /* 静默 */ }
+            })();
+
+            // 复制指纹
+            document.getElementById('btn-copy-fp').addEventListener('click', async () => {
+                try { await navigator.clipboard.writeText($fp.textContent); showStatus('ok','指纹已复制，发给开发者'); }
+                catch (e) { showStatus('err','复制失败，请手动选中复制'); }
+            });
+
+            // 激活
+            $btn.addEventListener('click', async () => {
+                const key = $key.value.trim();
+                if (!key) { showStatus('err', '请输入授权密钥'); return; }
+                $btn.disabled = true; $btn.textContent = '激活中…';
+                try {
+                    const info = await api.license.activate(key);
+                    showStatus('ok', '激活成功，即将进入应用…');
+                    renderActive(info, true);
+                    setTimeout(() => { location.href = 'index.html'; }, 800);
+                } catch (e) {
+                    showStatus('err', e.message || '激活失败');
+                } finally {
+                    $btn.disabled = false; $btn.textContent = '激活';
+                }
+            });
+
+            function renderActive(info, animate) {
+                const exp = info.expiry ? new Date(info.expiry).toLocaleString('zh-CN') : '永久';
+                const feats = (info.features || []).join('，') || '—';
+                const expired = info.expired ? '（已过期）' : '';
+                $status.style.display = 'block';
+                $status.className = 'lic-status ok' + (info.expired ? ' err' : '');
+                $status.innerHTML =
+                    '<div><b>' + api.esc(info.customer || '已激活') + '</b>' + expired + '</div>' +
+                    '<div class="lic-chips"><span class="lic-chip">到期：' + api.esc(exp) + '</span>' +
+                    '<span class="lic-chip">功能：' + api.esc(feats) + '</span>' +
+                    '<span class="lic-chip">密钥：' + api.esc(info.key_preview || '') + '</span></div>';
+                if (!info.expired) {
+                    const row = document.createElement('div'); row.className = 'lic-row'; row.style.marginTop = '.8rem';
+                    const back = document.createElement('button'); back.className='lic-btn'; back.textContent='进入应用';
+                    back.onclick = () => location.href = 'index.html';
+                    const off = document.createElement('button'); off.className='lic-btn lic-btn-ghost'; off.textContent='解绑本机';
+                    off.onclick = async () => { try{ await api.license.deactivate(); showStatus('ok','已解绑'); $status.style.display='block'; }catch(e){ showStatus('err', e.message);} };
+                    row.appendChild(back); row.appendChild(off);
+                    $status.appendChild(row);
+                }
+            }
+
+            function showStatus(type, msg) {
+                $status.style.display = 'block';
+                $status.className = 'lic-status ' + (type === 'ok' ? 'ok' : 'err');
+                $status.textContent = msg;
+            }
+        })();
+    </script>
+</body>
+</html>

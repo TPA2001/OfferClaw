@@ -13,6 +13,12 @@ Windows 环境下，uvicorn --reload 模式会强制使用 SelectorEventLoop，
 """
 import sys
 import asyncio
+import os
+from pathlib import Path
+
+# 打包模式：playwright 浏览器路径指向 exe 内的 ms-playwright（spec 打包的 chromium）
+if getattr(sys, "frozen", False):
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(Path(sys._MEIPASS) / "ms-playwright")
 
 # Windows 上必须使用 ProactorEventLoop，否则 Playwright 无法创建子进程
 if sys.platform == "win32":
@@ -32,9 +38,31 @@ if __name__ == "__main__":
         print("[警告] --reload 模式下 uvicorn 子进程可能使用 SelectorEventLoop，"
               "Playwright（Boss 登录/搜索）可能无法正常工作。", file=sys.stderr)
 
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=use_reload,
-    )
+    # 打包模式启动后自动打开浏览器到应用首页（开发模式不自动开，避免干扰）
+    if getattr(sys, "frozen", False):
+        import threading
+        import webbrowser
+        import time
+        def _open_browser():
+            time.sleep(1.5)  # 等服务起来
+            webbrowser.open("http://localhost:8000/")
+        threading.Thread(target=_open_browser, daemon=True).start()
+
+    if getattr(sys, "frozen", False):
+        # 打包模式：直接传 app 对象，绕过 uvicorn 字符串动态 import（frozen 下不可靠）
+        try:
+            from app.main import app as _app_obj
+        except Exception as e:
+            import traceback
+            print(f"[启动失败] 导入 app.main 失败: {e}", file=sys.stderr)
+            traceback.print_exc()
+            input("按回车退出...")
+            sys.exit(1)
+        uvicorn.run(_app_obj, host="0.0.0.0", port=8000)
+    else:
+        uvicorn.run(
+            "app.main:app",
+            host="0.0.0.0",
+            port=8000,
+            reload=use_reload,
+        )

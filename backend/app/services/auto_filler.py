@@ -75,17 +75,28 @@ class AutoFillerService:
         # 合并字段元数据
         field_meta = {f.get("id") or f.get("name") or "": f for f in fields if f.get("id") or f.get("name")}
 
-        # 构造填写任务列表
+        # 动作分布统计（来自 matcher 的 keep/fill/correct/manual/skip）
+        action_stats = {"keep": 0, "fill": 0, "correct": 0, "manual": 0, "skip": 0}
+
+        # 构造填写任务列表（仅 fill/correct 需要实际填写；keep/manual/skip 跳过）
         fill_tasks: List[Dict[str, Any]] = []
+        skip_actions = {"keep", "manual", "skip"}
         for mapping in mappings:
             fid = mapping.get("field_id") or mapping.get("id") or ""
             value = mapping.get("value")
+            action = (mapping.get("action") or "fill").lower()
+            # 统计
+            action_stats[action] = action_stats.get(action, 0) + 1
             if not fid or value in (None, ""):
+                continue
+            if action in skip_actions:
+                # keep/manual/skip：不自动填写，保留页面现有值或交由用户
                 continue
             meta = field_meta.get(fid, {})
             fill_tasks.append({
                 "id": fid,
                 "value": str(value),
+                "action": action,
                 "tag": (meta.get("tag") or "input").lower(),
                 "type": (meta.get("type") or "text").lower(),
                 "selector": meta.get("selector") or "",
@@ -99,10 +110,12 @@ class AutoFillerService:
         fill_js = self._build_fill_js(fill_tasks)
 
         failures: List[Dict[str, str]] = []
+        unverified: List[Dict[str, str]] = []  # 填后验证未通过的项
         screenshot_before = None
         screenshot_after = None
         submitted = False
         filled_count = 0
+        verified_count = 0
 
         # 使用 CDP 模式：subprocess 启动真实 Chrome + connect_over_cdp
         # 真实 Chrome 无自动化痕迹，不会被反爬识别
@@ -166,17 +179,37 @@ class AutoFillerService:
                             .oc-failed { outline: 2px solid #b94a3a !important; outline-offset: 1px; animation: oc-flash-err 0.8s ease-out; }
                         """)
 
-                        # 逐字段填写（在 Python 侧调度，便于收集结果）
+                        # 逐字段填写（在 Python 侧调度，便于收集结果 + 填后验证）
                         for task in fill_tasks:
                             try:
-                                ok = await self._fill_one(page, task)
+                                res = await self._fill_one(page, task)
+                                ok = bool(res and res.get("ok"))
                                 if ok:
                                     filled_count += 1
+                                    # 文件上传后：处理解析弹窗（覆盖/确认/刷新）
+                                    is_file = (task.get("type") == "file") or str(
+                                        task.get("value", "")
+                                    ).startswith("FILE:")
+                                    if is_file:
+                                        await self._handle_parser_dialog(page)
+                                    # 填后验证（文件字段不参与值校验，由解析弹窗+页面状态确认）
+                                    if is_file:
+                                        verified_count += 1
+                                    else:
+                                        verified = bool(res.get("verified"))
+                                        if verified:
+                                            verified_count += 1
+                                        else:
+                                            unverified.append({
+                                                "field_id": task["id"],
+                                                "label": task["label"],
+                                                "reason": "填后值未匹配期望（可能 select unconfirmed）",
+                                            })
                                 else:
                                     failures.append({
                                         "field_id": task["id"],
                                         "label": task["label"],
-                                        "reason": "未找到元素或填写失败",
+                                        "reason": (res.get("reason") if res else "未找到元素或填写失败"),
                                     })
                             except Exception as e:
                                 failures.append({
@@ -212,12 +245,19 @@ class AutoFillerService:
                         return {
                             "success": True,
                             "filled_count": filled_count,
+                            "verified_count": verified_count,
                             "failed_count": failed_count,
                             "failures": failures,
+                            "unverified": unverified,
+                            "action_stats": action_stats,
                             "screenshot_before": screenshot_before,
                             "screenshot_after": screenshot_after,
                             "submitted": submitted,
-                            "message": f"填写完成：成功 {filled_count} / 失败 {failed_count}",
+                            "message": (
+                                f"填写完成：成功 {filled_count}（已验证 {verified_count}）/ "
+                                f"失败 {failed_count}"
+                                + (f"，未验证 {len(unverified)}" if unverified else "")
+                            ),
                         }
                     finally:
                         try:
@@ -239,11 +279,18 @@ class AutoFillerService:
             except Exception as e:
                 logger.warning(f"stop_chrome 异常: {e}")
 
-    async def _fill_one(self, page, task: Dict[str, Any]) -> bool:
-        """填写单个字段，返回是否成功"""
+    async def _fill_one(self, page, task: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        填写单个字段，返回 {ok, verified, reason}
+
+        - ok: 是否填写成功
+        - verified: 填后读取实际值是否匹配期望（自定义下拉未选中→unconfirmed）
+        - reason: 失败原因
+        """
         # 文件上传字段：用 Playwright 原生 API（不用 evaluate，因为涉及本地文件）
         if (task.get("type") or "").lower() == "file" or str(task.get("value", "")).startswith("FILE:"):
-            return await self._fill_file(page, task)
+            file_ok = await self._fill_file(page, task)
+            return {"ok": file_ok, "verified": False, "reason": None if file_ok else "file_upload_failed"}
 
         # 用 page.evaluate 执行 JS 填写逻辑（复用脚本生成版的策略）
         js = """
@@ -325,8 +372,35 @@ class AutoFillerService:
             function markOk(el) { el.classList.add('oc-filled'); }
             function markFail(el) { el.classList.add('oc-failed'); }
 
+            // 读取字段当前实际值（用于填后验证）
+            function readValue(el) {
+                const tag = (el.tagName || '').toLowerCase();
+                const type = (el.type || task.type || 'text').toLowerCase();
+                if (el.isContentEditable || el.getAttribute('contenteditable') === 'true') return (el.innerText || '').trim();
+                if (tag === 'select') {
+                    if (!el.selectedOptions || !el.selectedOptions.length) return '';
+                    const o = el.selectedOptions[0];
+                    return (o.text || o.value || '').trim();
+                }
+                if (type === 'checkbox') return el.checked ? 'true' : 'false';
+                if (type === 'radio') return el.checked ? el.value : '';
+                if (el.getAttribute('role') === 'combobox' || el.classList.contains('ant-select-selector') ||
+                    el.classList.contains('el-select') || el.classList.contains('select-trigger')) {
+                    return (el.innerText || '').trim();
+                }
+                return (el.value || '').trim();
+            }
+
+            // 双向包含容错比对（忽略大小写）
+            function isMatch(actual, expected) {
+                if (!actual) return false;
+                const a = actual.toLowerCase().trim();
+                const e = (expected || '').toLowerCase().trim();
+                return a === e || a.includes(e) || e.includes(a);
+            }
+
             const el = findField(task);
-            if (!el) return { ok: false, reason: 'not_found' };
+            if (!el) return { ok: false, reason: 'not_found', verified: false };
 
             const tag = (el.tagName || '').toLowerCase();
             const type = (el.type || task.type || 'text').toLowerCase();
@@ -339,7 +413,7 @@ class AutoFillerService:
                     el.dispatchEvent(new InputEvent('input', { bubbles: true, data: val }));
                     el.dispatchEvent(new Event('blur', { bubbles: true }));
                     markOk(el);
-                    return { ok: true };
+                    return { ok: true, verified: isMatch(readValue(el), val) };
                 }
                 // select
                 if (tag === 'select') {
@@ -362,8 +436,12 @@ class AutoFillerService:
                             }
                         }
                     }
-                    if (matched) { markOk(el); return { ok: true }; }
-                    markFail(el); return { ok: false, reason: 'select_no_match' };
+                    if (matched) {
+                        markOk(el);
+                        const verified = isMatch(readValue(el), val) || el.value === val;
+                        return { ok: true, verified };
+                    }
+                    markFail(el); return { ok: false, reason: 'select_no_match', verified: false };
                 }
                 // checkbox
                 if (type === 'checkbox') {
@@ -371,11 +449,12 @@ class AutoFillerService:
                     if (el.checked !== want) el.click();
                     el.dispatchEvent(new Event('change', { bubbles: true }));
                     markOk(el);
-                    return { ok: true };
+                    return { ok: true, verified: el.checked === want };
                 }
                 // radio
                 if (type === 'radio') {
                     const group = document.querySelectorAll(`input[type="radio"][name="${el.name}"]`);
+                    let picked = null;
                     for (const r of group) {
                         const rVal = (r.value || '').toLowerCase();
                         const rLabel = (r.closest('label')?.textContent || r.getAttribute('aria-label') || '').trim().toLowerCase();
@@ -383,10 +462,12 @@ class AutoFillerService:
                             r.click();
                             r.dispatchEvent(new Event('change', { bubbles: true }));
                             markOk(r);
-                            return { ok: true };
+                            picked = r;
+                            break;
                         }
                     }
-                    markFail(el); return { ok: false, reason: 'radio_no_match' };
+                    if (picked) return { ok: true, verified: picked.checked };
+                    markFail(el); return { ok: false, reason: 'radio_no_match', verified: false };
                 }
                 // 自定义下拉
                 if (el.getAttribute('role') === 'combobox' || el.classList.contains('ant-select-selector') ||
@@ -394,18 +475,25 @@ class AutoFillerService:
                     el.click();
                     await new Promise(r => setTimeout(r, 200));
                     const items = document.querySelectorAll('.ant-select-item, .el-select-dropdown__item, [role="option"], li[role="option"]');
+                    let clicked = false;
                     for (const it of items) {
                         if ((it.textContent || '').trim() === val || (it.textContent || '').includes(val)) {
                             it.click();
-                            markOk(el);
-                            return { ok: true };
+                            clicked = true; break;
                         }
                     }
-                    markFail(el); return { ok: false, reason: 'custom_select_no_match' };
+                    if (clicked) {
+                        // 等待下拉关闭后重新读取选中值（select 确认）
+                        await new Promise(r => setTimeout(r, 350));
+                        markOk(el);
+                        const verified = isMatch(readValue(el), val);
+                        return { ok: true, verified };
+                    }
+                    markFail(el); return { ok: false, reason: 'custom_select_no_match', verified: false };
                 }
                 // 文件上传跳过（应在 Python 侧用 _fill_file 处理）
                 if (type === 'file') {
-                    markFail(el); return { ok: false, reason: 'file_upload_should_use_python' };
+                    markFail(el); return { ok: false, reason: 'file_upload_should_use_python', verified: false };
                 }
                 // 普通文本
                 el.focus();
@@ -414,19 +502,21 @@ class AutoFillerService:
                 el.dispatchEvent(new Event('change', { bubbles: true }));
                 el.dispatchEvent(new Event('blur', { bubbles: true }));
                 markOk(el);
-                return { ok: true };
+                return { ok: true, verified: isMatch(readValue(el), val) };
             } catch (e) {
                 markFail(el);
-                return { ok: false, reason: e.message };
+                return { ok: false, reason: e.message, verified: false };
             }
         }
         """
         try:
             result = await page.evaluate(js, task)
-            return bool(result and result.get("ok"))
+            if not isinstance(result, dict):
+                return {"ok": False, "verified": False, "reason": "invalid_result"}
+            return result
         except Exception as e:
             logger.debug(f"填写 {task.get('id')} 异常: {e}")
-            return False
+            return {"ok": False, "verified": False, "reason": str(e)}
 
     async def _fill_file(self, page, task: Dict[str, Any]) -> bool:
         """
@@ -642,6 +732,55 @@ class AutoFillerService:
             return False
         except Exception as e:
             logger.debug(f"自定义上传按钮触发失败: {e}")
+            return False
+
+    async def _handle_parser_dialog(self, page) -> bool:
+        """
+        检测并确认上传简历后弹出的解析对话框（覆盖/确认/刷新）
+
+        许多官网在用户上传简历后会弹窗询问：
+        - 「是否覆盖已有简历」「确认覆盖」「使用新简历替换」「刷新简历信息」
+        - 英文：overwrite / confirm / replace / refresh resume
+
+        命中关键词的按钮会被点击确认，让站点自己的解析器继续工作，
+        随后由 keep/fill/correct 动作规划补填缺失项。
+        """
+        js = """
+        () => {
+            const keywords = [
+                '覆盖', '确认覆盖', '确认替换', '使用新简历', '替换简历',
+                '刷新简历', '重新解析', '确定', '确认',
+                'overwrite', 'confirm', 'replace', 'refresh resume', 'use new resume'
+            ];
+            const btns = Array.from(document.querySelectorAll(
+                'button, [role="button"], .btn, [class*="btn"], .ant-btn, .el-button, a.btn'
+            ));
+            for (const kw of keywords) {
+                const k = kw.toLowerCase();
+                for (const b of btns) {
+                    const txt = (b.textContent || '').trim().toLowerCase();
+                    // 只点短文本按钮，避免误点正文段落
+                    if (!txt || txt.length > 12) continue;
+                    if (txt.includes(k)) {
+                        // 跳过「取消」类按钮
+                        if (txt.includes('取消') || txt.includes('cancel') || txt.includes('不')) continue;
+                        b.click();
+                        return { clicked: true, keyword: kw };
+                    }
+                }
+            }
+            return { clicked: false };
+        }
+        """
+        try:
+            result = await page.evaluate(js)
+            if result and result.get("clicked"):
+                logger.info(f"已确认解析弹窗: {result.get('keyword')}")
+                await human_delay(0.8, 1.5)
+                return True
+            return False
+        except Exception as e:
+            logger.debug(f"解析弹窗处理异常: {e}")
             return False
 
     def _build_fill_js(self, tasks: List[Dict[str, Any]]) -> str:

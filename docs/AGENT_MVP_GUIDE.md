@@ -32,34 +32,21 @@ cp .env.example .env
 
 无 LLM API Key 也能启动，会自动降级使用 Mock Provider（基于关键词触发工具）。
 
-### 3. 初始化数据库
+### 3. 启动服务
 
 ```bash
-python init_db.py
-```
-
-输出：
-
-```
-Creating database tables...
-✓ Database tables created successfully!
-  - profiles
-  - applications
-  - agent_sessions
-```
-
-### 4. 启动服务
-
-```bash
-# 后端
-python -m uvicorn app.main:app --reload --port 8000
+# 后端（数据库表会在首次启动时自动创建）
+python run.py
 
 # 前端（新终端）
 cd frontend/web
 python -m http.server 3000
 ```
 
-### 5. 访问 Agent
+> Windows 用户必须使用 `python run.py` 而非 `uvicorn app.main:app`，
+> 因为 `run.py` 会设置 ProactorEventLoop，Playwright 在 Windows 下依赖它创建子进程。
+
+### 4. 访问 Agent
 
 打开 http://localhost:3000/agent.html
 

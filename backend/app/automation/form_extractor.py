@@ -212,6 +212,9 @@ class FormExtractor:
                 aria_label=aria_label,
             )
 
+            # 读取当前已填值（用于 keep/correct 动作规划）
+            current_value = await self._get_current_value(el, "input", input_type)
+
             return {
                 "id": field_id,
                 "label": label,
@@ -221,6 +224,7 @@ class FormExtractor:
                 "selector": selectors[0]["value"] if selectors else "",
                 "selectors": selectors,
                 "placeholder": placeholder,
+                "current_value": current_value,
                 "field_type_inferred": infer_field_type(label, element_name, input_type),
             }
         except Exception as e:
@@ -251,6 +255,8 @@ class FormExtractor:
                 element_id=element_id, element_name=element_name, tag="select", label=label
             )
 
+            current_value = await self._get_current_value(el, "select", "select")
+
             return {
                 "id": field_id,
                 "label": label,
@@ -260,6 +266,7 @@ class FormExtractor:
                 "options": option_texts,
                 "selector": selectors[0]["value"] if selectors else "",
                 "selectors": selectors,
+                "current_value": current_value,
                 "field_type_inferred": infer_field_type(label, element_name, "select"),
             }
         except Exception as e:
@@ -289,6 +296,8 @@ class FormExtractor:
                 aria_label=aria_label,
             )
 
+            current_value = await self._get_current_value(el, "textarea", "textarea")
+
             return {
                 "id": field_id,
                 "label": label,
@@ -298,6 +307,7 @@ class FormExtractor:
                 "selector": selectors[0]["value"] if selectors else "",
                 "selectors": selectors,
                 "placeholder": placeholder,
+                "current_value": current_value,
                 "field_type_inferred": infer_field_type(label, element_name, "textarea"),
             }
         except Exception as e:
@@ -327,6 +337,8 @@ class FormExtractor:
             selectors.append({"type": "contenteditable", "value": '[contenteditable="true"]'})
             selectors.append({"type": "css", "value": f'[data-placeholder="{label}"]'})
 
+            current_value = await self._get_current_value(el, "contenteditable", "contenteditable")
+
             return {
                 "id": field_id,
                 "label": label,
@@ -335,6 +347,7 @@ class FormExtractor:
                 "required": False,
                 "selector": selectors[0]["value"],
                 "selectors": selectors,
+                "current_value": current_value,
                 "field_type_inferred": infer_field_type(label, element_id, "textarea"),
             }
         except Exception as e:
@@ -378,6 +391,8 @@ class FormExtractor:
                 selectors.append({"type": "id", "value": f"#{element_id}"})
             selectors.append({"type": "role", "value": '[role="combobox"]'})
 
+            current_value = await self._get_current_value(el, "custom-select", "custom-select")
+
             return {
                 "id": field_id,
                 "label": label,
@@ -387,6 +402,7 @@ class FormExtractor:
                 "options": [],  # 选项需点击展开才能获取
                 "selector": selectors[0]["value"],
                 "selectors": selectors,
+                "current_value": current_value,
                 "field_type_inferred": infer_field_type(label, element_id, "select"),
             }
         except Exception as e:
@@ -416,6 +432,8 @@ class FormExtractor:
                 {"type": "data-attr", "value": f'[data-oc-field="{field_name}"]'}
             )
 
+            current_value = await self._get_current_value(el, tag, field_type_attr)
+
             return {
                 "id": field_id,
                 "label": label,
@@ -424,6 +442,7 @@ class FormExtractor:
                 "required": (await el.get_attribute("data-oc-required")) == "true",
                 "selector": selectors[0]["value"],
                 "selectors": selectors,
+                "current_value": current_value,
                 "field_type_inferred": infer_field_type(label, field_name, field_type_attr),
             }
         except Exception as e:
@@ -456,6 +475,37 @@ class FormExtractor:
         return fields
 
     # ── Label 获取（多策略）──────────────────────────────────────────────
+
+    async def _get_current_value(self, el: ElementHandle, tag: str, input_type: str) -> str:
+        """
+        读取字段当前已填值（用于 keep/correct 动作规划）
+
+        - input/textarea：e.value
+        - select：选中项的 text
+        - contenteditable：innerText
+        - 自定义下拉：显示文本（选中项文本）
+        - 读取失败返回空串，不影响提取主流程
+        """
+        try:
+            if tag in ("input", "textarea"):
+                return (await el.evaluate("e => (e.value || '').toString()")) or ""
+            if tag == "select":
+                return (
+                    await el.evaluate(
+                        """e => {
+                            if (!e.selectedOptions || !e.selectedOptions.length) return '';
+                            const o = e.selectedOptions[0];
+                            return (o.text || o.value || '').trim();
+                        }"""
+                    )
+                ) or ""
+            if tag == "contenteditable" or input_type == "contenteditable":
+                return (await el.evaluate("e => (e.innerText || '').toString().trim()")) or ""
+            # 自定义下拉等：取元素自身显示文本
+            return (await el.evaluate("e => (e.innerText || '').toString().trim()")) or ""
+        except Exception as e:
+            logger.debug(f"读取当前值失败 ({tag}/{input_type}): {e}")
+            return ""
 
     async def _get_field_label(self, el: ElementHandle, page: Page) -> str:
         """多策略获取字段标签"""

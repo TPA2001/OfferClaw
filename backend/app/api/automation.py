@@ -13,6 +13,7 @@ import json
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.core.rate_limit import automation_rate_limit
 from app.core.response import ok, BadRequestError, InternalServerError
 from app.services.smart_fill import get_smart_fill_service
 from app.services.boss_search import get_boss_search_service
@@ -536,7 +537,7 @@ def _generate_fill_script(fields: List[Dict], mappings: List[Dict]) -> str:
     return script
 
 
-@router.post("/boss-search")
+@router.post("/boss-search", dependencies=[Depends(automation_rate_limit)])
 async def boss_search(
     request: BossSearchRequest,
     user_id: str = Depends(get_current_user)
@@ -600,7 +601,7 @@ async def login_status(
         raise InternalServerError(str(e))
 
 
-@router.post("/open-login")
+@router.post("/open-login", dependencies=[Depends(automation_rate_limit)])
 async def open_login(
     request: OpenLoginRequest,
     user_id: str = Depends(get_current_user),
@@ -626,7 +627,7 @@ async def open_login(
         raise InternalServerError(str(e))
 
 
-@router.post("/auto-fill")
+@router.post("/auto-fill", dependencies=[Depends(automation_rate_limit)])
 async def auto_fill(
     request: AutoFillRequest,
     user_id: str = Depends(get_current_user),

@@ -235,78 +235,98 @@ KEYWORD_RULES: List[Dict[str, Any]] = [
 class FieldMatcher:
     """字段语义匹配服务"""
 
-    MATCH_PROMPT = """你是表单填写助手。给定表单字段列表和用户画像，输出 JSON 映射数组：
+    MATCH_PROMPT = """你是表单填写助手。给定表单字段列表（含 current_value 页面已有值）和用户画像，输出 JSON 映射数组：
 [{{
   "field_id": "字段ID",
   "value": "填写值或 null",
+  "action": "keep|fill|correct|manual|skip",
   "confidence": 0.0-1.0,
   "source": "profile|local_sensitive|file_upload",
   "reason": "匹配理由(低置信度时必填)"
 }}]
 
-# 规则
+# 动作规划规则（核心）
 
-## 字段类型处理
+每个字段必须给出 action，决策依据「页面已有值 current_value」与「画像值」的关系：
+
+| action | 触发条件 | 含义 |
+|---|---|---|
+| `keep` | current_value 非空且看起来正确（尤其官网解析器已填的值），或画像无此字段但页面已有值 | 保留页面现有值，不填写 |
+| `fill` | current_value 为空且画像有对应值 | 字段空白，用画像值填入 |
+| `correct` | current_value 非空且与画像值强烈冲突 | 用画像值覆盖纠正 |
+| `manual` | 敏感/模糊字段，需用户人工确认 | 标记人工，不自动填 |
+| `skip` | 字段无关/不支持/无法推断 | 跳过 |
+
+**重要：不要盲目覆盖。官网简历解析器已填的合理数据应 keep，只补填 blank 与纠正明显冲突。**
+
+# 字段类型处理规则
+
 - **文本类**（input/textarea）：直接填画像值
-- **下拉/单选**（select/radio）：从 options 中选最匹配项的「value」原文；若无匹配则 value=null，reason 说明
+- **下拉/单选**（select/radio）：从 options 中选最匹配项的「value」原文；若无匹配则 value=null，action 视情况 keep 或 manual，reason 说明
 - **复选框**（checkbox）：true/false/'是'/'否'，按画像语义判断
 - **文件字段**（type=file 或 label 含「简历/附件/上传」）：value 填 "FILE:resume"，source 填 "file_upload"
 - **contenteditable/富文本**：填画像对应字段的纯文本
 
-## 敏感字段（不填值，标记 local_sensitive）
-- 身份证号、护照号、银行卡号、家庭住址、社保号
-- value=null，source="local_sensitive"，reason 注明「敏感字段，本地填值」
+# 敏感字段（不填值，标记 local_sensitive + manual）
 
-## 置信度建议
+- 身份证号、护照号、银行卡号、家庭住址、社保号
+- value=null，source="local_sensitive"，action="manual"，reason 注明「敏感字段，本地填值」
+
+# 置信度建议
+
 - 0.95：字段标签与画像字段精确对应（如 "姓名" → name）
 - 0.85：语义匹配但表述不同（如 "毕业院校" → latest_school）
 - 0.70：模糊推断（如 "过往经历" → 工作描述）
 - 0.50：select 选项无精确匹配但选了最接近的
 - 0.00：完全无法匹配
 
-## 注意事项
+# 注意事项
+
 - 字段标签含「账号/用户名」时不要填真实姓名
 - 「期望薪资」填 "20-40K" 格式（带单位）
 - 列表型字段（如技能）用顿号「、」拼接
-- 画像字段为空时 value=null，reason 注明「画像无此字段」
+- 画像字段为空且 current_value 为空时 value=null，action="skip"，reason 注明「画像无此字段」
+- current_value 非空且与画像值一致时 action="keep"，value 填 current_value
 
 # 示例
 
-## 示例 1：基本信息 + select
+## 示例 1：keep + fill + 文件上传
 表单字段: [
-  {{"id":"name","label":"姓名","type":"text"}},
-  {{"id":"gender","label":"性别","type":"select","options":[{{"value":"M","label":"男"}},{{"value":"F","label":"女"}}]}},
-  {{"id":"resume","label":"上传简历","type":"file"}}
+  {{"id":"name","label":"姓名","type":"text","current_value":"张三"}},
+  {{"id":"phone","label":"手机号","type":"tel","current_value":""}},
+  {{"id":"resume","label":"上传简历","type":"file","current_value":""}}
 ]
-用户画像: {{"name":"张三","gender":"男"}}
+用户画像: {{"name":"张三","phone":"13800000000"}}
 
 输出:
 [
-  {{"field_id":"name","value":"张三","confidence":0.95,"source":"profile","reason":null}},
-  {{"field_id":"gender","value":"M","confidence":0.95,"source":"profile","reason":"从选项中匹配 男"}},
-  {{"field_id":"resume","value":"FILE:resume","confidence":0.9,"source":"file_upload","reason":null}}
+  {{"field_id":"name","value":"张三","action":"keep","confidence":0.95,"source":"profile","reason":"页面已有值与画像一致"}},
+  {{"field_id":"phone","value":"13800000000","action":"fill","confidence":0.95,"source":"profile","reason":"字段空白，填画像值"}},
+  {{"field_id":"resume","value":"FILE:resume","action":"fill","confidence":0.9,"source":"file_upload","reason":null}}
 ]
 
-## 示例 2：敏感字段 + 无匹配选项
+## 示例 2：correct + 敏感 + 无匹配选项
 表单字段: [
-  {{"id":"id_card","label":"身份证号","type":"text"}},
-  {{"id":"degree","label":"学历","type":"select","options":[{{"value":"1","label":"高中"}},{{"value":"2","label":"初中"}}]}}
+  {{"id":"id_card","label":"身份证号","type":"text","current_value":""}},
+  {{"id":"school","label":"毕业院校","type":"text","current_value":"清华大学"}},
+  {{"id":"degree","label":"学历","type":"select","current_value":"高中","options":[{{"value":"1","label":"高中"}},{{"value":"2","label":"本科"}}]}}
 ]
-用户画像: {{"latest_degree":"本科"}}
+用户画像: {{"latest_school":"北京大学","latest_degree":"本科"}}
 
 输出:
 [
-  {{"field_id":"id_card","value":null,"confidence":0.5,"source":"local_sensitive","reason":"敏感字段，本地填值"}},
-  {{"field_id":"degree","value":null,"confidence":0.3,"source":"profile","reason":"画像为本科，但选项只有高中/初中，无匹配"}}
+  {{"field_id":"id_card","value":null,"action":"manual","confidence":0.5,"source":"local_sensitive","reason":"敏感字段，本地填值"}},
+  {{"field_id":"school","value":"北京大学","action":"correct","confidence":0.9,"source":"profile","reason":"页面值与画像冲突，纠正"}},
+  {{"field_id":"degree","value":"2","action":"fill","confidence":0.9,"source":"profile","reason":"从选项中匹配 本科"}}
 ]
 
-## 示例 3：无法匹配
-表单字段: [{{"id":"referral","label":"推荐人姓名","type":"text"}}]
+## 示例 3：skip
+表单字段: [{{"id":"referral","label":"推荐人姓名","type":"text","current_value":""}}]
 用户画像: {{"name":"张三"}}
 
 输出:
 [
-  {{"field_id":"referral","value":null,"confidence":0.0,"source":null,"reason":"画像无推荐人信息"}}
+  {{"field_id":"referral","value":null,"action":"skip","confidence":0.0,"source":null,"reason":"画像无推荐人信息"}}
 ]
 
 # 实际任务
@@ -335,7 +355,7 @@ class FieldMatcher:
         if not use_llm:
             return await self._fallback_match(fields, profile)
 
-        from app.core.llm import chat_json
+        from app.core.llm import get_gen_provider, Message
         from app.core.subscription import SubscriptionManager
 
         # 1. 订阅校验（如果有数据库）
@@ -347,19 +367,40 @@ class FieldMatcher:
 
         # 2. LLM 语义匹配
         try:
-            result = await chat_json(
-                system="你是表单填写助手，只输出 JSON。",
-                user=self.MATCH_PROMPT.format(
-                    fields=json.dumps(fields, ensure_ascii=False, default=str),
-                    profile=json.dumps(profile, ensure_ascii=False, default=str),
+            provider = get_gen_provider()
+            messages = [
+                Message(role="system", content="你是表单填写助手，只输出 JSON。"),
+                Message(
+                    role="user",
+                    content=self.MATCH_PROMPT.format(
+                        fields=json.dumps(fields, ensure_ascii=False, default=str),
+                        profile=json.dumps(profile, ensure_ascii=False, default=str),
+                    ),
                 ),
-            )
+            ]
+            resp = await provider.chat(messages, temperature=0.2)
+            raw = resp.content or ""
+
+            # 解析 JSON（兼容 ```json``` 包裹与裸 JSON）
+            json_text = raw.strip()
+            if json_text.startswith("```"):
+                json_text = re.sub(r"^```(?:json)?\s*|\s*```$", "", json_text, flags=re.MULTILINE)
+            match = re.search(r"\{[\s\S]*\}", json_text)
+            if not match:
+                raise ValueError("LLM 响应未包含 JSON 对象")
+            result = json.loads(match.group())
 
             # 3. 计数（如果有数据库）
             if db:
                 subscription_manager.increment_usage(user_id, 'autofill')
 
             mappings = result.get("mappings", result) if isinstance(result, dict) else result
+            # 安全网：LLM 可能漏掉 action，按 current_value/value 兜底
+            field_cv = {f.get("id") or f.get("name"): (f.get("current_value") or "") for f in fields if isinstance(f, dict)}
+            for m in mappings:
+                if isinstance(m, dict) and not m.get("action"):
+                    fid = m.get("field_id") or m.get("id") or ""
+                    m["action"] = self._decide_action(field_cv.get(fid, ""), m.get("value"))
             return {"mappings": mappings, "profile_used": True, "source": "llm"}
 
         except Exception as e:
@@ -375,6 +416,7 @@ class FieldMatcher:
         - 扁平化结构（来自 /profiles/flatten）：{name: ..., latest_school: ..., skills_str: ...}
 
         会自动检测并转换嵌套结构为扁平结构。
+        输出每个字段的 action（keep/fill/correct/manual/skip），依据 current_value 与画像值关系。
         """
         # 自动转换嵌套结构为扁平结构
         flat = self._ensure_flatten(profile)
@@ -387,6 +429,7 @@ class FieldMatcher:
             field_name_lower = field_id.lower()
             field_type = (field.get("type") or "text").lower()
             options = field.get("options") or []
+            current_value = (field.get("current_value") or "").strip()
             # 用于匹配的合并文本
             field_text = f"{field_id} {field_label} {field.get('name', '')} {field.get('placeholder', '')}".lower()
 
@@ -395,6 +438,7 @@ class FieldMatcher:
                 mappings.append({
                     "field_id": field_id,
                     "value": "FILE:resume",
+                    "action": "fill" if not current_value else "keep",
                     "confidence": 0.6,
                     "source": "file_upload",
                     "reason": "识别为文件上传字段",
@@ -406,6 +450,7 @@ class FieldMatcher:
                 mappings.append({
                     "field_id": field_id,
                     "value": None,
+                    "action": "manual",
                     "confidence": 0.5,
                     "source": "local_sensitive",
                     "reason": "敏感字段，需本地填写",
@@ -429,6 +474,7 @@ class FieldMatcher:
                         mappings.append({
                             "field_id": field_id,
                             "value": None,
+                            "action": self._decide_action(current_value, None),
                             "confidence": confidence,
                             "source": "profile",
                             "reason": f"画像有值 '{match['value']}'，但选项无匹配",
@@ -440,20 +486,42 @@ class FieldMatcher:
                 mappings.append({
                     "field_id": field_id,
                     "value": value,
+                    "action": self._decide_action(current_value, value),
                     "confidence": confidence,
                     "source": "profile",
                     "reason": None,
                 })
             else:
+                # 无匹配：保留页面已有值，否则跳过
                 mappings.append({
                     "field_id": field_id,
                     "value": None,
+                    "action": self._decide_action(current_value, None),
                     "confidence": 0.0,
                     "source": None,
                     "reason": "无法自动匹配",
                 })
 
         return {"mappings": mappings, "profile_used": True, "source": "rules"}
+
+    def _decide_action(self, current_value: str, value: Optional[str]) -> str:
+        """
+        依据页面已有值 current_value 与画像值 value 决定动作
+
+        - 敏感字段由调用方先判定（不进这里）
+        - 无 value（画像无值）：current_value 非空→keep，否则 skip
+        - 有 value 且 current_value 空：fill
+        - 两者都有：一致→keep，冲突→correct
+        """
+        cv = (current_value or "").strip()
+        if not value:
+            return "keep" if cv else "skip"
+        if not cv:
+            return "fill"
+        # 双向包含视为一致（容错大小写/格式差异）
+        if cv == value or value in cv or cv in value:
+            return "keep"
+        return "correct"
 
     def _ensure_flatten(self, profile: dict) -> dict:
         """

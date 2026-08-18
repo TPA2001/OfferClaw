@@ -52,6 +52,14 @@ class DoneEvent(AgentEvent):
     finish_reason: str = "stop"
 
 
+class NavigateEvent(AgentEvent):
+    """前端页面跳转事件 — Agent 请求切换到某个功能视图"""
+    type: str = "navigate"
+    target: str                # 路由路径：/kanban, /profile, /jobs, /smart-fill, /interview, /settings
+    params: dict = {}          # 可选的查询参数
+    message: str = ""          # 给用户的说明
+
+
 class ErrorEvent(AgentEvent):
     """错误事件"""
     type: str = "error"

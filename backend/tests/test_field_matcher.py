@@ -411,3 +411,68 @@ class TestFallbackMatch:
         assert mappings[0]["value"] is None
         assert mappings[0]["confidence"] == 0.0
         assert mappings[0]["source"] is None
+
+
+# ============ 动作规划（keep/fill/correct/manual/skip）测试 ============
+
+class TestActionPlanning:
+    """动作规划：依据 current_value 与画像值决定 keep/fill/correct/manual/skip"""
+
+    def test_decide_action_fill_blank(self, matcher):
+        """空字段 + 有画像值 → fill"""
+        assert matcher._decide_action("", "张三") == "fill"
+        assert matcher._decide_action(None, "张三") == "fill"
+
+    def test_decide_action_keep_same(self, matcher):
+        """页面值与画像值一致 → keep"""
+        assert matcher._decide_action("张三", "张三") == "keep"
+        # 双向包含容错
+        assert matcher._decide_action("张三丰", "张三") == "keep"
+        assert matcher._decide_action("张三", "张三丰") == "keep"
+
+    def test_decide_action_correct_conflict(self, matcher):
+        """页面值与画像值冲突 → correct"""
+        assert matcher._decide_action("清华大学", "北京大学") == "correct"
+
+    def test_decide_action_skip_no_value(self, matcher):
+        """空字段 + 无画像值 → skip"""
+        assert matcher._decide_action("", None) == "skip"
+
+    def test_decide_action_keep_no_value(self, matcher):
+        """页面有值 + 无画像值 → keep（保留官网已填）"""
+        assert matcher._decide_action("官网已填", None) == "keep"
+
+    def test_fallback_action_fill(self, matcher, flat_profile):
+        """空白字段 + 有画像 → action=fill"""
+        import asyncio
+        fields = [{"id": "name", "label": "姓名", "type": "text", "current_value": ""}]
+        result = asyncio.run(matcher._fallback_match(fields, flat_profile))
+        assert result["mappings"][0]["action"] == "fill"
+
+    def test_fallback_action_keep(self, matcher, flat_profile):
+        """页面已有正确值 → action=keep"""
+        import asyncio
+        fields = [{"id": "name", "label": "姓名", "type": "text", "current_value": "张三"}]
+        result = asyncio.run(matcher._fallback_match(fields, flat_profile))
+        assert result["mappings"][0]["action"] == "keep"
+
+    def test_fallback_action_correct(self, matcher, flat_profile):
+        """页面值与画像冲突 → action=correct"""
+        import asyncio
+        fields = [{"id": "name", "label": "姓名", "type": "text", "current_value": "李四"}]
+        result = asyncio.run(matcher._fallback_match(fields, flat_profile))
+        assert result["mappings"][0]["action"] == "correct"
+
+    def test_fallback_action_manual_sensitive(self, matcher, flat_profile):
+        """敏感字段 → action=manual"""
+        import asyncio
+        fields = [{"id": "id_card", "label": "身份证号", "type": "text", "current_value": ""}]
+        result = asyncio.run(matcher._fallback_match(fields, flat_profile))
+        assert result["mappings"][0]["action"] == "manual"
+
+    def test_fallback_action_skip_unmatched(self, matcher, flat_profile):
+        """无法匹配且页面空 → action=skip"""
+        import asyncio
+        fields = [{"id": "zzz", "label": "完全无关的字段", "type": "text", "current_value": ""}]
+        result = asyncio.run(matcher._fallback_match(fields, flat_profile))
+        assert result["mappings"][0]["action"] == "skip"

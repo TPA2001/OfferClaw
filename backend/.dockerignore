@@ -1,0 +1,51 @@
+# =============================================================================
+# OfferClaw Backend .dockerignore
+# 构建上下文为 backend/ 目录，因此路径相对 backend/ 编写
+# 对应项目根目录下的 backend/data/、backend/tests/ 等
+# =============================================================================
+
+# 运行时数据（含浏览器 profile、Cookie、备份等敏感数据，严禁入镜像）
+data/
+
+# 测试代码与缓存（生产镜像不需要）
+tests/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 本地 SQLite 数据库文件
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+
+# 环境变量（生产由 docker-compose env_file 注入，绝不烤进镜像）
+.env
+.env.local
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# 日志与临时文件
+*.log
+logs/
+*.tmp
+*.bak

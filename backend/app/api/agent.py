@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.core.database import get_db, SessionLocal
 from app.core.llm import get_default_provider
+from app.core.rate_limit import agent_rate_limit
 from app.core.response import ok, BadRequestError, NotFoundError
 from app.agent.apps import create_job_agent
 from app.agent.runtime.events import (
@@ -61,7 +62,7 @@ def _event_to_sse(event) -> str:
 
 # ============ 路由 ============
 
-@router.post("/chat")
+@router.post("/chat", dependencies=[Depends(agent_rate_limit)])
 async def agent_chat(
     req: ChatRequest,
     user_id: str = Depends(get_current_user),
