@@ -67,6 +67,10 @@ class AgentLoop:
         try:
             async for event in self._loop():
                 yield event
+        except GeneratorExit:
+            # 客户端提前断开（SSE 取消）：也持久化当前会话，避免对话丢失
+            self.state.persist()
+            raise
         except Exception as e:
             logger.exception(f"Agent 运行异常: {e}")
             yield ErrorEvent(message=str(e))
@@ -262,6 +266,9 @@ class AgentLoop:
         try:
             async for event in self._loop():
                 yield event
+        except GeneratorExit:
+            self.state.persist()
+            raise
         except Exception as e:
             logger.exception(f"Agent 恢复运行异常: {e}")
             yield ErrorEvent(message=str(e))

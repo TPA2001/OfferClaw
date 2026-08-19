@@ -11,12 +11,26 @@ from pydantic import BaseModel
 
 
 class BasicInfo(BaseModel):
-    """基本信息"""
+    """基本信息（均为非敏感字段；身份证/住址/银行卡/护照等敏感字段不在此结构，仅本地存储）"""
     name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
     gender: Optional[str] = None
     birth: Optional[str] = None
+    age: Optional[str] = None
+    location: Optional[str] = None
+    ethnicity: Optional[str] = None
+    political_status: Optional[str] = None
+    marital_status: Optional[str] = None
+    native_place: Optional[str] = None
+    wechat: Optional[str] = None
+    qq: Optional[str] = None
+    website: Optional[str] = None
+    github: Optional[str] = None
+    linkedin: Optional[str] = None
+    english_level: Optional[str] = None
+    driving_license: Optional[str] = None
+    job_status: Optional[str] = None
 
 
 class EducationItem(BaseModel):

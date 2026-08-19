@@ -28,7 +28,7 @@ OfferClaw/
 ├── backend/          # 后端项目（Python FastAPI）
 ├── frontend/         # 前端项目（原生 HTML/CSS/JS）
 │   └── web/
-├── docker/           # 容器化配置
+├── offerclaw-extension/  # Chrome MV3 浏览器扩展（智能填表 + 本地画像）
 ├── docs/             # 项目文档
 ├── README.md         # 项目总览 + 快速开始
 ├── PROJECT_FRAMEWORK.md  # 本文档：框架说明
@@ -252,17 +252,17 @@ python -m http.server 3000
 
 ---
 
-## 五、Docker 部署
+## 五、打包与部署
 
-[`docker/`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/docker) 提供容器化配置：
+当前采用 **PyInstaller 单文件打包**（`backend/build_release.bat` + `offerclaw.spec`），Docker 配置已移除。
 
 ```bash
-cd docker
-docker-compose up -d   # 启动后端服务
+cd backend
+build_release.bat        # 生成单文件可执行程序（dist/）
 ```
 
-- `Dockerfile.backend`：基于 Python 3.10-slim，安装依赖 + Playwright Chromium
-- `docker-compose.yml`：单服务编排，可扩展数据库服务
+- 打包产物自带前端静态资源（`_MEIPASS/frontend/web`）与本地数据目录（`exe 同目录/data`）
+- 正式发布为 frozen 构建，走授权校验；源码模式默认 `OFFERCLAW_DEV=1` 开放授权门控（内测）
 
 ---
 

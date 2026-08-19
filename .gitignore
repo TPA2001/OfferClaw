@@ -65,3 +65,15 @@ backend/data/auto-fill-resp.json
 # 运行时数据库（即使放非默认位置也排除）
 offerclaw.db
 offerclaw.db-journal
+
+# 第三方参考项目（GPL-3.0，与 OfferClaw MIT 协议隔离，不提交到本仓库）
+# 旧的 AI-Resume-Form-Filling-Assistant-master 已清理出项目
+
+# 根目录的简历/资料类文件（含个人信息，留在项目根目录外）
+/*.pdf
+/*.PDF
+/*.docx
+/*.doc
+
+# WorkBuddy 项目数据（会话内存等工具内部数据，不入仓）
+.workbuddy/

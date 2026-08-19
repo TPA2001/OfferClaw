@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "OfferClaw填表助手",
+  "version": "0.0.3",
+  "description": "OfferClaw 浏览器扩展：网申表单智能填写 + 投递记录 + 本地画像（本地数据库优先，后端可选）",
+  "permissions": ["storage", "scripting", "activeTab", "tabs"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "OfferClaw填表助手"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": [
+        "shared/schema.js",
+        "shared/storage.js",
+        "shared/config.js",
+        "shared/privacy.js",
+        "shared/profile-matcher.js",
+        "shared/scanner.js",
+        "shared/fill-runtime.js",
+        "shared/api-client.js",
+        "shared/profile-sync.js",
+        "content.js"
+      ],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {}
+}

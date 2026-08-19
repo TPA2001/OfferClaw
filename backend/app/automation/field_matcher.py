@@ -336,7 +336,7 @@ class FieldMatcher:
 
     async def match(self, fields: list, user_id: str, profile: dict,
                     llm_client=None, db: Optional[Session] = None,
-                    use_llm: bool = True) -> dict:
+                    use_llm: bool = True, skip_subscription: bool = False) -> dict:
         """
         字段语义匹配
 
@@ -347,6 +347,7 @@ class FieldMatcher:
             llm_client: LLM 客户端（可选）
             db: 数据库 Session（可选）
             use_llm: 是否使用 LLM（False 则仅用规则匹配）
+            skip_subscription: 跳过订阅校验与计数（扩展端内测模式专用）
 
         Returns:
             dict: {"mappings": [...], "profile_used": bool, "source": "llm"|"rules"}
@@ -358,8 +359,8 @@ class FieldMatcher:
         from app.core.llm import get_gen_provider, Message
         from app.core.subscription import SubscriptionManager
 
-        # 1. 订阅校验（如果有数据库）
-        if db:
+        # 1. 订阅校验（如果有数据库；扩展端 skip_subscription 时跳过）
+        if db and not skip_subscription:
             subscription_manager = SubscriptionManager(db)
             has_permission = subscription_manager.check_permission(user_id, 'autofill')
             if not has_permission:
@@ -390,8 +391,8 @@ class FieldMatcher:
                 raise ValueError("LLM 响应未包含 JSON 对象")
             result = json.loads(match.group())
 
-            # 3. 计数（如果有数据库）
-            if db:
+            # 3. 计数（扩展端 skip_subscription 时跳过）
+            if db and not skip_subscription:
                 subscription_manager.increment_usage(user_id, 'autofill')
 
             mappings = result.get("mappings", result) if isinstance(result, dict) else result

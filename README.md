@@ -47,13 +47,16 @@ OfferClaw Agent 集成 **28 个工具（8 组）**，并按用户意图激活 **
 - 搜索结果一键加入投递看板
 
 ### 📝 简历画像
-- 结构化用户画像（基本信息/教育/工作/技能/项目/证书/自我总结）
+- 结构化用户画像（基本信息/教育/工作/技能/项目/证书/自我总结/自定义字段）
 - Agent 可读写画像，用于简历生成 / 岗位匹配评分 / 智能填表
+- **PDF 简历导入**：上传 PDF 简历自动解析为画像（优先 LLM 结构化，未配置 Key 时规则降级，文本提取全程本地）
+- **敏感信息仅存本机**：身份证/住址/银行卡/护照等敏感字段只保存在浏览器 localStorage，后端强制剔除、永不落库
 
 ### 🤖 智能填表
-- 网申表单字段自动提取（Playwright 渲染页面）
-- LLM 语义匹配表单字段与画像
-- **隐私分层**：敏感数据（身份证号/住址）仅存浏览器本地，后端永不接触
+- 网申表单字段自动提取（Playwright 渲染页面 / 扩展本地扫描）
+- LLM 语义匹配表单字段与画像；扩展端可走后端脱敏匹配 `/api/v1/automation/ext/match`——PII 脱敏为 `[REDACTED_*]` 占位符后才发 LLM，返回时本地还原
+- **Chrome 扩展（V0.0.3）**：本地数据库优先，扫描 → 匹配 → 确定性填写全在浏览器完成；启用后端后自动同步 Web 端画像到本地 `chrome.storage`，免去重复录入
+- **隐私分层**：敏感数据（身份证号/住址/银行卡/护照）仅存浏览器本地，后端永不接触；后端 REST 与 Agent 工具写入路径均经 sanitizer 强制剔除敏感字段
 
 ### 🎤 面试复盘
 - 面试记录 / LLM 辅助分析表现 / 改进建议
@@ -100,13 +103,14 @@ offerclaw/
 │   │   │   ├── profile.py            # 用户画像
 │   │   │   ├── journal.py            # 求职日志
 │   │   │   ├── settings.py           # 设置 & LLM 配置
-│   │   │   └── auth.py               # 鉴权
+│   │   │   └── license.py            # 授权激活（鉴权逻辑在 core/auth.py）
 │   │   ├── core/                     # 基础设施层
 │   │   │   ├── config.py / config_store.py  # 配置 + 运行时持久化
 │   │   │   ├── database.py / auth.py / response.py / log_utils.py
-│   │   │   ├── rate_limit.py / security.py / subscription.py
-│   │   │   └── llm/                  # LLM 抽象层（base/openai/mock/retry/factory）
-│   │   ├── models/                   # SQLAlchemy ORM（application/profile/user）
+│   │   │   ├── rate_limit.py / subscription.py
+│   │   │   ├── license.py / migrations.py / paths.py  # 授权 / 自动迁移 / 路径
+│   │   │   └── llm/                  # LLM 抽象层（base/openai/mock/retry/factory + errors/events/serialization）
+│   │   ├── models/                   # SQLAlchemy ORM（application/profile/AgentSession）
 │   │   ├── schemas/                  # Pydantic 请求/响应模型
 │   │   ├── features/                 # Feature 模块（company_research/mock_interview/journal）
 │   │   ├── services/                 # 服务层（resume/boss_search/smart_fill/auto_filler/playwright）
@@ -118,7 +122,26 @@ offerclaw/
 │   │       └── apps/                 # job_agent 主 Agent
 │   ├── tests/                        # 单元测试 + 集成测试
 │   ├── pyproject.toml / requirements.txt / .env.example
-│   └── run.py                        # 唯一启动入口（含 Windows 事件循环修正）
+│   ├── run.py                        # 唯一启动入口（含 Windows 事件循环修正）
+│   ├── build_release.bat             # PyInstaller 单文件打包脚本
+│   ├── offerclaw.spec                # PyInstaller spec
+│   └── dist/                         # 打包产物（gitignore：本地保留，不入仓）
+│
+├── offerclaw-extension/              # Chrome MV3 浏览器扩展（智能填表 + 本地画像）
+│   ├── manifest.json                 # MV3 配置
+│   ├── background.js                 # service worker
+│   ├── content.js / content.css      # 页面注入：扫描 + 填写
+│   ├── popup.html / popup.css / popup.js  # 侧边弹窗
+│   └── shared/                       # 共享脚本（schema/storage/config/api-client/...）
+│       ├── schema.js                 # 数据结构与常量
+│       ├── storage.js                # chrome.storage.local 持久化 + 版本迁移
+│       ├── config.js                 # 后端配置
+│       ├── privacy.js                # 敏感字段本地识别
+│       ├── profile-matcher.js        # 规则匹配引擎
+│       ├── scanner.js                # 表单字段扫描
+│       ├── fill-runtime.js           # 确定性填写运行时
+│       ├── api-client.js             # 后端 API 客户端
+│       └── profile-sync.js           # 后端画像 → 本地画像 同步
 │
 ├── frontend/web/                     # 前端单页应用
 │   ├── index.html                    # 主壳（顶栏 + 侧栏 + 视图挂载点）
@@ -129,8 +152,7 @@ offerclaw/
 │   ├── motion.js                     # 动画系统
 │   └── config.js
 │
-├── docker/                           # Dockerfile.backend / Dockerfile.frontend / docker-compose.yml / nginx.conf
-├── docs/                             # PROJECT_STRUCTURE / AGENT_ARCHITECTURE / AGENT_MVP_GUIDE / SMART_FILL_GUIDE
+├── docs/                             # PROJECT_STRUCTURE / AGENT_ARCHITECTURE / AGENT_MVP_GUIDE / SMART_FILL_GUIDE + 截图
 ├── PROJECT_FRAMEWORK.md              # 框架说明
 └── README.md
 ```
@@ -161,7 +183,7 @@ offerclaw/
 | 模块 | 状态 | 说明 |
 |------|------|------|
 | 投递看板 | ✅ 已完成 | CRUD / 拖拽 / 统计 / 跟进 / 导入导出 |
-| 简历画像 | ✅ 已完成 | 结构化画像 + Agent 读写 |
+| 简历画像 | ✅ 已完成 | 结构化画像 + Agent 读写 + PDF 简历导入 + 自定义字段 |
 | 求职日志 / 周报 | ✅ 已完成 | 日志 CRUD + 周报生成 |
 | 面试复盘 | ✅ 已完成 | 记录 + LLM 分析 |
 | 设置（主题/LLM/健康） | ✅ 已完成 | 6 主题 + 运行时 LLM 配置 |
@@ -172,7 +194,7 @@ offerclaw/
 | 智能填表（提取/匹配） | ✅ 已完成 | 字段提取 + LLM 语义匹配 |
 | 智能填表（自动执行） | 🟡 部分完成 | 依赖目标站点登录态，需 headful 浏览器介入 |
 | 简历/求职信/面试准备 | ✅ 已完成 | LLM 驱动，按 JD 定制 |
-| Docker 部署 | 🟡 部分完成 | 后端镜像就绪，前端 nginx 镜像待完善 |
+| Docker 部署 | ❌ 未提供 | 已移除 Docker 配置,改用 PyInstaller 单文件打包 |
 | 用户系统 | 🟡 部分完成 | demo / jwt / header 三模式鉴权，多用户隔离基础已就绪 |
 | 测试覆盖 | 🟡 部分完成 | 单元测试覆盖核心模块，集成测试需手动运行 |
 
@@ -236,8 +258,9 @@ python -m http.server 5173
 OfferClaw 严格遵守隐私保护原则：
 
 - ✅ 姓名、手机号、邮箱等**非敏感数据**可存储在云端，用于 Agent 编排
-- 🔒 身份证号、家庭住址等**敏感数据仅存储在浏览器本地**
-- 🔒 后端永不接触原始敏感数据
+- 🔒 身份证号、家庭住址、银行卡、护照等**敏感数据仅存储在浏览器本地**
+- 🔒 后端在 REST 写入路径与 Agent 工具写入路径都强制剔除敏感字段（`core/sanitizer.py`），**永不落库**
+- 🔒 扩展走 LLM 增强匹配时，PII 先脱敏为 `[REDACTED_*]` 占位符再发送，结果在本地还原（`automation/privacy.py`）
 - 🔒 Agent 不询问敏感信息，填表时由前端本地读取并注入
 
 ---
@@ -259,7 +282,7 @@ OfferClaw 严格遵守隐私保护原则：
 - [ ] Boss 搜索登录态自动化（扫码登录持久化）
 - [ ] 智能填表自动执行（headful 流程编排）
 - [ ] 多用户体系完善（注册/登录/数据隔离）
-- [ ] Docker 一键部署（前端 nginx 镜像）
+- [ ] Docker 容器化部署（可选,当前用 PyInstaller 单文件打包）
 - [ ] 移动端适配
 - [ ] 更多 Agent 技能（薪资谈判 / offer 比较）
 

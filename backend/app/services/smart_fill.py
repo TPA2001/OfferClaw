@@ -12,6 +12,7 @@
 """
 
 import asyncio
+import base64
 import logging
 from typing import Dict, Any, List
 
@@ -58,52 +59,57 @@ class SmartFillService:
             async with async_playwright() as p:
                 # 启动浏览器（无头模式）
                 browser = await p.chromium.launch(headless=True)
-                page = await browser.new_page()
-
-                # SPA 页面用 domcontentloaded + 等待，避免 networkidle 超时
                 try:
-                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                except Exception as e:
-                    logger.warning(f"domcontentloaded 加载超时，重试 load: {e}")
+                    page = await browser.new_page()
+
+                    # SPA 页面用 domcontentloaded + 等待，避免 networkidle 超时
                     try:
-                        await page.goto(url, wait_until="load", timeout=30000)
-                    except Exception as e2:
-                        logger.warning(f"load 也超时，继续尝试: {e2}")
-                        await page.goto(url, timeout=30000)
+                        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    except Exception as e:
+                        logger.warning(f"domcontentloaded 加载超时，重试 load: {e}")
+                        try:
+                            await page.goto(url, wait_until="load", timeout=30000)
+                        except Exception as e2:
+                            logger.warning(f"load 也超时，继续尝试: {e2}")
+                            await page.goto(url, timeout=30000)
 
-                # 等待 SPA 渲染完成
-                await asyncio.sleep(2.0)
+                    # 等待 SPA 渲染完成
+                    await asyncio.sleep(2.0)
 
-                # 获取页面标题
-                title = await page.title()
-                logger.info(f"页面标题: {title}")
+                    # 获取页面标题
+                    title = await page.title()
+                    logger.info(f"页面标题: {title}")
 
-                # 提取表单字段（统一调用 FormExtractor）
-                fields = await self._extractor.extract_fields(page)
+                    # 提取表单字段（统一调用 FormExtractor）
+                    fields = await self._extractor.extract_fields(page)
 
-                # 检测多步骤向导结构
-                wizard = await self._extractor.detect_wizard_steps(page)
-                if wizard.get("is_multi_step"):
-                    logger.info(
-                        f"检测到多步骤向导: 当前第 {wizard.get('current_step', 0)} / "
-                        f"{wizard.get('total_steps', 0)} 步, "
-                        f"标题={wizard.get('step_titles', [])[:3]}"
-                    )
+                    # 检测多步骤向导结构
+                    wizard = await self._extractor.detect_wizard_steps(page)
+                    if wizard.get("is_multi_step"):
+                        logger.info(
+                            f"检测到多步骤向导: 当前第 {wizard.get('current_step', 0)} / "
+                            f"{wizard.get('total_steps', 0)} 步, "
+                            f"标题={wizard.get('step_titles', [])[:3]}"
+                        )
 
-                # 截图（用于预览）
-                screenshot = await page.screenshot(type="jpeg", quality=50)
-                screenshot_base64 = screenshot.hex() if screenshot else None
+                    # 截图（用于预览）
+                    screenshot = await page.screenshot(type="jpeg", quality=50)
+                    screenshot_base64 = base64.b64encode(screenshot).decode() if screenshot else None
 
-                await browser.close()
-
-                return {
-                    "url": url,
-                    "title": title,
-                    "fields": fields,
-                    "field_count": len(fields),
-                    "screenshot": screenshot_base64,
-                    "wizard": wizard,
-                }
+                    return {
+                        "url": url,
+                        "title": title,
+                        "fields": fields,
+                        "field_count": len(fields),
+                        "screenshot": screenshot_base64,
+                        "wizard": wizard,
+                    }
+                finally:
+                    # 任何异常路径都必须关闭浏览器，避免 Chromium 进程泄漏
+                    try:
+                        await browser.close()
+                    except Exception:
+                        pass
 
         except Exception as e:
             logger.error(f"页面抓取失败: {e}", exc_info=True)
@@ -186,7 +192,7 @@ class SmartFillService:
                             "title": (wizard.get("step_titles") or [None])[0] if wizard.get("step_titles") else f"步骤 {step_count}",
                             "field_count": len(fields),
                             "new_field_count": new_count,
-                            "screenshot": shot.hex() if shot else None,
+                            "screenshot": base64.b64encode(shot).decode() if shot else None,
                         })
 
                         logger.info(
@@ -231,7 +237,7 @@ class SmartFillService:
                         "field_count": len(all_fields),
                         "steps": steps_info,
                         "total_steps_traversed": step_count,
-                        "screenshot": final_shot.hex() if final_shot else None,
+                        "screenshot": base64.b64encode(final_shot).decode() if final_shot else None,
                     }
                 finally:
                     await browser.close()

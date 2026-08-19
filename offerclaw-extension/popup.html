@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OfferClaw填表助手</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="oc-header">
+    <div class="oc-logo">OfferClaw<span class="oc-logo-suffix">填表助手</span></div>
+    <div class="oc-status" id="backendStatus">检测中…</div>
+  </header>
+
+  <nav class="oc-nav">
+    <button class="oc-tab active" data-tab="fill">填写</button>
+    <button class="oc-tab" data-tab="apps">投递</button>
+    <button class="oc-tab" data-tab="profile">画像</button>
+    <button class="oc-tab" data-tab="settings">设置</button>
+  </nav>
+
+  <main class="oc-main">
+    <!-- 填写面板 -->
+    <section class="oc-panel active" id="panel-fill">
+      <div class="oc-card">
+        <div class="oc-card-title">智能填写当前页</div>
+        <p class="oc-hint">在网申表单页点击下方按钮，扫描字段并自动填写（不会自动提交）。所有匹配在本地完成，画像不上传。</p>
+        <button class="oc-btn primary" id="btnFill">扫描并智能填写</button>
+        <button class="oc-btn ghost" id="btnClear">清除高亮</button>
+        <div id="fillResult" class="oc-result"></div>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">使用统计</div>
+        <div class="oc-stats" id="extStats">—</div>
+      </div>
+    </section>
+
+    <!-- 投递记录面板 -->
+    <section class="oc-panel" id="panel-apps">
+      <div class="oc-card">
+        <div class="oc-card-title">投递记录</div>
+        <div class="oc-row">
+          <select id="appStatusFilter" class="oc-input"></select>
+          <button class="oc-btn ghost" id="btnRefreshApps">刷新</button>
+        </div>
+        <div id="appsList" class="oc-list"></div>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">新建投递</div>
+        <input class="oc-input" id="newCompany" placeholder="公司" />
+        <input class="oc-input" id="newPosition" placeholder="职位" />
+        <input class="oc-input" id="newJobUrl" placeholder="岗位链接（可选）" />
+        <select class="oc-input" id="newStatus"></select>
+        <select class="oc-input" id="newPriority"></select>
+        <textarea class="oc-input" id="newNotes" placeholder="备注（可选）"></textarea>
+        <button class="oc-btn primary" id="btnCreateApp">创建</button>
+      </div>
+    </section>
+
+    <!-- 画像面板（本地数据库） -->
+    <section class="oc-panel" id="panel-profile">
+      <div class="oc-card">
+        <div class="oc-card-title">画像完成度</div>
+        <div id="profileCompletion" class="oc-completion">—</div>
+        <div id="profileSource" class="oc-hint">—</div>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">基本信息（存本地数据库）</div>
+        <div class="oc-form-grid" id="basicForm">
+          <label class="oc-label">姓名</label>
+          <input class="oc-input" id="pf-name" placeholder="如：张三" />
+          <label class="oc-label">性别</label>
+          <select class="oc-input" id="pf-gender">
+            <option value="">未填</option>
+            <option value="男">男</option>
+            <option value="女">女</option>
+          </select>
+          <label class="oc-label">年龄</label>
+          <input class="oc-input" id="pf-age" type="number" placeholder="如：26" />
+          <label class="oc-label">出生日期</label>
+          <input class="oc-input" id="pf-birth" placeholder="如：2000-01" />
+          <label class="oc-label">手机号</label>
+          <input class="oc-input" id="pf-phone" type="tel" placeholder="如：13800138000" />
+          <label class="oc-label">邮箱</label>
+          <input class="oc-input" id="pf-email" type="email" placeholder="如：you@example.com" />
+          <label class="oc-label">籍贯/所在地</label>
+          <input class="oc-input" id="pf-location" placeholder="如：山东济南" />
+          <label class="oc-label">求职方向</label>
+          <input class="oc-input" id="pf-job_intent" placeholder="如：AI Agent 开发" />
+          <label class="oc-label">民族</label>
+          <input class="oc-input" id="pf-ethnicity" placeholder="如：汉族" />
+          <label class="oc-label">政治面貌</label>
+          <input class="oc-input" id="pf-political_status" placeholder="如：中共党员" />
+          <label class="oc-label">婚姻状况</label>
+          <input class="oc-input" id="pf-marital_status" placeholder="如：未婚" />
+          <label class="oc-label">籍贯</label>
+          <input class="oc-input" id="pf-native_place" placeholder="如：山东济南" />
+          <label class="oc-label">微信</label>
+          <input class="oc-input" id="pf-wechat" placeholder="微信号" />
+          <label class="oc-label">QQ</label>
+          <input class="oc-input" id="pf-qq" placeholder="QQ 号" />
+          <label class="oc-label">个人网站/作品集</label>
+          <input class="oc-input" id="pf-website" placeholder="https://..." />
+          <label class="oc-label">GitHub</label>
+          <input class="oc-input" id="pf-github" placeholder="用户名" />
+          <label class="oc-label">领英 LinkedIn</label>
+          <input class="oc-input" id="pf-linkedin" placeholder="profile 链接或 ID" />
+          <label class="oc-label">英语水平</label>
+          <input class="oc-input" id="pf-english_level" placeholder="如：CET-6 / 雅思 6.5" />
+          <label class="oc-label">驾照</label>
+          <input class="oc-input" id="pf-driving_license" placeholder="如：C1 / 无" />
+          <label class="oc-label">求职状态</label>
+          <input class="oc-input" id="pf-job_status" placeholder="如：离职-随时到岗" />
+        </div>
+        <button class="oc-btn primary" id="btnSaveBasic">保存基本信息</button>
+        <button class="oc-btn ghost" id="btnRefreshProfile">重新加载</button>
+        <button class="oc-btn ghost" id="btnSyncFromBackend">从后端同步画像</button>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">教育/工作/项目（JSON 高级编辑）</div>
+        <p class="oc-hint">可粘贴从 OfferClaw Web 画像页导出的 JSON，或手动编辑。保存到本地数据库。</p>
+        <textarea class="oc-input oc-textarea" id="pfJsonExtra" placeholder='{"education":[...],"experience":[...],"projects":[...],"skills":[...],"summary":{...}}'></textarea>
+        <button class="oc-btn primary" id="btnSaveJson">保存 JSON</button>
+        <button class="oc-btn ghost" id="btnExportProfile">导出当前画像</button>
+      </div>
+    </section>
+
+    <!-- 设置面板 -->
+    <section class="oc-panel" id="panel-settings">
+      <div class="oc-card">
+        <div class="oc-card-title">数据存储模式</div>
+        <p class="oc-hint" id="modeHint">当前：<b>本地数据库模式</b>。所有画像、投递记录、敏感数据均存浏览器本地，无需后端。</p>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">后端连接（可选）</div>
+        <label class="oc-label">OfferClaw 后端地址</label>
+        <input class="oc-input" id="cfgBackend" placeholder="http://localhost:8000" />
+        <label class="oc-switch">
+          <input type="checkbox" id="cfgUseBackend" /> 启用后端（默认关闭，纯本地即可使用）
+        </label>
+        <button class="oc-btn primary" id="btnSaveConfig">保存配置</button>
+        <button class="oc-btn ghost" id="btnTestConn">测试连接</button>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">敏感数据（仅存本地）</div>
+        <label class="oc-label">身份证号</label>
+        <input class="oc-input" id="sensIdCard" type="password" />
+        <label class="oc-label">家庭住址</label>
+        <input class="oc-input" id="sensHomeAddress" type="password" />
+        <label class="oc-label">银行卡号</label>
+        <input class="oc-input" id="sensBankCard" type="password" />
+        <label class="oc-label">护照号</label>
+        <input class="oc-input" id="sensPassport" type="password" />
+        <label class="oc-label">紧急联系人</label>
+        <input class="oc-input" id="sensEmergencyContact" placeholder="姓名（仅存本地）" />
+        <label class="oc-label">紧急联系人电话</label>
+        <input class="oc-input" id="sensEmergencyPhone" placeholder="电话（仅存本地）" />
+        <button class="oc-btn primary" id="btnSaveSensitive">保存到本地</button>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">数据维护</div>
+        <button class="oc-btn ghost" id="btnExport">导出全部本地数据</button>
+        <button class="oc-btn danger" id="btnReset">重置本地数据</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="shared/schema.js"></script>
+  <script src="shared/storage.js"></script>
+  <script src="shared/config.js"></script>
+  <script src="shared/privacy.js"></script>
+  <script src="shared/profile-matcher.js"></script>
+  <script src="shared/scanner.js"></script>
+  <script src="shared/fill-runtime.js"></script>
+  <script src="shared/api-client.js"></script>
+  <script src="shared/profile-sync.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

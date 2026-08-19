@@ -1088,16 +1088,25 @@
         const form = modalOverlay.querySelector('#kb-form');
         const fd = new FormData(form);
         const data = {};
-        const datetimeFields = ['applied_at', 'assessment_deadline', 'interview_time', 'offer_deadline'];
+        // 前端展示字段名 → 后端 API 字段名映射
+        // （前端表单用更口语化的 name，后端 schema 用既有语义字段，避免提交被静默丢弃）
+        const FIELD_MAP = {
+            'salary_range': 'offer_salary',
+            'location': 'offer_location',
+            'contact_name': 'hr_contact',
+            'interview_time': 'next_interview_at',
+        };
+        const datetimeFields = ['applied_at', 'assessment_deadline', 'next_interview_at', 'offer_deadline'];
 
         for (const [k, v] of fd.entries()) {
-            if (datetimeFields.indexOf(k) >= 0) {
+            const key = FIELD_MAP[k] || k;
+            if (datetimeFields.indexOf(key) >= 0) {
                 const iso = fromLocalInput(v);
-                if (iso) data[k] = iso;
-            } else if (k === 'interview_round') {
-                if (v !== '') data[k] = parseInt(v, 10);
+                if (iso) data[key] = iso;
+            } else if (key === 'interview_round') {
+                if (v !== '') data[key] = parseInt(v, 10);
             } else {
-                if (v !== '') data[k] = v;
+                if (v !== '') data[key] = v;
             }
         }
         // 始终发送状态与优先级

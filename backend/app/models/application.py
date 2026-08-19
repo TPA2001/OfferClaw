@@ -40,6 +40,12 @@ class Application(Base):
     # offer_collapsed=offer谈崩 / hc_empty=HC没有 / other=其他
     rejection_stage = Column(String(30), nullable=True)
 
+    # 拒绝补充说明（仅 status=rejected 时使用，前端可填自由文本）
+    rejection_reason = Column(Text, nullable=True)
+
+    # 笔试类型（仅 status=assessment 时使用，如 在线编程/行测/性格测试）
+    assessment_type = Column(String(100), nullable=True)
+
     # 当前面试轮次（仅 status=interview 时使用，1=一面 2=二面 3=三面 4=HR面）
     interview_round = Column(Integer, nullable=True)
 

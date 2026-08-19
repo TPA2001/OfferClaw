@@ -197,11 +197,11 @@ class TestResponseEnvelopeIntegration:
         assert body["data"] is None
         assert body["message"] == "已删除"
 
-    def test_root_endpoint_envelope(self, client):
-        """根端点也遵循统一信封"""
+    def test_root_serves_frontend(self, client):
+        """根端点返回前端静态页面（StaticFiles 挂载接管，不再是 JSON 信封）"""
         resp = client.get("/")
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["code"] == 0
-        assert "data" in body
-        assert "version" in body["data"]
+        # 根路径由后端挂载的前端静态目录接管，返回 HTML
+        content_type = resp.headers.get("content-type", "")
+        assert "text/html" in content_type
+        assert "<html" in resp.text.lower() or "<!doctype" in resp.text.lower()

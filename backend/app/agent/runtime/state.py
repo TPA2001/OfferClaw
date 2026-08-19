@@ -14,6 +14,13 @@ from app.models.application import AgentSession
 
 logger = logging.getLogger("offerclaw.agent.state")
 
+# 进程级待确认操作注册表：action_id → 工具调用信息
+# 原因：/chat 与 /confirm 是两次独立 HTTP 请求，各自新建 AgentState（内存态不共享）。
+# 挂起的确认操作必须跨请求保留，否则 confirm 时 resolve 必然返回 None、确认流程整体失效。
+# 按全局唯一 action_id 索引（uuid 生成），不依赖 session_id（首次对话时 session_id 可能尚为 None）。
+# 进程重启后注册表清空，此时再 confirm 会提示"无效的 action_id"，可接受。
+_PENDING_REGISTRY: dict[str, dict[str, Any]] = {}
+
 
 class AgentState:
     """
@@ -184,6 +191,14 @@ class AgentState:
 
     def register_pending_action(self, action_id: str, info: dict) -> None:
         self.pending_actions[action_id] = info
+        # 同时写入进程级注册表，供跨请求的 confirm 端点恢复
+        _PENDING_REGISTRY[action_id] = info
 
     def resolve_pending_action(self, action_id: str) -> Optional[dict]:
-        return self.pending_actions.pop(action_id, None)
+        # 先查实例内存（同实例复用场景），再查进程级注册表（跨请求场景）
+        info = self.pending_actions.pop(action_id, None)
+        if info is not None:
+            # 同实例命中也要同步清理进程级注册表，避免同一 action 被二次弹出
+            _PENDING_REGISTRY.pop(action_id, None)
+            return info
+        return _PENDING_REGISTRY.pop(action_id, None)

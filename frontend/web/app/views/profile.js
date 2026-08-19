@@ -23,6 +23,8 @@
         { key: 'summary',      label: '自我评价' },
         { key: 'certificates', label: '证书' },
         { key: 'job_intent',   label: '求职意向' },
+        { key: 'custom',       label: '自定义字段' },
+        { key: 'sensitive',    label: '敏感信息' },
     ];
 
     const DEGREES = ['高中', '大专', '本科', '硕士', '博士'];
@@ -379,6 +381,65 @@
     font-size: 0.88rem;
 }
 
+/* --- 分组分隔 / 自定义字段 / 敏感信息 --- */
+.field-group-divider {
+    width: 100%;
+    margin: 0.6rem 0 0.2rem;
+    padding-top: 0.8rem;
+    border-top: 1px dashed var(--line-soft);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    letter-spacing: 0.02em;
+}
+.form-field.full { grid-column: 1 / -1; }
+.custom-hint {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    line-height: 1.6;
+    margin: 0 0 0.9rem;
+}
+.sensitive-hint {
+    background: var(--olive-soft);
+    border: 1px solid var(--olive);
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+    color: var(--olive-dark);
+}
+.custom-add-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 0.8rem;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-bottom: 0.9rem;
+}
+.custom-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.custom-row {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.6rem 0.9rem;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+.custom-key {
+    font-weight: 700;
+    color: var(--ink);
+    min-width: 120px;
+    font-size: 0.85rem;
+}
+.custom-val {
+    flex: 1;
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+    word-break: break-all;
+}
+
 @media (max-width: 700px) {
     .profile-toolbar { flex-direction: column; align-items: stretch; }
     .completion-wrap { width: 100%; }
@@ -392,7 +453,12 @@
 
     function emptyProfile() {
         return {
-            basic: { name: '', gender: '', age: '', phone: '', email: '', location: '', avatar: '', job_intent: '' },
+            basic: {
+                name: '', gender: '', age: '', birth: '', phone: '', email: '', location: '',
+                ethnicity: '', political_status: '', marital_status: '', native_place: '',
+                wechat: '', qq: '', website: '', github: '', linkedin: '',
+                english_level: '', driving_license: '', job_status: '', avatar: '', job_intent: ''
+            },
             education: [],
             experience: [],
             projects: [],
@@ -400,14 +466,18 @@
             summary: { self_intro: '', strengths: '', career_goal: '', expected_salary: '', expected_location: '', expected_position: '' },
             certificates: [],
             job_intent: { target_positions: [], target_cities: [], expected_salary: '', work_type: '', availability: '' },
+            extra_fields: {},
         };
     }
 
     function normalizeProfile(p) {
         if (!p || typeof p !== 'object') p = {};
         const base = emptyProfile();
-        if (p.basic && typeof p.basic === 'object') {
-            base.basic = Object.assign(base.basic, p.basic);
+        // 兼容后端 basic_info 字段名
+        const basicSrc = (p.basic && typeof p.basic === 'object') ? p.basic
+                       : (p.basic_info && typeof p.basic_info === 'object') ? p.basic_info : null;
+        if (basicSrc) {
+            base.basic = Object.assign(base.basic, basicSrc);
         }
         base.education = Array.isArray(p.education) ? p.education.map(normalizeEdu).filter(Boolean) : [];
         base.experience = Array.isArray(p.experience) ? p.experience.map(normalizeExp).filter(Boolean) : [];
@@ -416,11 +486,18 @@
         if (p.summary && typeof p.summary === 'object') {
             base.summary = Object.assign(base.summary, p.summary);
         }
-        base.certificates = Array.isArray(p.certificates) ? p.certificates.map(normalizeCert).filter(Boolean) : [];
+        // 兼容后端 certifications 字段名
+        const certSrc = Array.isArray(p.certificates) ? p.certificates
+                      : (Array.isArray(p.certifications) ? p.certifications : []);
+        base.certificates = certSrc.map(normalizeCert).filter(Boolean);
         if (p.job_intent && typeof p.job_intent === 'object') {
             base.job_intent = Object.assign(base.job_intent, p.job_intent);
             base.job_intent.target_positions = Array.isArray(base.job_intent.target_positions) ? base.job_intent.target_positions : [];
             base.job_intent.target_cities = Array.isArray(base.job_intent.target_cities) ? base.job_intent.target_cities : [];
+        }
+        // 自定义字段（用户添加的额外键值对）
+        if (p.extra_fields && typeof p.extra_fields === 'object') {
+            base.extra_fields = p.extra_fields;
         }
         return base;
     }
@@ -538,6 +615,8 @@
                     <span class="status-dot"></span>
                     <span class="status-text">加载中...</span>
                 </span>
+                <input type="file" id="pdf-file-input" accept=".pdf,application/pdf" style="display:none">
+                <button class="btn btn-ghost btn-import-pdf" id="btn-import-pdf" title="从 PDF 简历解析填充画像">导入 PDF</button>
                 <button class="btn btn-primary btn-save" id="btn-save" disabled>保存</button>
             </div>
             <div class="tabs" id="profile-tabs">${tabsHtml}</div>
@@ -615,6 +694,8 @@
             case 'summary':      html = renderSummaryTab(); break;
             case 'certificates': html = renderCertificatesTab(); break;
             case 'job_intent':   html = renderJobIntentTab(); break;
+            case 'custom':       html = renderCustomTab(); break;
+            case 'sensitive':    html = renderSensitiveTab(); break;
         }
         container.innerHTML = '<div class="tab-panel">' + html + '</div>';
         bindPanelEvents();
@@ -668,6 +749,61 @@
                 <div class="form-field">
                     <label>当前求职意向</label>
                     <input type="text" data-section="basic" data-field="job_intent" value="${esc(b.job_intent)}" placeholder="如 后端工程师">
+                </div>
+                <div class="form-field full">
+                    <div class="field-group-divider">更多个人信息（同步至后端，便于网申自动填写）</div>
+                </div>
+                <div class="form-field">
+                    <label>出生日期</label>
+                    <input type="text" data-section="basic" data-field="birth" value="${esc(b.birth)}" placeholder="如 2000-01-15">
+                </div>
+                <div class="form-field">
+                    <label>民族</label>
+                    <input type="text" data-section="basic" data-field="ethnicity" value="${esc(b.ethnicity)}" placeholder="如 汉族">
+                </div>
+                <div class="form-field">
+                    <label>政治面貌</label>
+                    <input type="text" data-section="basic" data-field="political_status" value="${esc(b.political_status)}" placeholder="如 共青团员 / 党员">
+                </div>
+                <div class="form-field">
+                    <label>婚姻状况</label>
+                    <input type="text" data-section="basic" data-field="marital_status" value="${esc(b.marital_status)}" placeholder="如 未婚">
+                </div>
+                <div class="form-field">
+                    <label>籍贯</label>
+                    <input type="text" data-section="basic" data-field="native_place" value="${esc(b.native_place)}" placeholder="如 山东济南">
+                </div>
+                <div class="form-field">
+                    <label>微信</label>
+                    <input type="text" data-section="basic" data-field="wechat" value="${esc(b.wechat)}" placeholder="微信号">
+                </div>
+                <div class="form-field">
+                    <label>QQ</label>
+                    <input type="text" data-section="basic" data-field="qq" value="${esc(b.qq)}" placeholder="QQ 号">
+                </div>
+                <div class="form-field">
+                    <label>个人网站 / 作品集</label>
+                    <input type="url" data-section="basic" data-field="website" value="${esc(b.website)}" placeholder="https://...">
+                </div>
+                <div class="form-field">
+                    <label>GitHub</label>
+                    <input type="text" data-section="basic" data-field="github" value="${esc(b.github)}" placeholder="用户名">
+                </div>
+                <div class="form-field">
+                    <label>领英 LinkedIn</label>
+                    <input type="text" data-section="basic" data-field="linkedin" value="${esc(b.linkedin)}" placeholder="profile 链接或 ID">
+                </div>
+                <div class="form-field">
+                    <label>英语水平</label>
+                    <input type="text" data-section="basic" data-field="english_level" value="${esc(b.english_level)}" placeholder="如 CET-6 / 雅思 6.5">
+                </div>
+                <div class="form-field">
+                    <label>驾照</label>
+                    <input type="text" data-section="basic" data-field="driving_license" value="${esc(b.driving_license)}" placeholder="如 C1 / 无">
+                </div>
+                <div class="form-field">
+                    <label>求职状态</label>
+                    <input type="text" data-section="basic" data-field="job_status" value="${esc(b.job_status)}" placeholder="如 离职-随时到岗">
                 </div>
             </div>
         </div>`;
@@ -1014,6 +1150,128 @@
         </div>`;
     }
 
+    // --- 自定义字段 ---
+    // 用户可添加任意「字段名 → 值」，用于覆盖标准画像未列举的信息
+    const LOCAL_SENSITIVE_KEY = 'offerclaw_local_profile_sensitive';
+
+    function loadLocalSensitive() {
+        try {
+            const raw = localStorage.getItem(LOCAL_SENSITIVE_KEY);
+            if (!raw) return {};
+            const o = JSON.parse(raw);
+            return (o && typeof o === 'object') ? o : {};
+        } catch (e) { return {}; }
+    }
+
+    function saveLocalSensitiveFromUI() {
+        const ids = ['id_card', 'home_address', 'bank_card', 'passport', 'emergency_contact', 'emergency_phone'];
+        const map = {};
+        ids.forEach((id) => {
+            const el = root.querySelector('#sens-' + id);
+            map[id] = el ? el.value.trim() : '';
+        });
+        try {
+            localStorage.setItem(LOCAL_SENSITIVE_KEY, JSON.stringify(map));
+            API.toast('敏感信息已仅保存在本机浏览器', 'success');
+        } catch (e) {
+            API.toast('保存失败: ' + (e.message || '未知错误'), 'error');
+        }
+    }
+
+    function renderCustomTab() {
+        const extra = state.profile.extra_fields || {};
+        const keys = Object.keys(extra);
+        let rows = '';
+        if (keys.length === 0) {
+            rows = '<div class="empty-card"><span class="empty-emoji">🧩</span><h3>暂无自定义字段</h3><p>添加任意「字段名 → 值」，例如：党员转正时间 → 2022-07、外语能力 → 日语 N2。填表时会按字段名自动匹配网申表单。</p></div>';
+        } else {
+            rows = keys.map((k) =>
+                `<div class="custom-row">
+                    <div class="custom-key">${esc(k)}</div>
+                    <div class="custom-val">${esc(extra[k])}</div>
+                    <button class="btn btn-danger btn-sm" data-action="delete-custom" data-key="${esc(k)}">删除</button>
+                </div>`
+            ).join('');
+        }
+        return `
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">自定义字段</h2>
+            </div>
+            <p class="custom-hint">这些字段会同步到后端（用于自动填表），也可在扩展里按字段名匹配任意网申表单字段，覆盖标准画像未列举的信息。</p>
+            <div class="custom-add-row">
+                <input type="text" id="custom-key-input" class="skill-add-input" placeholder="字段名，如：外语能力">
+                <input type="text" id="custom-value-input" class="skill-add-input" placeholder="字段值，如：日语 N2">
+                <button class="btn btn-primary btn-sm" data-action="add-custom">添加</button>
+            </div>
+            <div class="custom-list">${rows}</div>
+        </div>`;
+    }
+
+    function addCustomField() {
+        const keyEl = root.querySelector('#custom-key-input');
+        const valEl = root.querySelector('#custom-value-input');
+        if (!keyEl || !valEl) return;
+        const key = keyEl.value.trim();
+        const val = valEl.value.trim();
+        if (!key) { API.toast('请填写字段名', 'warn'); return; }
+        if (!state.profile.extra_fields) state.profile.extra_fields = {};
+        if (Object.prototype.hasOwnProperty.call(state.profile.extra_fields, key)) {
+            API.toast('该字段名已存在', 'warn'); return;
+        }
+        state.profile.extra_fields[key] = val;
+        markDirty();
+        renderTabPanel();
+        API.toast('已添加自定义字段', 'info', 1200);
+    }
+
+    function deleteCustomField(key) {
+        if (!state.profile.extra_fields) return;
+        delete state.profile.extra_fields[key];
+        markDirty();
+        renderTabPanel();
+        API.toast('已删除', 'success', 1200);
+    }
+
+    // --- 敏感信息（仅本机） ---
+    function renderSensitiveTab() {
+        const s = loadLocalSensitive();
+        return `
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">🛡️ 敏感信息（仅本机）</h2>
+            </div>
+            <p class="custom-hint sensitive-hint">此处信息<b>只保存在你当前浏览器的本地存储（localStorage），绝不会上传到 OfferClaw 后端</b>。适合存放身份证号、住址、银行卡等。如需在网申时自动填写这些字段，请到扩展的「设置 → 敏感数据」中填写（扩展同样仅存本地）。</p>
+            <div class="form-grid">
+                <div class="form-field">
+                    <label>身份证号</label>
+                    <input type="password" id="sens-id_card" value="${esc(s.id_card)}" placeholder="仅存本机">
+                </div>
+                <div class="form-field">
+                    <label>家庭住址</label>
+                    <input type="password" id="sens-home_address" value="${esc(s.home_address)}" placeholder="仅存本机">
+                </div>
+                <div class="form-field">
+                    <label>银行卡号</label>
+                    <input type="password" id="sens-bank_card" value="${esc(s.bank_card)}" placeholder="仅存本机">
+                </div>
+                <div class="form-field">
+                    <label>护照号</label>
+                    <input type="password" id="sens-passport" value="${esc(s.passport)}" placeholder="仅存本机">
+                </div>
+                <div class="form-field">
+                    <label>紧急联系人</label>
+                    <input type="text" id="sens-emergency_contact" value="${esc(s.emergency_contact)}" placeholder="仅存本机">
+                </div>
+                <div class="form-field">
+                    <label>紧急联系人电话</label>
+                    <input type="text" id="sens-emergency_phone" value="${esc(s.emergency_phone)}" placeholder="仅存本机">
+                </div>
+            </div>
+            <button class="btn btn-primary" data-action="save-sensitive">保存到本机</button>
+        </div>`;
+    }
+
     // --- JSON 备份 ---
 
     function renderJsonBackup() {
@@ -1095,6 +1353,19 @@
         if (saveBtn) {
             saveBtn.addEventListener('click', saveProfile);
         }
+
+        // 导入 PDF
+        const importBtn = root.querySelector('#btn-import-pdf');
+        const pdfInput = root.querySelector('#pdf-file-input');
+        if (importBtn && pdfInput) {
+            importBtn.addEventListener('click', () => pdfInput.click());
+            pdfInput.addEventListener('change', () => {
+                if (pdfInput.files && pdfInput.files[0]) {
+                    uploadPdf(pdfInput.files[0]);
+                    pdfInput.value = '';
+                }
+            });
+        }
     }
 
     function updateTabsUI() {
@@ -1124,8 +1395,22 @@
                 deleteSkill(parseInt(btn.dataset.index, 10));
             } else if (action === 'delete-tag') {
                 deleteTag(btn.dataset.field, parseInt(btn.dataset.index, 10));
+            } else if (action === 'add-custom') {
+                addCustomField();
+            } else if (action === 'delete-custom') {
+                deleteCustomField(btn.dataset.key);
+            } else if (action === 'save-sensitive') {
+                saveLocalSensitiveFromUI();
             }
         });
+
+        // 自定义字段：回车快捷添加
+        const customVal = panel.querySelector('#custom-value-input');
+        if (customVal) {
+            customVal.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); addCustomField(); }
+            });
+        }
 
         // 技能添加
         const skillInput = panel.querySelector('#skill-name-input');
@@ -1337,6 +1622,11 @@
                 tech_stack: Array.isArray(p.tech_stack) ? p.tech_stack :
                     (typeof p.tech_stack === 'string' ? techStackToArray(p.tech_stack) : []),
             }));
+            // 前端 ↔ 后端字段名对齐：basic → basic_info，certificates → certifications
+            payload.basic_info = payload.basic;
+            delete payload.basic;
+            payload.certifications = payload.certificates;
+            delete payload.certificates;
 
             await API.post('/profiles/', payload);
             state.dirty = false;
@@ -1348,6 +1638,75 @@
             state.saving = false;
             updateSaveStatus();
         }
+    }
+
+    // ============ PDF 导入 ============
+
+    async function uploadPdf(file) {
+        if (!file) return;
+        API.toast('正在解析 PDF...', 'info', 3000);
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+            // 必须用 API.API_V1（含 http://localhost:8000 基址），否则相对路径会打到前端静态服务器 404
+            const resp = await fetch(API.API_V1 + '/profiles/import-pdf', { method: 'POST', body: fd });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.message || ('HTTP ' + resp.status));
+            const parsed = normalizeProfile((data.data && data.data.profile) || {});
+            const filled = countFilled(parsed);
+            mergeProfile(parsed);
+            state.dirty = true;
+            renderAll();
+            updateSaveStatus();
+            const srcMap = { llm: 'LLM', rules: '规则', empty: '空', error: '失败' };
+            const src = (data.data && srcMap[data.data.source]) || '未知';
+            if (filled === 0) {
+                API.toast('PDF 解析完成但未提取到有效信息（' + src + '），请手动填写', 'warn', 5000);
+            } else {
+                API.toast(`PDF 解析完成（${src}），已填充约 ${filled} 项，请核对后保存`, 'success', 5000);
+            }
+        } catch (e) {
+            API.toast('PDF 解析失败: ' + (e.message || '未知错误'), 'error', 6000);
+        }
+    }
+
+    function mergeProfile(parsed) {
+        const cur = state.profile;
+        if (parsed.basic) {
+            Object.keys(parsed.basic).forEach(k => {
+                if (parsed.basic[k] !== '' && parsed.basic[k] != null) cur.basic[k] = parsed.basic[k];
+            });
+        }
+        if (Array.isArray(parsed.education) && parsed.education.length) cur.education = parsed.education;
+        if (Array.isArray(parsed.experience) && parsed.experience.length) cur.experience = parsed.experience;
+        if (Array.isArray(parsed.projects) && parsed.projects.length) cur.projects = parsed.projects;
+        if (Array.isArray(parsed.skills) && parsed.skills.length) cur.skills = parsed.skills;
+        if (Array.isArray(parsed.certificates) && parsed.certificates.length) cur.certificates = parsed.certificates;
+        if (parsed.summary) {
+            Object.keys(parsed.summary).forEach(k => {
+                if (parsed.summary[k] !== '' && parsed.summary[k] != null) cur.summary[k] = parsed.summary[k];
+            });
+        }
+        if (parsed.job_intent) {
+            if (Array.isArray(parsed.job_intent.target_positions) && parsed.job_intent.target_positions.length)
+                cur.job_intent.target_positions = parsed.job_intent.target_positions;
+            if (Array.isArray(parsed.job_intent.target_cities) && parsed.job_intent.target_cities.length)
+                cur.job_intent.target_cities = parsed.job_intent.target_cities;
+            ['expected_salary', 'work_type', 'availability'].forEach(k => {
+                if (parsed.job_intent[k]) cur.job_intent[k] = parsed.job_intent[k];
+            });
+        }
+    }
+
+    function countFilled(p) {
+        let n = 0;
+        if (p.basic) Object.values(p.basic).forEach(v => { if (v !== '' && v != null) n++; });
+        n += (p.education || []).length;
+        n += (p.experience || []).length;
+        n += (p.projects || []).length;
+        n += (p.skills || []).length;
+        n += (p.certificates || []).length;
+        return n;
     }
 
     // ============ 全量渲染 ============

@@ -42,13 +42,13 @@ class UpdateProfileTool(BaseTool):
     """更新用户画像"""
 
     name = "update_profile"
-    description = "更新用户画像的某个部分。可更新的字段：basic_info(基本信息)、education(教育经历数组)、experience(工作经历数组)、skills(技能数组)、job_intent(求职意向)。传入的字段会整体覆盖原值。"
+    description = "更新用户画像的某个部分。可更新的字段：basic_info(基本信息)、education(教育经历数组)、experience(工作经历数组)、skills(技能数组)、job_intent(求职意向)。传入的字段会整体覆盖原值。注意：身份证号、家庭住址、银行卡、护照、紧急联系人等敏感字段会被自动剔除、不会保存。"
     parameters = {
         "type": "object",
         "properties": {
             "basic_info": {
                 "type": "object",
-                "description": "基本信息对象，包含 name/phone/email/gender/birth 等字段",
+                "description": "基本信息对象，包含 name/phone/email/gender/birth/ethnicity/political_status/marital_status/native_place/wechat/qq/website/github/linkedin/english_level/driving_license/job_status 等非敏感字段",
             },
             "education": {
                 "type": "array",
@@ -92,7 +92,9 @@ class UpdateProfileTool(BaseTool):
 
         updated_fields = []
         if basic_info is not None:
-            profile.basic_info = basic_info
+            # 安全：剔除敏感字段（身份证/住址/银行卡/护照/紧急联系人等），后端绝不持久化 PII
+            from app.core.sanitizer import strip_sensitive_basic
+            profile.basic_info = strip_sensitive_basic(basic_info)
             updated_fields.append("basic_info")
         if education is not None:
             profile.education = education

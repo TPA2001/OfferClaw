@@ -678,6 +678,107 @@ async def get_automation_status():
             "boss_search": "available",
             "auto_filler": "available",
             "login_check": "available",
+            "extension_api": "available",
         },
         message="智能填写模块运行正常",
     )
+
+
+# ============================================================================
+# 扩展专用端点（内测 V0.0.1，跳过收费、隐私优先）
+# ============================================================================
+
+class ExtMatchRequest(BaseModel):
+    """扩展端字段匹配请求（隐私优先，跳过订阅）"""
+    fields: List[Dict[str, Any]]
+    use_llm: bool = False                # 默认规则匹配（零隐私、免 LLM Key、免订阅）
+    page_url: Optional[str] = None       # 仅用于日志/缓存键，不参与匹配
+
+
+@router.post("/ext/match")
+async def ext_match_fields(
+    request: ExtMatchRequest,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """扩展端字段匹配（隐私优先）
+
+    与 /match 的区别：
+    - skip_subscription=True（内测不计费）
+    - 默认 use_llm=False（规则匹配，PII 不出后端内存）
+    - use_llm=True 时对画像 PII(姓名/手机/邮箱/出生)脱敏后再发 LLM
+    - 表单 current_value 中的 PII 也脱敏
+    - 敏感字段(身份证/住址)返回 source=local_sensitive + value=null，由扩展本地填
+    """
+    from app.automation.privacy import (
+        redact_flat_profile, redact_fields, restore_mappings,
+    )
+
+    logger.info(
+        f"[ext] 用户 {user_id} 请求扩展匹配: fields={len(request.fields)}, "
+        f"use_llm={request.use_llm}, url={request.page_url}"
+    )
+
+    try:
+        # 加载画像
+        profile = db.query(Profile).filter(Profile.user_id == user_id).first()
+        if not profile:
+            profile_data = {}
+        else:
+            profile_data = {
+                "basic_info": profile.basic_info or {},
+                "education": profile.education or [],
+                "experience": profile.experience or [],
+                "skills": profile.skills or [],
+                "projects": profile.projects or [],
+                "summary": profile.summary or {},
+                "certifications": profile.certifications or [],
+                "job_intent": profile.job_intent or {},
+            }
+
+        matcher = FieldMatcher()
+
+        if not request.use_llm:
+            # 规则匹配：profile 仅在内存处理，不调 LLM，零泄露
+            result = await matcher.match(
+                fields=request.fields,
+                user_id=user_id,
+                profile=profile_data,
+                db=db,
+                use_llm=False,
+                skip_subscription=True,
+            )
+            source = result.get("source", "rules")
+            privacy_mode = "rules"
+        else:
+            # LLM 模式：脱敏 PII 后再发 LLM
+            flat = matcher._ensure_flatten(profile_data)
+            redacted_flat, token_map = redact_flat_profile(flat)
+            redacted_fields, value_map = redact_fields(request.fields)
+            result = await matcher.match(
+                fields=redacted_fields,
+                user_id=user_id,
+                profile=redacted_flat,
+                db=db,
+                use_llm=True,
+                skip_subscription=True,
+            )
+            # 还原占位符为真实值
+            result["mappings"] = restore_mappings(
+                result["mappings"], token_map, value_map
+            )
+            source = "llm_redacted"
+            privacy_mode = "llm_redacted"
+
+        return ok(
+            {
+                "mappings": result["mappings"],
+                "profile_used": result["profile_used"],
+                "source": source,
+                "privacy_mode": privacy_mode,
+            },
+            message="扩展匹配完成" if privacy_mode == "rules" else "脱敏 LLM 匹配完成",
+        )
+    except Exception as e:
+        logger.error(f"[ext] 扩展匹配失败: {e}", exc_info=True)
+        raise InternalServerError(f"扩展匹配失败: {e}")

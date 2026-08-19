@@ -24,6 +24,7 @@ Playwright 自动填表服务
 """
 
 import asyncio
+import base64
 import logging
 import json
 from typing import List, Dict, Any, Optional
@@ -163,7 +164,7 @@ class AutoFillerService:
 
                         # 截图：填写前
                         shot = await page.screenshot(type="jpeg", quality=50)
-                        screenshot_before = shot.hex() if shot else None
+                        screenshot_before = base64.b64encode(shot).decode() if shot else None
 
                         # 注入视觉反馈样式
                         await page.add_style_tag(content="""
@@ -224,7 +225,7 @@ class AutoFillerService:
 
                         # 截图：填写后
                         shot = await page.screenshot(type="jpeg", quality=50)
-                        screenshot_after = shot.hex() if shot else None
+                        screenshot_after = base64.b64encode(shot).decode() if shot else None
 
                         # 自动提交
                         if auto_submit and submit_selector:
@@ -236,7 +237,7 @@ class AutoFillerService:
                                     submitted = True
                                     # 提交后再截一次图
                                     shot = await page.screenshot(type="jpeg", quality=50)
-                                    screenshot_after = shot.hex() if shot else None
+                                    screenshot_after = base64.b64encode(shot).decode() if shot else None
                             except Exception as e:
                                 logger.warning(f"自动提交失败: {e}")
 
@@ -318,17 +319,19 @@ class AutoFillerService:
                     } catch (e) {}
                 }
                 // 3. 旧版多重兜底（兼容未升级的 fields 数据）
+                //    注意：属性值来自任意网页（label/id 由目标站点控制），
+                //    必须用 CSS.escape 转义后再拼选择器，防止注入破坏语法/执行代码
                 if (entry.id) {
                     const el = document.getElementById(entry.id);
                     if (el) return el;
-                    const byName = document.querySelector(`[name="${entry.id}"]`);
+                    const byName = document.querySelector('[name="' + CSS.escape(entry.id) + '"]');
                     if (byName) return byName;
-                    const byAria = document.querySelector(`[aria-label="${entry.label}"]`);
+                    const byAria = document.querySelector('[aria-label="' + CSS.escape(entry.label || '') + '"]');
                     if (byAria) return byAria;
-                    const byPh = document.querySelector(`[placeholder="${entry.label}"]`);
+                    const byPh = document.querySelector('[placeholder="' + CSS.escape(entry.label || '') + '"]');
                     if (byPh) return byPh;
                     // data-oc-field 自定义属性
-                    const byData = document.querySelector(`[data-oc-field="${entry.id}"]`);
+                    const byData = document.querySelector('[data-oc-field="' + CSS.escape(entry.id) + '"]');
                     if (byData) return byData;
                 }
                 // 4. label[for] 关联（精确匹配 + 包含匹配）
@@ -544,21 +547,37 @@ class AutoFillerService:
             file_ref = value
 
         import os
+        from pathlib import Path as _Path
         from app.services.playwright_runtime import USER_DATA_ROOT
+
+        user_root = _Path(USER_DATA_ROOT).resolve()
+
+        def _safe_within_root(p: _Path) -> bool:
+            """路径必须位于 USER_DATA_ROOT 之内（防御 ../ 穿越与任意文件读取）"""
+            rp = p.resolve()
+            return rp == user_root or user_root in rp.parents
 
         candidate_paths = []
         if file_ref and (file_ref.startswith("/") or file_ref.startswith("\\") or ":" in file_ref[:2]):
-            # 绝对路径
-            candidate_paths.append(file_ref)
+            # 绝对路径：仅允许 USER_DATA_ROOT 内的文件
+            abs_path = _Path(file_ref)
+            if _safe_within_root(abs_path):
+                candidate_paths.append(str(abs_path))
+            else:
+                logger.warning(f"拒绝 USER_DATA_ROOT 之外的绝对路径: {file_ref}")
         elif file_ref == "resume" or not file_ref:
             # 默认简历文件名
             for ext in [".pdf", ".doc", ".docx"]:
                 candidate_paths.append(str(USER_DATA_ROOT / "autofill" / f"resume{ext}"))
                 candidate_paths.append(str(USER_DATA_ROOT / f"resume{ext}"))
         else:
-            # 相对路径，在 user_data_root 下查找
-            candidate_paths.append(str(USER_DATA_ROOT / file_ref))
-            candidate_paths.append(str(USER_DATA_ROOT / "autofill" / file_ref))
+            # 相对路径：在 user_data_root 下查找（解析后必须仍在根内，拒绝 ../ 穿越）
+            for base in (USER_DATA_ROOT, USER_DATA_ROOT / "autofill"):
+                cand = base / file_ref
+                if _safe_within_root(cand):
+                    candidate_paths.append(str(cand))
+                else:
+                    logger.warning(f"拒绝穿越路径: {file_ref}")
 
         # 找第一个存在的文件
         file_path = None

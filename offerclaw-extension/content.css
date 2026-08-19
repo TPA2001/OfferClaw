@@ -1,0 +1,21 @@
+/* OfferClaw 扩展 - 填写视觉反馈样式 */
+.oc-fill-ok {
+  box-shadow: 0 0 0 2px #22c55e !important;
+  outline: 2px solid #22c55e !important;
+  outline-offset: 1px;
+  transition: box-shadow 0.2s ease;
+}
+
+.oc-fill-warn {
+  box-shadow: 0 0 0 2px #f59e0b !important;
+  outline: 2px solid #f59e0b !important;
+  outline-offset: 1px;
+  transition: box-shadow 0.2s ease;
+}
+
+.oc-fill-skip {
+  box-shadow: 0 0 0 2px #9ca3af !important;
+  outline: 2px solid #9ca3af !important;
+  outline-offset: 1px;
+  transition: box-shadow 0.2s ease;
+}

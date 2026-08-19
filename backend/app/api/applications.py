@@ -91,6 +91,8 @@ class ApplicationCreate(BaseModel):
     tags: Optional[str] = None
     status: str = "applied"
     rejection_stage: Optional[str] = None
+    rejection_reason: Optional[str] = None  # 拒绝补充说明（自由文本）
+    assessment_type: Optional[str] = None   # 笔试类型（在线编程/行测/性格测试）
     interview_round: Optional[int] = None
     next_interview_at: Optional[str] = None  # ISO 字符串
     assessment_deadline: Optional[str] = None  # 笔试截止时间
@@ -111,6 +113,8 @@ class ApplicationUpdate(BaseModel):
     tags: Optional[str] = None
     status: Optional[str] = None
     rejection_stage: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    assessment_type: Optional[str] = None
     interview_round: Optional[int] = None
     next_interview_at: Optional[str] = None
     assessment_deadline: Optional[str] = None
@@ -163,6 +167,8 @@ def _to_dict(a: Application) -> dict:
         "status_label": VALID_STATUSES.get(a.status, a.status),
         "rejection_stage": a.rejection_stage,
         "rejection_stage_label": REJECTION_STAGES.get(a.rejection_stage, a.rejection_stage) if a.rejection_stage else None,
+        "rejection_reason": a.rejection_reason,
+        "assessment_type": a.assessment_type,
         "interview_round": a.interview_round,
         "interview_round_label": INTERVIEW_ROUND_LABELS.get(a.interview_round, str(a.interview_round)) if a.interview_round else None,
         "next_interview_at": a.next_interview_at.isoformat() if a.next_interview_at else None,
@@ -204,11 +210,13 @@ def _cleanup_status_fields(app: Application, status: str) -> None:
     """根据状态清理不相关的子字段（用于状态切换时保持数据一致性）"""
     if status != "rejected":
         app.rejection_stage = None
+        app.rejection_reason = None
     if status != "interview":
         app.interview_round = None
         app.next_interview_at = None
     if status != "assessment":
         app.assessment_deadline = None
+        app.assessment_type = None
     if status != "offer":
         app.offer_status = None
         app.offer_salary = None
@@ -450,7 +458,8 @@ async def get_by_company(
 
     result = []
     for c in companies.values():
-        positions = sorted(c.pop("positions"))
+        # 历史脏数据 position 可能为 None，排序前过滤，避免 TypeError
+        positions = sorted(p for p in c.pop("positions") if p is not None)
         latest_at = c.pop("latest_at")
         result.append({
             **c,
@@ -521,6 +530,8 @@ async def create_application(
         tags=body.tags,
         status=body.status,
         rejection_stage=body.rejection_stage,
+        rejection_reason=body.rejection_reason,
+        assessment_type=body.assessment_type,
         interview_round=body.interview_round,
         next_interview_at=_parse_dt(body.next_interview_at),
         assessment_deadline=_parse_dt(body.assessment_deadline),
@@ -591,6 +602,10 @@ async def update_application(
         if body.rejection_stage is not None and body.rejection_stage not in REJECTION_STAGES:
             raise BadRequestError(f"非法拒绝环节: {body.rejection_stage}")
         app.rejection_stage = body.rejection_stage
+    if "rejection_reason" in provided:
+        app.rejection_reason = body.rejection_reason
+    if "assessment_type" in provided:
+        app.assessment_type = body.assessment_type
     if "interview_round" in provided:
         if body.interview_round is not None and (body.interview_round < 1 or body.interview_round > 5):
             raise BadRequestError("面试轮次必须在 1-5 之间")

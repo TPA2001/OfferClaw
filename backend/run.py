@@ -31,6 +31,11 @@ if sys.platform == "win32":
         pass
 
 if __name__ == "__main__":
+    # 内测阶段：源码（非打包）运行默认开放授权门控，无需提交密钥即可使用全部功能。
+    # 正式发布为 frozen 打包构建，不受影响；如需显式关闭，设置 OFFERCLAW_DEV=0。
+    if not getattr(sys, "frozen", False) and "OFFERCLAW_DEV" not in os.environ:
+        os.environ["OFFERCLAW_DEV"] = "1"
+
     import uvicorn
 
     use_reload = "--reload" in sys.argv

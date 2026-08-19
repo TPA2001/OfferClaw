@@ -407,7 +407,8 @@ async def extract_cookies_from_browser(user_id: str = "default") -> Tuple[Dict[s
                     if name and value:
                         cookies[name] = value
 
-                has_required = bool(REQUIRED_COOKIES & set(cookies.keys()))
+                # 必须全部必需 cookie 都齐备才算登录态（子集判断，而非任一命中）
+                has_required = REQUIRED_COOKIES <= set(cookies.keys())
                 logger.info(
                     f"提取到 {len(cookies)} 个 zhipin.com cookie，"
                     f"必需 cookie 完整: {has_required}"

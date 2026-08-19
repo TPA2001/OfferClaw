@@ -84,7 +84,7 @@ app = FastAPI(
 
 # CORS middleware
 # 通过环境变量 CORS_ORIGINS 配置允许的来源（逗号分隔），默认放开常见本地开发端口
-_default_origins = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000"
+_default_origins = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000"
 _cors_env = os.getenv("CORS_ORIGINS", _default_origins)
 allow_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
 # 允许在开发环境用通配符，此时必须关闭 credentials
@@ -100,6 +100,9 @@ if "*" in allow_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
+    # 允许 OfferClaw 官方浏览器扩展跨域调用（Origin = chrome-extension://<id>）
+    # CORS spec 不支持 chrome-extension://* 通配，必须用正则
+    allow_origin_regex=r"chrome-extension://.*",
     allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],

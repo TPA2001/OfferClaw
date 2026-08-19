@@ -3,14 +3,15 @@
 提供用户画像的增删改查接口
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
-from app.core.response import ok, NotFoundError
+from app.core.response import ok, NotFoundError, BadRequestError
+from app.core.sanitizer import strip_sensitive_basic as _strip_sensitive_basic
 from app.models.profile import Profile
 
 router = APIRouter(prefix="/api/v1/profiles", tags=["profiles"])
@@ -23,7 +24,8 @@ class BasicInfo(BaseModel):
     email: Optional[str] = None
     gender: Optional[str] = None
     birth: Optional[str] = None
-    # 注意：身份证号和家庭住址等敏感信息不应提交到服务器
+    # 注意：身份证号、家庭住址、银行卡、护照等敏感信息不应提交到服务器，
+    # API 在落库前会再次剔除任何敏感 key（见 _strip_sensitive_basic）。
 
 
 class Education(BaseModel):
@@ -58,7 +60,7 @@ class ProfileCreate(BaseModel):
     basic_info: Optional[Dict[str, Any]] = {}
     education: Optional[List[Dict[str, Any]]] = []
     experience: Optional[List[Dict[str, Any]]] = []
-    skills: Optional[List[str]] = []
+    skills: Optional[List[Dict[str, Any]]] = []
     projects: Optional[List[Dict[str, Any]]] = []
     summary: Optional[Dict[str, Any]] = {}
     certifications: Optional[List[Dict[str, Any]]] = []
@@ -71,7 +73,7 @@ class ProfileUpdate(BaseModel):
     basic_info: Optional[Dict[str, Any]] = None
     education: Optional[List[Dict[str, Any]]] = None
     experience: Optional[List[Dict[str, Any]]] = None
-    skills: Optional[List[str]] = None
+    skills: Optional[List[Dict[str, Any]]] = None
     projects: Optional[List[Dict[str, Any]]] = None
     summary: Optional[Dict[str, Any]] = None
     certifications: Optional[List[Dict[str, Any]]] = None
@@ -123,7 +125,7 @@ async def create_or_update_profile(
         # 创建新画像
         profile = Profile(
             user_id=user_id,
-            basic_info=profile_data.basic_info or {},
+            basic_info=_strip_sensitive_basic(profile_data.basic_info or {}),
             education=profile_data.education or [],
             experience=profile_data.experience or [],
             skills=profile_data.skills or [],
@@ -137,7 +139,7 @@ async def create_or_update_profile(
     else:
         # 更新现有画像
         if profile_data.basic_info is not None:
-            profile.basic_info = profile_data.basic_info
+            profile.basic_info = _strip_sensitive_basic(profile_data.basic_info)
         if profile_data.education is not None:
             profile.education = profile_data.education
         if profile_data.experience is not None:
@@ -201,9 +203,14 @@ async def get_profile_completion(
     sections = {}
     missing = []
 
-    # 基本信息（5 个字段）
+    # 基本信息（拓展后的标准字段）
     b = profile.basic_info or {}
-    basic_keys = ["name", "phone", "email", "gender", "birth"]
+    basic_keys = [
+        "name", "gender", "birth", "phone", "email", "location",
+        "ethnicity", "political_status", "marital_status", "native_place",
+        "wechat", "qq", "website", "github", "linkedin",
+        "english_level", "driving_license", "job_status",
+    ]
     basic_filled = sum(1 for k in basic_keys if b.get(k))
     sections["basic_info"] = {
         "total": len(basic_keys), "filled": basic_filled,
@@ -326,6 +333,20 @@ async def get_profile_flatten(
     flat["email"] = b.get("email", "")
     flat["gender"] = b.get("gender", "")
     flat["birth"] = b.get("birth", "")
+    flat["age"] = b.get("age", "")
+    flat["location"] = b.get("location", "")
+    flat["ethnicity"] = b.get("ethnicity", "")
+    flat["political_status"] = b.get("political_status", "")
+    flat["marital_status"] = b.get("marital_status", "")
+    flat["native_place"] = b.get("native_place", "")
+    flat["wechat"] = b.get("wechat", "")
+    flat["qq"] = b.get("qq", "")
+    flat["website"] = b.get("website", "")
+    flat["github"] = b.get("github", "")
+    flat["linkedin"] = b.get("linkedin", "")
+    flat["english_level"] = b.get("english_level", "")
+    flat["driving_license"] = b.get("driving_license", "")
+    flat["job_status"] = b.get("job_status", "")
 
     # 求职意向
     j = profile.job_intent or {}
@@ -376,7 +397,11 @@ async def get_profile_flatten(
     # 技能
     skills = profile.skills or []
     flat["skills"] = skills
-    flat["skills_str"] = "、".join(skills)
+    # 技能可能是字符串，也可能是 {name, level, category} 对象（Web 端格式）
+    skill_names = [
+        (s.get("name") if isinstance(s, dict) else str(s)) for s in skills
+    ]
+    flat["skills_str"] = "、".join(filter(None, skill_names))
 
     # 项目经历
     projs = profile.projects or []
@@ -412,6 +437,43 @@ async def get_profile_flatten(
         flat[f"extra_{k}"] = v
 
     return ok(flat, message="获取成功")
+
+
+@router.post("/import-pdf")
+async def import_pdf_resume(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user),
+):
+    """从 PDF 简历解析画像（不直接保存，返回结构化数据供前端确认后保存）
+
+    解析策略：
+    - pdfplumber 提取文本（本地，非 LLM）
+    - 优先 LLM 结构化（用户已配置 Key），否则规则降级
+    - 敏感字段（身份证/住址）后端不存储，解析结果也不含这些
+    """
+    from app.services.resume_parser import parse_resume
+
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise BadRequestError("仅支持 PDF 文件")
+
+    pdf_bytes = await file.read()
+    if not pdf_bytes:
+        raise BadRequestError("PDF 文件为空")
+    # 防超大文件导致内存压力（20MB 上限，正常简历远小于此）
+    if len(pdf_bytes) > 20 * 1024 * 1024:
+        raise BadRequestError("PDF 文件过大（最大 20MB）")
+
+    profile, text, source = await parse_resume(pdf_bytes)
+    source_label = {"llm": "LLM", "rules": "规则", "empty": "空", "error": "失败"}.get(source, source)
+    return ok(
+        {
+            "profile": profile,
+            "source": source,
+            "text_length": len(text),
+            "text_preview": text[:500] if text else "",
+        },
+        message=f"PDF 解析完成（{source_label}）",
+    )
 
 
 def _calc_exp_years(exps: list) -> str:
