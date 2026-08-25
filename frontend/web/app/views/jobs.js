@@ -66,7 +66,7 @@
     transition: border-color 0.25s var(--ease), background 0.25s var(--ease);
 }
 .login-banner.ok { border-color: var(--olive); background: var(--olive-soft); }
-.login-banner.warn { border-color: var(--warn); background: #fdf6e3; }
+.login-banner.warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--card)); }
 .login-banner.err { border-color: var(--danger); background: var(--terra-soft); }
 .login-banner-icon {
     width: 34px; height: 34px;
@@ -124,7 +124,7 @@
     outline: none;
     border-color: var(--olive);
     box-shadow: 0 0 0 3px var(--olive-glow);
-    background: #fff;
+    background: var(--card);
 }
 .search-bar .jobs-city {
     padding: 0.5rem 0.6rem;
@@ -320,6 +320,13 @@
     background: var(--olive-soft);
     color: var(--olive-dark);
 }
+/* 状态徽章按状态着色，与看板色板一致 */
+.mine-status.st-applied { background: var(--st-applied-soft); color: var(--st-applied-deep); }
+.mine-status.st-assessment { background: var(--st-assessment-soft); color: var(--st-assessment-deep); }
+.mine-status.st-interview { background: var(--st-interview-soft); color: var(--st-interview-deep); }
+.mine-status.st-offer { background: var(--st-offer-soft); color: var(--st-offer-deep); }
+.mine-status.st-rejected { background: var(--st-rejected-soft); color: var(--st-rejected-deep); }
+.mine-status.st-withdrawn { background: var(--st-withdrawn-soft); color: var(--st-withdrawn-deep); }
 .mine-position {
     font-size: 0.82rem;
     color: var(--ink-soft);
@@ -375,6 +382,24 @@
         if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
         if (diff < 604800000) return Math.floor(diff / 86400000) + '天前';
         return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+    }
+
+    /** 投递/更新时间：显示具体日期（当年省略年份），1 天内附加相对时间；悬浮提示完整时间 */
+    function formatAppliedMeta(ts) {
+        if (!ts) return '';
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return '';
+        const pad = n => String(n).padStart(2, '0');
+        const now = new Date();
+        const md = pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+        const sameYear = d.getFullYear() === now.getFullYear();
+        const datePart = sameYear ? md : String(d.getFullYear()).slice(2) + '-' + md;
+        const diff = Date.now() - d.getTime();
+        const rel = (diff >= 0 && diff < 86400000) ? ' · ' + formatRelative(ts) : '';
+        return {
+            short: datePart + rel,
+            full: d.getFullYear() + '-' + md + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()),
+        };
     }
 
     /** 规范化 Boss 搜索结果（兼容不同字段命名） */
@@ -577,20 +602,21 @@
         const salary = pick(app, 'salary_range', 'offer_salary');
         const loc = pick(app, 'location', 'offer_location');
         const source = app.source || '';
-        const dateText = formatRelative(pick(app, 'applied_at', 'updated_at'));
+        const appliedTs = pick(app, 'applied_at', 'updated_at');
+        const appliedMeta = formatAppliedMeta(appliedTs);
 
         const meta = [];
         if (salary) meta.push(`<span>${esc(salary)}</span>`);
         if (loc) meta.push(`<span>📍 ${esc(loc)}</span>`);
         if (source) meta.push(`<span>来源: ${esc(source)}</span>`);
-        if (dateText) meta.push(`<span>${esc(dateText)}</span>`);
+        if (appliedMeta) meta.push(`<span title="投递于 ${esc(appliedMeta.full)}">${esc(appliedMeta.short)}</span>`);
 
         return `
         <div class="mine-item st-${status}">
             <div class="mine-main">
                 <div class="mine-row1">
                     <span class="mine-company">${esc(app.company || '未知公司')}</span>
-                    <span class="mine-status">${esc(statusLabel)}</span>
+                    <span class="mine-status st-${status}">${esc(statusLabel)}</span>
                 </div>
                 <div class="mine-position">${esc(app.position || '未知职位')}</div>
                 ${meta.length ? `<div class="mine-meta">${meta.join('')}</div>` : ''}

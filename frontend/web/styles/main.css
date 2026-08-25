@@ -1,53 +1,79 @@
 /* ============================================
-   OfferClaw Design System
-   Aesthetic: Editorial Paper Archive
-   - Warm paper background with subtle texture
-   - Deep olive as primary, terra as accent
+   OfferClaw Design System v2 — Modern Neutral Canvas
+   参考 GitHub Primer / Linear / Notion 的配色纪律：
+   - 近中性微着色画布（低饱和底色，任何主色放上去都协调）
+   - 每个主题一个明确主色（--olive，可被主色调选择器覆盖）
+   - 状态/语义色采用主流 Tailwind 色阶（浅色主题 600 / 暗色主题 400）
+   - 所有派生色（-dark/-soft/-deep/-glow）用 var(--ink) / var(--paper-light)
+     混合派生，明暗主题自动适配，无需逐主题覆写
    - Noto Serif SC for display, Noto Sans SC for body
    ============================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700;900&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-    /* Paper palette */
-    --paper: #f5f1e8;
-    --paper-light: #faf8f3;
-    --paper-deep: #ede7d6;
-    --card: #fefdf9;
+    /* Canvas — 暖调中性白（Ivory） */
+    --paper: #f7f6f3;
+    --paper-light: #fcfbf9;
+    --paper-deep: #eeece6;
+    --card: #ffffff;
 
     /* Ink */
-    --ink: #2d2a26;
-    --ink-soft: #6b665e;
-    --ink-faint: #a8a299;
-    --ink-ghost: #c7c0b0;
+    --ink: #27251f;
+    --ink-soft: #6d6a61;
+    --ink-faint: #a29d92;
+    --ink-ghost: #c9c4b8;
 
-    /* Accents — olive 是主色，衍生色由 color-mix 自动派生 */
-    --olive: #6b7d0a;
-    --olive-dark: color-mix(in srgb, var(--olive) 78%, #000);
-    --olive-soft: color-mix(in srgb, var(--olive) 18%, var(--paper-light));
-    --olive-glow: color-mix(in srgb, var(--olive) 12%, transparent);
+    /* Primary — 主色（默认现代蓝，可被主色调选择器覆盖）
+       -dark 混向 ink：浅色主题变深（悬浮态），暗色主题自动变浅 */
+    --olive: #2563eb;
+    --olive-dark: color-mix(in srgb, var(--olive) 78%, var(--ink));
+    --olive-soft: color-mix(in srgb, var(--olive) 12%, var(--paper-light));
+    --olive-glow: color-mix(in srgb, var(--olive) 14%, transparent);
 
-    --terra: #c4664a;
-    --terra-soft: #f4ddd2;
-    --terra-deep: #9c4a30;
+    /* Warm secondary — 暖色辅助（悬浮强调、横幅等），同样自动派生 */
+    --terra: #e8590c;
+    --terra-soft: color-mix(in srgb, var(--terra) 10%, var(--paper-light));
+    --terra-deep: color-mix(in srgb, var(--terra) 80%, var(--ink));
 
-    /* Status colors */
-    --st-applied: #6b7d0a;
-    --st-assessment: #b8860b;
-    --st-interview: #2d6a9f;
-    --st-offer: #5a7a3a;
-    --st-rejected: #b94a3a;
-    --st-withdrawn: #8a8378;
+    /* Status colors — 主流语义色板（Tailwind 600 系）
+       蓝=已投递(进行中,与主色同族) 琥珀=笔试(待办) 紫=面试(活跃)
+       翠绿=录用(成功) 红=拒绝 石墨=撤回(归档)
+       -deep 混向 ink → 浅色主题深字、暗色主题浅字，自动适配 */
+    --st-applied: #2563eb;
+    --st-applied-soft: color-mix(in srgb, var(--st-applied) 12%, var(--paper-light));
+    --st-applied-deep: color-mix(in srgb, var(--st-applied) 80%, var(--ink));
+
+    --st-assessment: #d97706;
+    --st-assessment-soft: color-mix(in srgb, var(--st-assessment) 12%, var(--paper-light));
+    --st-assessment-deep: color-mix(in srgb, var(--st-assessment) 80%, var(--ink));
+
+    --st-interview: #7c3aed;
+    --st-interview-soft: color-mix(in srgb, var(--st-interview) 11%, var(--paper-light));
+    --st-interview-deep: color-mix(in srgb, var(--st-interview) 80%, var(--ink));
+
+    --st-offer: #059669;
+    --st-offer-soft: color-mix(in srgb, var(--st-offer) 11%, var(--paper-light));
+    --st-offer-deep: color-mix(in srgb, var(--st-offer) 80%, var(--ink));
+
+    --st-rejected: #dc2626;
+    --st-rejected-soft: color-mix(in srgb, var(--st-rejected) 10%, var(--paper-light));
+    --st-rejected-deep: color-mix(in srgb, var(--st-rejected) 80%, var(--ink));
+
+    --st-withdrawn: #64748b;
+    --st-withdrawn-soft: color-mix(in srgb, var(--st-withdrawn) 12%, var(--paper-light));
+    --st-withdrawn-deep: color-mix(in srgb, var(--st-withdrawn) 78%, var(--ink));
 
     /* Lines */
-    --line: #e0dacd;
-    --line-soft: #ece7da;
-    --line-faint: #f0ece1;
+    --line: #e6e3db;
+    --line-soft: #edebe4;
+    --line-faint: #f2f0ea;
 
-    /* Semantic */
-    --danger: #b94a3a;
-    --success: #5a7a3a;
-    --warn: #b8860b;
+    /* Semantic — 与状态色板对齐（Tailwind 600 系） */
+    --danger: #dc2626;
+    --success: #059669;
+    --warn: #d97706;
+    --info: #2563eb;
 
     /* Typography */
     --font-serif: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
@@ -79,11 +105,11 @@ body {
     color: var(--ink);
     min-height: 100vh;
     line-height: 1.6;
-    /* Paper texture: subtle dotted noise + warm radial gradients */
+    /* 氛围：主色光晕 + 暖色微光 + 中心提亮，全部由变量派生 */
     background-image:
-        radial-gradient(circle at 15% 8%, rgba(107, 125, 10, 0.05) 0%, transparent 35%),
-        radial-gradient(circle at 85% 92%, rgba(196, 102, 74, 0.04) 0%, transparent 40%),
-        radial-gradient(circle at 50% 50%, rgba(255, 253, 245, 0.4) 0%, transparent 70%);
+        radial-gradient(circle at 15% 8%, var(--olive-glow) 0%, transparent 35%),
+        radial-gradient(circle at 85% 92%, color-mix(in srgb, var(--terra) 4%, transparent) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.5) 0%, transparent 70%);
     background-attachment: fixed;
 }
 
@@ -341,7 +367,7 @@ body::before {
 }
 
 .btn-danger:hover {
-    background: #fbeae6;
+    background: color-mix(in srgb, var(--danger) 9%, var(--card));
     border-color: var(--danger);
 }
 
@@ -594,9 +620,9 @@ body::before {
     display: inline-block;
 }
 
-.dot.ok { background: var(--success); box-shadow: 0 0 0 3px rgba(90, 122, 58, 0.15); }
-.dot.err { background: var(--danger); box-shadow: 0 0 0 3px rgba(185, 74, 58, 0.15); }
-.dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.15); }
+.dot.ok { background: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 15%, transparent); }
+.dot.err { background: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 15%, transparent); }
+.dot.warn { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 15%, transparent); }
 .dot.pending { background: var(--ink-faint); }
 
 /* ============================================
@@ -2088,6 +2114,55 @@ body::before {
     margin-bottom: 0.4rem;
 }
 
+/* --- 紧凑标题行：眉标 + 标题 + 副标题 放同一行 --- */
+.view-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+.view-header-inline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    padding-bottom: 0.75rem;
+}
+.view-header-inline .view-title-row h1 { margin: 0; }
+.view-header-inline .header-eyebrow {
+    margin: 0;
+    padding: 0.16rem 0.55rem;
+    background: var(--olive-soft);
+    border-radius: 5px;
+    font-size: 0.62rem;
+    letter-spacing: 1.5px;
+    line-height: 1.4;
+}
+.view-header-inline .view-subtitle {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 0.86rem;
+    white-space: nowrap;
+}
+/* 带搜索框的一行式标题：搜索框吸右，标题在左，副标题紧随标题 */
+.view-header-inline.has-search {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem 1rem;
+    position: relative;
+}
+.view-header-inline.has-search .view-title-row { flex-shrink: 0; }
+.view-header-inline.has-search .kb-search-wrap {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+@media (max-width: 720px) {
+    .view-header-inline .view-subtitle { white-space: normal; }
+    .view-header-inline.has-search { flex-wrap: wrap; }
+    .view-header-inline.has-search .kb-search-wrap { margin-left: 0; flex: 1 1 240px; }
+}
+
 /* --- Skeleton loading --- */
 .skeleton-row {
     height: 14px;
@@ -2165,140 +2240,141 @@ body::before {
    Dark themes also get body.is-dark for texture flip.
    ============================================ */
 
-/* --- Theme: ink — Midnight Ink (dark editorial) --- */
+/* --- Theme: ink — 午夜石墨（暗色中性，GitHub Dark 风） --- */
 html[data-theme="ink"] {
-    --paper: #14171c;
-    --paper-light: #1a1e25;
-    --paper-deep: #0f1217;
-    --card: #1c2128;
+    --paper: #101216;
+    --paper-light: #171a20;
+    --paper-deep: #0b0d10;
+    --card: #1a1e25;
 
-    --ink: #e8e6e0;
-    --ink-soft: #a8a39a;
-    --ink-faint: #6b665e;
-    --ink-ghost: #3a3a3a;
+    --ink: #ececee;
+    --ink-soft: #a6abb5;
+    --ink-faint: #6d7280;
+    --ink-ghost: #333842;
 
-    --olive: #7da3d1;
+    --olive: #60a5fa;
+    --terra: #e3b04b;
 
-    --terra: #d4a574;
-    --terra-soft: #3a2e20;
-    --terra-deep: #b08850;
-
-    --line: #2a2f37;
-    --line-soft: #23272e;
-    --line-faint: #1e2228;
+    --line: #262b33;
+    --line-soft: #20242b;
+    --line-faint: #1b1f26;
 
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
-    --shadow-olive: 0 4px 16px color-mix(in srgb, var(--olive) 18%, transparent);
 }
 
-/* --- Theme: forest — Deep Forest (organic, dark green) --- */
+/* --- Theme: forest — 森林（暗色绿调微着色） --- */
 html[data-theme="forest"] {
-    --paper: #1a2820;
-    --paper-light: #213026;
-    --paper-deep: #14201a;
-    --card: #243429;
+    --paper: #101612;
+    --paper-light: #161e18;
+    --paper-deep: #0a0f0c;
+    --card: #19221b;
 
-    --ink: #e8e3d0;
-    --ink-soft: #a8a090;
-    --ink-faint: #6b6558;
-    --ink-ghost: #3a4538;
+    --ink: #e5ebe2;
+    --ink-soft: #a3b0a2;
+    --ink-faint: #6c7870;
+    --ink-ghost: #2d3a31;
 
-    --olive: #8fb049;
+    --olive: #4ade80;
+    --terra: #e3b04b;
 
-    --terra: #d4a554;
-    --terra-soft: #3a2e18;
-    --terra-deep: #a88040;
-
-    --line: #2e3a30;
-    --line-soft: #263228;
-    --line-faint: #1f2a22;
+    --line: #243028;
+    --line-soft: #1e2921;
+    --line-faint: #19231c;
 
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
-/* --- Theme: ocean — Tidal Deep (cool, dark blue) --- */
+/* --- Theme: ocean — 深海（暗色蓝调微着色） --- */
 html[data-theme="ocean"] {
-    --paper: #0f1a24;
-    --paper-light: #15222e;
-    --paper-deep: #0a141d;
-    --card: #182634;
+    --paper: #0d1420;
+    --paper-light: #131c2b;
+    --paper-deep: #090e17;
+    --card: #16202f;
 
-    --ink: #dde8f0;
-    --ink-soft: #8fa0b0;
-    --ink-faint: #5a6878;
-    --ink-ghost: #2e3a48;
+    --ink: #e3eaf4;
+    --ink-soft: #9daabc;
+    --ink-faint: #66748c;
+    --ink-ghost: #283448;
 
-    --olive: #4db8a8;
+    --olive: #22d3ee;
+    --terra: #e8a35c;
 
-    --terra: #7dc4e8;
-    --terra-soft: #1e3445;
-    --terra-deep: #5098b8;
-
-    --line: #243442;
-    --line-soft: #1e2c38;
-    --line-faint: #18242e;
+    --line: #1e2a3d;
+    --line-soft: #18232f;
+    --line-faint: #141d29;
 
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
-/* --- Theme: sunset — Desert Sunset (warm light editorial) --- */
+/* --- Theme: sunset — 暖沙（浅色暖调微着色） --- */
 html[data-theme="sunset"] {
-    --paper: #faf3ec;
-    --paper-light: #fef8f2;
-    --paper-deep: #f3e6d8;
-    --card: #fffaf4;
+    --paper: #faf6f0;
+    --paper-light: #fefbf7;
+    --paper-deep: #f1eadd;
+    --card: #fffdf9;
 
-    --ink: #3a2820;
-    --ink-soft: #7d5f50;
-    --ink-faint: #b09080;
-    --ink-ghost: #d8c0b0;
+    --ink: #35281f;
+    --ink-soft: #786558;
+    --ink-faint: #ac988a;
+    --ink-ghost: #d8c8ba;
 
-    --olive: #d4664a;
+    --olive: #e0563f;
+    --terra: #b45309;
 
-    --terra: #c8854a;
-    --terra-soft: #f4e0c8;
-    --terra-deep: #9c6028;
+    --line: #ead9c8;
+    --line-soft: #f0e4d5;
+    --line-faint: #f4ece0;
 
-    --line: #ecd8c4;
-    --line-soft: #f2e4d2;
-    --line-faint: #f6ece0;
-
-    --shadow-sm: 0 1px 3px rgba(58, 40, 32, 0.05);
-    --shadow-md: 0 4px 16px rgba(58, 40, 32, 0.1);
-    --shadow-lg: 0 12px 40px rgba(58, 40, 32, 0.14);
+    --shadow-sm: 0 1px 3px rgba(53, 40, 31, 0.05);
+    --shadow-md: 0 4px 16px rgba(53, 40, 31, 0.1);
+    --shadow-lg: 0 12px 40px rgba(53, 40, 31, 0.14);
 }
 
-/* --- Theme: mono — Brutalist Mono (stark, single red accent) --- */
+/* --- Theme: mono — 极简黑白（Vercel 式黑主色） --- */
 html[data-theme="mono"] {
     --paper: #fafafa;
     --paper-light: #ffffff;
     --paper-deep: #f0f0f0;
     --card: #ffffff;
 
-    --ink: #0a0a0a;
-    --ink-soft: #555555;
-    --ink-faint: #999999;
-    --ink-ghost: #d0d0d0;
+    --ink: #111111;
+    --ink-soft: #525252;
+    --ink-faint: #a3a3a3;
+    --ink-ghost: #d4d4d4;
 
-    --olive: #d63030;
+    --olive: #171717;
+    --terra: #737373;
 
-    --terra: #888888;
-    --terra-soft: #eeeeee;
-    --terra-deep: #555555;
-
-    --line: #e0e0e0;
+    --line: #e5e5e5;
     --line-soft: #ececec;
     --line-faint: #f4f4f4;
 
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
     --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+/* --- Dark themes: 状态/语义色提亮（Tailwind 400 系，soft/deep 随基色+ink 自动派生） --- */
+html[data-theme="ink"],
+html[data-theme="forest"],
+html[data-theme="ocean"] {
+    --st-applied: #60a5fa;
+    --st-assessment: #fbbf24;
+    --st-interview: #a78bfa;
+    --st-offer: #34d399;
+    --st-rejected: #f87171;
+    --st-withdrawn: #94a3b8;
+
+    --danger: #f87171;
+    --success: #34d399;
+    --warn: #fbbf24;
+    --info: #60a5fa;
 }
 
 /* --- Dark theme texture adjustments --- */

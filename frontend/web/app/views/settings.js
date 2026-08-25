@@ -412,12 +412,13 @@
             </button>`;
         }).join('');
 
-        // 主色调选择器：点击颜色圆点即时切换主色
+        // 主色调选择器：点击颜色圆点即时切换主色（圆点颜色随主题明暗显示对应变体）
         const accents = Theme.ACCENTS || [];
         const accentDots = accents.map(a => {
             const isActive = a.id === accent;
+            const dotColor = (Theme.accentColor ? Theme.accentColor(a.id) : '') || a.color;
             return `
-            <button class="accent-dot ${isActive ? 'active' : ''}" data-accent-id="${esc(a.id)}" style="--dot-color:${a.color}" title="${esc(a.name)}（${esc(a.color)}）">
+            <button class="accent-dot ${isActive ? 'active' : ''}" data-accent-id="${esc(a.id)}" style="--dot-color:${dotColor}" title="${esc(a.name)}">
                 <span class="accent-dot-inner"></span>
             </button>`;
         }).join('');

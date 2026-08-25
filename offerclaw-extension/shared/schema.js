@@ -44,7 +44,10 @@
         basic: {
           name: "", gender: "", age: "", birth: "",
           phone: "", email: "", location: "",
-          ethnicity: "", political_status: "", marital_status: "", native_place: "",
+          ethnicity: "", nationality: "", hukou: "", current_city: "",
+          political_status: "", marital_status: "", native_place: "",
+          current_company: "", current_title: "", years_experience: "",
+          height: "", weight: "",
           wechat: "", qq: "", website: "", github: "", linkedin: "",
           english_level: "", driving_license: "", job_status: "",
           job_intent: "", avatar: ""

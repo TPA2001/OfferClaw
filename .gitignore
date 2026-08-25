@@ -68,6 +68,7 @@ offerclaw.db-journal
 
 # 第三方参考项目（GPL-3.0，与 OfferClaw MIT 协议隔离，不提交到本仓库）
 # 旧的 AI-Resume-Form-Filling-Assistant-master 已清理出项目
+AI-Resume-Form-Filling-Assistant-master/
 
 # 根目录的简历/资料类文件（含个人信息，留在项目根目录外）
 /*.pdf

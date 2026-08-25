@@ -293,6 +293,20 @@ async def health():
     }
 
 
+@app.get("/api/v1/status")
+async def api_status():
+    """扩展状态接口：轻量级连接检测（无需鉴权，无需激活）"""
+    return {
+        "code": 0,
+        "message": "ok",
+        "data": {
+            "version": "1.1.0",
+            "backend_url": "http://localhost:8000",
+            "running": True,
+        },
+    }
+
+
 # === 前端静态文件挂载（必须在所有 API 路由之后注册，最后匹配）===
 # 开发模式：服务项目根 frontend/web/；打包模式：服务 _MEIPASS/frontend/web/
 from pathlib import Path as _Path

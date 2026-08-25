@@ -94,7 +94,7 @@
     outline: none;
     border-color: var(--olive);
     box-shadow: 0 0 0 3px var(--olive-glow);
-    background: #fff;
+    background: var(--card);
 }
 .iv-form-actions {
     display: flex; gap: 0.6rem; align-items: center;
@@ -268,8 +268,8 @@
     border-radius: 10px;
     white-space: nowrap;
 }
-.q-quality.good { background: rgba(40, 167, 69, 0.12); color: var(--success); }
-.q-quality.mid  { background: #fdf6e3; color: var(--warn); }
+.q-quality.good { background: color-mix(in srgb, var(--success) 13%, var(--card)); color: var(--success); }
+.q-quality.mid  { background: color-mix(in srgb, var(--warn) 13%, var(--card)); color: var(--warn); }
 .q-quality.bad  { background: var(--terra-soft); color: var(--terra-deep); }
 
 /* --- 历史复盘列表 --- */
@@ -328,8 +328,8 @@
     border-radius: 10px;
     flex-shrink: 0;
 }
-.review-score-badge.good { background: rgba(40, 167, 69, 0.12); color: var(--success); }
-.review-score-badge.mid  { background: #fdf6e3; color: var(--warn); }
+.review-score-badge.good { background: color-mix(in srgb, var(--success) 13%, var(--card)); color: var(--success); }
+.review-score-badge.mid  { background: color-mix(in srgb, var(--warn) 13%, var(--card)); color: var(--warn); }
 .review-score-badge.bad  { background: var(--terra-soft); color: var(--terra-deep); }
 .review-score-badge.none { background: var(--paper-deep); color: var(--ink-faint); }
 .review-preview {

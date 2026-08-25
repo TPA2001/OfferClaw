@@ -59,69 +59,76 @@ window.sanitizeUrl = function(url) {
     var DENSITY_KEY = "oc_density";
     var ACCENT_KEY = "oc_accent";
 
-    // 主题元数据：swatches 顺序 [paper, ink, primary, accent]
+    // 主题元数据：swatches 顺序 [paper, ink, primary, secondary]
+    // 设计纪律（参考 GitHub Primer / Linear / Notion）：
+    // 近中性微着色画布 + 每主题一个明确主色，保证任何状态色/主色调放上去都协调
     var THEMES = [
         {
             id: "paper",
-            name: "纸质档案",
-            desc: "Editorial Paper",
+            name: "纸白",
+            desc: "Ivory & Blue",
             dark: false,
-            swatches: ["#f5f1e8", "#2d2a26", "#6b7d0a", "#c4664a"],
+            swatches: ["#f7f6f3", "#27251f", "#2563eb", "#e8590c"],
         },
         {
             id: "ink",
-            name: "午夜墨色",
-            desc: "Midnight Ink",
+            name: "午夜",
+            desc: "Midnight Graphite",
             dark: true,
-            swatches: ["#14171c", "#e8e6e0", "#7da3d1", "#d4a574"],
+            swatches: ["#101216", "#ececee", "#60a5fa", "#e3b04b"],
         },
         {
             id: "forest",
-            name: "深林",
+            name: "森林",
             desc: "Deep Forest",
             dark: true,
-            swatches: ["#1a2820", "#e8e3d0", "#8fb049", "#d4a554"],
+            swatches: ["#101612", "#e5ebe2", "#4ade80", "#e3b04b"],
         },
         {
             id: "ocean",
-            name: "潮汐深蓝",
-            desc: "Tidal Deep",
+            name: "深海",
+            desc: "Deep Sea",
             dark: true,
-            swatches: ["#0f1a24", "#dde8f0", "#4db8a8", "#7dc4e8"],
+            swatches: ["#0d1420", "#e3eaf4", "#22d3ee", "#e8a35c"],
         },
         {
             id: "sunset",
-            name: "沙漠日落",
-            desc: "Desert Sunset",
+            name: "暖沙",
+            desc: "Warm Sand",
             dark: false,
-            swatches: ["#faf3ec", "#3a2820", "#d4664a", "#c8854a"],
+            swatches: ["#faf6f0", "#35281f", "#e0563f", "#b45309"],
         },
         {
             id: "mono",
-            name: "极简赤墨",
-            desc: "Brutalist Mono",
+            name: "极简",
+            desc: "Mono Contrast",
             dark: false,
-            swatches: ["#fafafa", "#0a0a0a", "#d63030", "#888888"],
+            swatches: ["#fafafa", "#111111", "#171717", "#737373"],
         },
     ];
 
     var THEME_MAP = {};
     THEMES.forEach(function (t) { THEME_MAP[t.id] = t; });
 
-    // 主色调选项：点击后 --olive 变成该颜色，衍生色由 color-mix 自动派生
+    // 主色调选项（按色环排序，主流 Tailwind 色阶）：
+    // color = 浅色主题用（600 系，深底白字）；colorDark = 暗色主题用（400 系提亮）
+    // 点击后 --olive 变成对应变体，soft/dark/glow 由 color-mix 自动派生
     var ACCENTS = [
-        { id: "olive",   name: "橄榄",   color: "#6b7d0a" },
-        { id: "ocean",   name: "海蓝",   color: "#2d6a9f" },
-        { id: "terra",   name: "砖红",   color: "#c4664a" },
-        { id: "amber",   name: "琥珀",   color: "#b8860b" },
-        { id: "emerald", name: "翡翠",   color: "#5a7a3a" },
-        { id: "violet",  name: "紫罗兰", color: "#7a4d8f" },
-        { id: "teal",    name: "青绿",   color: "#4db8a8" },
-        { id: "rose",    name: "玫红",   color: "#c04d6f" },
-        { id: "indigo",  name: "靛蓝",   color: "#4d5d9f" },
-        { id: "gold",    name: "金橙",   color: "#d4a554" },
-        { id: "crimson", name: "朱红",   color: "#d63030" },
-        { id: "slate",   name: "岩灰",   color: "#5a6878" },
+        { id: "blue",    name: "海蓝",   color: "#2563eb", colorDark: "#60a5fa" },
+        { id: "sky",     name: "天蓝",   color: "#0284c7", colorDark: "#38bdf8" },
+        { id: "cyan",    name: "晴青",   color: "#0891b2", colorDark: "#22d3ee" },
+        { id: "teal",    name: "青绿",   color: "#0d9488", colorDark: "#2dd4bf" },
+        { id: "emerald", name: "翡翠",   color: "#059669", colorDark: "#34d399" },
+        { id: "olive",   name: "橄榄",   color: "#65a30d", colorDark: "#a3e635" },
+        { id: "gold",    name: "暖金",   color: "#ca8a04", colorDark: "#facc15" },
+        { id: "amber",   name: "琥珀",   color: "#d97706", colorDark: "#fbbf24" },
+        { id: "terra",   name: "暖橙",   color: "#ea580c", colorDark: "#fb923c" },
+        { id: "crimson", name: "朱红",   color: "#dc2626", colorDark: "#f87171" },
+        { id: "rose",    name: "玫红",   color: "#e11d48", colorDark: "#fb7185" },
+        { id: "pink",    name: "樱粉",   color: "#db2777", colorDark: "#f472b6" },
+        { id: "violet",  name: "紫罗兰", color: "#7c3aed", colorDark: "#a78bfa" },
+        { id: "indigo",  name: "靛蓝",   color: "#4f46e5", colorDark: "#818cf8" },
+        { id: "slate",   name: "岩灰",   color: "#475569", colorDark: "#94a3b8" },
     ];
 
     function current() {
@@ -145,6 +152,9 @@ window.sanitizeUrl = function(url) {
             root.classList.toggle("is-dark-pending", !!meta.dark);
         }
         try { localStorage.setItem(STORAGE_KEY, themeId); } catch (e) {}
+        // 主题明暗切换后，重应用当前主色调以切换到对应的明/暗变体
+        var ac = currentAccent();
+        if (ac) applyAccent(ac);
         // 通知其它组件（如代码高亮）主题已变
         try {
             global.dispatchEvent(new CustomEvent("oc-theme-change", { detail: { theme: themeId, dark: !!meta.dark } }));
@@ -159,6 +169,22 @@ window.sanitizeUrl = function(url) {
         return a;
     }
 
+    /** 按 id 查找主色调定义 */
+    function findAccent(accentId) {
+        for (var i = 0; i < ACCENTS.length; i++) {
+            if (ACCENTS[i].id === accentId) return ACCENTS[i];
+        }
+        return null;
+    }
+
+    /** 当前主题下该主色调的实际显示色（浅色主题 600 系 / 暗色主题 400 系变体） */
+    function accentColor(accentId) {
+        var a = findAccent(accentId);
+        if (!a) return "";
+        var t = THEME_MAP[current()];
+        return (t && t.dark && a.colorDark) ? a.colorDark : a.color;
+    }
+
     function applyAccent(accentId) {
         var root = document.documentElement;
         if (!accentId) {
@@ -166,13 +192,10 @@ window.sanitizeUrl = function(url) {
             root.style.removeProperty("--olive");
             try { localStorage.removeItem(ACCENT_KEY); } catch (e) {}
         } else {
-            var accent = null;
-            for (var i = 0; i < ACCENTS.length; i++) {
-                if (ACCENTS[i].id === accentId) { accent = ACCENTS[i]; break; }
-            }
+            var accent = findAccent(accentId);
             if (!accent) return;
-            // 用 inline style 覆盖 --olive，衍生色由 color-mix 自动派生
-            root.style.setProperty("--olive", accent.color);
+            // 用 inline style 覆盖 --olive（按主题明暗选择变体），衍生色由 color-mix 自动派生
+            root.style.setProperty("--olive", accentColor(accentId));
             try { localStorage.setItem(ACCENT_KEY, accentId); } catch (e) {}
         }
         try {
@@ -225,5 +248,6 @@ window.sanitizeUrl = function(url) {
         applyDensity: applyDensity,
         currentAccent: currentAccent,
         applyAccent: applyAccent,
+        accentColor: accentColor,
     };
 })(window);

@@ -124,6 +124,7 @@ class ApplicationUpdate(BaseModel):
     offer_deadline: Optional[str] = None
     hr_contact: Optional[str] = None
     priority: Optional[str] = None
+    sort_order: Optional[int] = None
 
 
 class ApplicationOut(BaseModel):
@@ -630,6 +631,8 @@ async def update_application(
         if body.priority is not None and body.priority not in PRIORITIES:
             raise BadRequestError(f"非法优先级: {body.priority}")
         app.priority = body.priority
+    if "sort_order" in provided:
+        app.sort_order = body.sort_order or 0
 
     # 基本字段（None 清空）
     for field in ("company", "position", "job_url", "source", "notes", "tags"):
@@ -673,6 +676,33 @@ async def update_status(
         message="状态已更新",
         extra={"old_status": old_status},
     )
+
+
+@router.patch("/reorder")
+async def reorder_applications(
+    orders: List[Dict[str, Any]],
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """批量更新排序（看板拖拽排序用）
+
+    接收 [{"id": "...", "sort_order": 0}, ...]，按 sort_order 升序排列。
+    """
+    updated = 0
+    for item in orders:
+        app_id = item.get("id")
+        so = item.get("sort_order", 0)
+        if not app_id:
+            continue
+        app = db.query(Application).filter(
+            Application.id == app_id,
+            Application.user_id == user_id,
+        ).first()
+        if app:
+            app.sort_order = so
+            updated += 1
+    db.commit()
+    return ok({"updated": updated}, message="排序已更新")
 
 
 @router.delete("/{application_id}")
@@ -812,22 +842,12 @@ async def get_stats(
                 waiting_days.append(days)
                 if days >= STALE_THRESHOLD_DAYS and a.status == "applied":
                     stale_count += 1
-        # 即将到来的面试（未来 7 天内）
-        if a.next_interview_at and a.status == "interview":
-            interview_dt = a.next_interview_at
-            if interview_dt.tzinfo is None:
-                interview_dt = interview_dt.replace(tzinfo=timezone.utc)
-            delta_hours = (interview_dt - now).total_seconds() / 3600
-            if -24 <= delta_hours <= 7 * 24:  # 1天内已开始到未来7天
-                upcoming_interviews += 1
-        # 笔试 deadline（未来 7 天内未完成）
-        if a.assessment_deadline and a.status == "assessment":
-            deadline_dt = a.assessment_deadline
-            if deadline_dt.tzinfo is None:
-                deadline_dt = deadline_dt.replace(tzinfo=timezone.utc)
-            delta_hours = (deadline_dt - now).total_seconds() / 3600
-            if -24 <= delta_hours <= 7 * 24:
-                pending_assessments += 1
+        # 即将到来的面试：面试中的全部项目（与看板列/跟进提醒口径一致）
+        if a.status == "interview":
+            upcoming_interviews += 1
+        # 待完成笔试：笔试中的全部项目（与看板列/跟进提醒口径一致）
+        if a.status == "assessment":
+            pending_assessments += 1
 
     # 渠道效果统计：各来源的投递数 / 回复数 / 回复率
     source_stats = {}
@@ -890,15 +910,15 @@ async def get_followups(
     db: Session = Depends(get_db),
 ):
     """跟进提醒：列出需要关注的项目
-    - 长时间未回复的投递（>= 7 天）
-    - 即将到来的笔试 deadline（未来 7 天）
-    - 即将到来的面试（未来 7 天）
-    - 待回复的 offer
+
+    与看板列状态保持一致（提醒数 = 对应列的卡片数）：
+    - 长时间未回复的投递（>= 7 天，仅已投递状态）
+    - 笔试中的所有项目（有截止时间的显示倒计时，无则提示未设置）
+    - 面试中的所有项目（有面试时间的显示倒计时，无则提示未安排）
+    - 待回复的 offer（offer_status 非 accepted/declined，含未填写）
     """
     now = datetime.now(timezone.utc)
     stale_threshold = now - timedelta(days=STALE_THRESHOLD_DAYS)
-    upcoming_end = now + timedelta(days=7)
-    past_24h = now - timedelta(days=1)
 
     apps = db.query(Application).filter(
         Application.user_id == user_id
@@ -918,40 +938,52 @@ async def get_followups(
             if applied < stale_threshold:
                 days = (now - applied).days
                 stale_apps.append({**_to_dict(a), "stale_days": days})
-        # 即将笔试
-        if a.status == "assessment" and a.assessment_deadline:
-            deadline_dt = a.assessment_deadline
-            if deadline_dt.tzinfo is None:
-                deadline_dt = deadline_dt.replace(tzinfo=timezone.utc)
-            if past_24h <= deadline_dt <= upcoming_end:
+        # 笔试中：全部列出，与看板「笔试中」列一致
+        if a.status == "assessment":
+            item = _to_dict(a)
+            if a.assessment_deadline:
+                deadline_dt = a.assessment_deadline
+                if deadline_dt.tzinfo is None:
+                    deadline_dt = deadline_dt.replace(tzinfo=timezone.utc)
                 delta = deadline_dt - now
                 hours = delta.total_seconds() / 3600
-                pending_assessments.append({
-                    **_to_dict(a),
+                item.update({
                     "hours_until": round(hours, 1),
                     "when": deadline_dt.isoformat(),
+                    "scheduled": True,
                 })
-        # 即将面试
-        if a.status == "interview" and a.next_interview_at:
-            interview_dt = a.next_interview_at
-            if interview_dt.tzinfo is None:
-                interview_dt = interview_dt.replace(tzinfo=timezone.utc)
-            if past_24h <= interview_dt <= upcoming_end:
+            else:
+                item.update({"hours_until": None, "scheduled": False})
+            pending_assessments.append(item)
+        # 面试中：全部列出，与看板「面试中」列一致
+        if a.status == "interview":
+            item = _to_dict(a)
+            if a.next_interview_at:
+                interview_dt = a.next_interview_at
+                if interview_dt.tzinfo is None:
+                    interview_dt = interview_dt.replace(tzinfo=timezone.utc)
                 delta = interview_dt - now
                 hours = delta.total_seconds() / 3600
-                upcoming.append({
-                    **_to_dict(a),
+                item.update({
                     "hours_until": round(hours, 1),
                     "when": interview_dt.isoformat(),
+                    "scheduled": True,
                 })
-        # 待回复 offer
-        if a.status == "offer" and a.offer_status == "pending":
+            else:
+                item.update({"hours_until": None, "scheduled": False})
+            upcoming.append(item)
+        # 待回复 offer：未填写或 pending 均视为待回复
+        if a.status == "offer" and (a.offer_status or "pending") not in ("accepted", "declined"):
             pending_offers.append(_to_dict(a))
 
-    # 排序
+    # 排序：有时间倒计时升序在前，未安排时间的垫底
+    def _by_hours(x):
+        h = x.get("hours_until")
+        return (1, 0) if h is None else (0, h)
+
     stale_apps.sort(key=lambda x: -x["stale_days"])
-    pending_assessments.sort(key=lambda x: x["hours_until"])
-    upcoming.sort(key=lambda x: x["hours_until"])
+    pending_assessments.sort(key=_by_hours)
+    upcoming.sort(key=_by_hours)
 
     return ok({
         "stale": stale_apps,

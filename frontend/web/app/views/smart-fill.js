@@ -77,7 +77,7 @@
     transition: border-color 0.25s var(--ease), background 0.25s var(--ease);
 }
 .sf-login-banner.ok { border-color: var(--olive); background: var(--olive-soft); }
-.sf-login-banner.warn { border-color: var(--warn); background: #fdf6e3; }
+.sf-login-banner.warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--card)); }
 .sf-login-banner.err { border-color: var(--danger); background: var(--terra-soft); }
 .sf-login-banner-icon {
     width: 34px; height: 34px;
@@ -186,7 +186,7 @@
     outline: none;
     border-color: var(--olive);
     box-shadow: 0 0 0 3px var(--olive-glow);
-    background: #fff;
+    background: var(--card);
 }
 
 /* --- Page info strip --- */
@@ -354,7 +354,7 @@
     outline: none;
     border-color: var(--olive);
     box-shadow: 0 0 0 2px var(--olive-glow);
-    background: #fff;
+    background: var(--card);
 }
 .sf-match-reason {
     font-size: 0.72rem;
@@ -374,7 +374,7 @@
     margin-top: 0.3rem;
 }
 .sf-confidence.high { background: var(--olive-soft); color: var(--olive-dark); }
-.sf-confidence.mid { background: #fdf6e3; color: var(--warn); }
+.sf-confidence.mid { background: color-mix(in srgb, var(--warn) 13%, var(--card)); color: var(--warn); }
 .sf-confidence.low { background: var(--terra-soft); color: var(--terra-deep); }
 .sf-confidence::before {
     content: '';
@@ -493,7 +493,7 @@
     outline: none;
     border-color: var(--olive);
     box-shadow: 0 0 0 2px var(--olive-glow);
-    background: #fff;
+    background: var(--card);
 }
 
 /* --- Progress --- */

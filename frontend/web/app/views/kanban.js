@@ -47,13 +47,17 @@
         stats: null,
         followups: null,
         filters: { search: '', source: '', priority: '' },
-        editing: null,   // null=新建, 对象=编辑
+        editing: null,
+        initialStatus: 'applied',
         loading: true,
+        viewMode: 'card',   // 'card' | 'compact'
     };
 
     let root = null;
     let modalOverlay = null;
     let draggedId = null;
+    let draggedSourceStatus = null;
+    let dragPlaceholder = null;
 
     // ============ CSS ============
 
@@ -64,14 +68,15 @@
         const style = document.createElement('style');
         style.id = CSS_ID;
         style.textContent = `
-.kb-view { padding-bottom: 4rem; }
+.kb-view { padding-bottom: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
 
 /* --- 统计栏 --- */
 .kb-stats-bar {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 0.9rem;
-    margin-bottom: 1.4rem;
+    margin-bottom: 1rem;
+    flex-shrink: 0;
 }
 .kb-stat-card {
     background: var(--card);
@@ -92,8 +97,8 @@
     transform-origin: left;
     transition: transform 0.5s var(--ease-out);
 }
-.kb-stat-card.accent-olive::before { background: var(--olive); }
-.kb-stat-card.accent-terra::before { background: var(--terra); }
+.kb-stat-card.accent-info::before { background: var(--info); }
+.kb-stat-card.accent-success::before { background: var(--success); }
 .kb-stat-card.accent-warn::before { background: var(--warn); }
 .kb-stat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
 .kb-stat-card:hover::before { transform: scaleX(1); }
@@ -117,13 +122,17 @@
     color: var(--ink-faint);
     margin-top: 0.25rem;
 }
+.kb-stat-card.accent-info .kb-stat-value { color: color-mix(in srgb, var(--info) 82%, var(--ink)); }
+.kb-stat-card.accent-success .kb-stat-value { color: color-mix(in srgb, var(--success) 82%, var(--ink)); }
+.kb-stat-card.accent-warn .kb-stat-value { color: color-mix(in srgb, var(--warn) 82%, var(--ink)); }
 
 /* --- 跟进提醒 --- */
 .kb-followups {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 0.9rem;
-    margin-bottom: 1.4rem;
+    margin-bottom: 1rem;
+    flex-shrink: 0;
 }
 .kb-followup-card {
     background: var(--card);
@@ -131,13 +140,18 @@
     border-left: 3px solid var(--ink-faint);
     border-radius: 8px;
     padding: 0.8rem 0.95rem;
-    transition: box-shadow 0.2s var(--ease);
+    transition: box-shadow 0.2s var(--ease), border-color 0.2s var(--ease), transform 0.2s var(--ease);
 }
-.kb-followup-card:hover { box-shadow: var(--shadow-sm); }
+.kb-followup-card:hover { box-shadow: var(--shadow-sm); transform: translateY(-1px); }
 .kb-followup-card.stale { border-left-color: var(--warn); }
 .kb-followup-card.assessment { border-left-color: var(--st-assessment); }
 .kb-followup-card.interview { border-left-color: var(--st-interview); }
 .kb-followup-card.offer { border-left-color: var(--st-offer); }
+/* 非空提醒卡带对应状态的淡色渐变，与看板卡片色彩呼应 */
+.kb-followup-card.stale:not(.empty) { background: linear-gradient(135deg, color-mix(in srgb, var(--warn) 7%, var(--card)), var(--card) 60%); }
+.kb-followup-card.assessment:not(.empty) { background: linear-gradient(135deg, color-mix(in srgb, var(--st-assessment) 7%, var(--card)), var(--card) 60%); }
+.kb-followup-card.interview:not(.empty) { background: linear-gradient(135deg, color-mix(in srgb, var(--st-interview) 7%, var(--card)), var(--card) 60%); }
+.kb-followup-card.offer:not(.empty) { background: linear-gradient(135deg, color-mix(in srgb, var(--st-offer) 8%, var(--card)), var(--card) 60%); }
 .kb-followup-card.empty { opacity: 0.55; }
 .kb-fu-head {
     display: flex;
@@ -164,6 +178,11 @@
     min-width: 24px;
     text-align: center;
 }
+/* 计数徽章按提醒类型着色 */
+.kb-followup-card.stale .kb-fu-count { color: color-mix(in srgb, var(--warn) 72%, var(--ink)); background: color-mix(in srgb, var(--warn) 15%, transparent); }
+.kb-followup-card.assessment .kb-fu-count { color: color-mix(in srgb, var(--st-assessment) 72%, var(--ink)); background: color-mix(in srgb, var(--st-assessment) 15%, transparent); }
+.kb-followup-card.interview .kb-fu-count { color: color-mix(in srgb, var(--st-interview) 72%, var(--ink)); background: color-mix(in srgb, var(--st-interview) 15%, transparent); }
+.kb-followup-card.offer .kb-fu-count { color: color-mix(in srgb, var(--st-offer) 72%, var(--ink)); background: color-mix(in srgb, var(--st-offer) 15%, transparent); }
 .kb-followup-card.empty .kb-fu-count { background: var(--paper-deep); color: var(--ink-faint); }
 .kb-fu-list { display: flex; flex-direction: column; gap: 0.3rem; }
 .kb-fu-item {
@@ -178,95 +197,190 @@
     text-overflow: ellipsis;
 }
 .kb-fu-item:hover { background: var(--olive-soft); color: var(--olive-dark); }
+/* 未安排时间的条目弱化显示 */
+.kb-fu-item.unscheduled { color: var(--ink-faint); font-style: italic; }
+/* 已逾期的条目警示 */
+.kb-fu-item.overdue { color: var(--st-rejected-deep); font-weight: 600; }
 .kb-fu-empty {
     font-size: 0.76rem;
     color: var(--ink-faint);
     padding: 0.35rem 0.5rem;
     font-style: italic;
 }
+.kb-fu-more {
+    font-size: 0.72rem;
+    color: var(--ink-faint);
+    padding: 0.3rem 0.5rem 0.1rem;
+    border-top: 1px dashed var(--line-soft);
+    margin-top: 0.25rem;
+}
 
-/* --- 筛选栏 --- */
-.kb-filter-bar {
+/* --- 顶部一体化工具条 --- */
+.kb-toolbar {
     display: flex;
-    gap: 0.6rem;
     align-items: center;
+    gap: 0.75rem 1rem;
     flex-wrap: wrap;
-    margin-bottom: 1.2rem;
+    margin-bottom: 1rem;
     padding: 0.7rem 0.9rem;
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 10px;
+    box-shadow: var(--shadow-sm);
+    flex-shrink: 0;
+}
+/* 标题组：眉标徽章 + 标题 + 副标题 横排 */
+.kb-toolbar .view-title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem 0.7rem;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+.kb-toolbar .view-title-row h1 {
+    font-family: var(--font-serif);
+    font-size: 1.2rem;
+    font-weight: 900;
+    color: var(--ink);
+    margin: 0;
+    letter-spacing: -0.3px;
+}
+.kb-toolbar .view-title-row .header-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 1.5px;
+    line-height: 1.4;
+    color: var(--olive);
+    background: var(--olive-soft);
+    padding: 0.16rem 0.55rem;
+    border-radius: 5px;
+    align-self: center;
+    white-space: nowrap;
+}
+.kb-toolbar .view-title-row .view-subtitle {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 0.84rem;
+    white-space: nowrap;
+}
+/* 搜索框 + 放大镜图标（紧凑定宽，吸向右侧区域） */
+.kb-search-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 240px;
+    max-width: 100%;
+}
+.kb-search-icon {
+    position: absolute;
+    left: 0.65rem;
+    display: inline-flex;
+    color: var(--ink-faint);
+    pointer-events: none;
+    transition: color 0.2s;
+    z-index: 1;
 }
 .kb-search-input {
-    flex: 1;
-    min-width: 180px;
-    padding: 0.45rem 0.75rem;
+    width: 100%;
+    padding: 0.42rem 0.75rem 0.42rem 1.9rem;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: 7px;
     background: var(--paper-light);
     color: var(--ink);
     font-size: 0.85rem;
     font-family: inherit;
-    transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+    transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.2s var(--ease);
 }
 .kb-search-input:focus {
     outline: none;
     border-color: var(--olive);
     box-shadow: 0 0 0 3px var(--olive-glow);
-    background: #fff;
+    background: var(--card);
+}
+.kb-search-input:focus ~ .kb-search-icon { color: var(--olive); }
+/* 筛选 + 操作按钮组：吸右 */
+.kb-filter-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-left: auto;
 }
 .kb-filter-select {
-    padding: 0.45rem 0.6rem;
+    padding: 0.42rem 0.6rem;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: 7px;
     background: var(--paper-light);
     color: var(--ink);
     font-size: 0.82rem;
     font-family: inherit;
     cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
 }
+.kb-filter-select:hover { border-color: var(--ink-ghost); }
 .kb-filter-select:focus { outline: none; border-color: var(--olive); }
-.kb-filter-actions { display: flex; gap: 0.4rem; margin-left: auto; }
+.kb-filter-actions {
+    display: flex;
+    gap: 0.4rem;
+    padding-left: 0.75rem;
+    border-left: 1px solid var(--line-soft);
+}
 
 /* --- 看板 --- */
 .kb-board {
     display: flex;
     gap: 0.7rem;
     overflow-x: auto;
-    padding-bottom: 0.6rem;
-    min-height: 380px;
+    overflow-y: hidden;
+    padding-bottom: 0.4rem;
+    min-height: 0;
+    flex: 1;
 }
 .kb-column {
-    flex: 0 0 280px;
+    flex: 0 0 260px;
     background: var(--paper-light);
     border: 1px solid var(--line);
     border-radius: 10px;
     display: flex;
     flex-direction: column;
-    max-height: 70vh;
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
 }
 .kb-column-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.65rem 0.85rem;
+    padding: 0.55rem 0.75rem;
     border-top: 3px solid var(--col-color, var(--olive));
     border-bottom: 1px solid var(--line-soft);
-    background: var(--card);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--col-color, var(--olive)) 9%, var(--card)), var(--card) 70%);
     border-radius: 7px 7px 0 0;
+    flex-shrink: 0;
 }
 .kb-column-title {
     font-family: var(--font-serif);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 700;
     color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.kb-col-dot {
+    flex-shrink: 0;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--col-color, var(--olive));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--col-color, var(--olive)) 20%, transparent);
 }
 .kb-column-count {
     font-family: var(--font-mono);
     font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--ink-soft);
-    background: var(--paper-deep);
+    font-weight: 700;
+    color: color-mix(in srgb, var(--col-color, var(--olive)) 68%, var(--ink));
+    background: color-mix(in srgb, var(--col-color, var(--olive)) 16%, transparent);
     padding: 0.1rem 0.5rem;
     border-radius: 10px;
     min-width: 22px;
@@ -275,12 +389,18 @@
 .kb-column-body {
     flex: 1;
     overflow-y: auto;
-    padding: 0.6rem;
+    overflow-x: hidden;
+    padding: 0.55rem;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
     transition: background 0.18s var(--ease);
+    min-height: 0;
 }
+/* 列内滚动条 */
+.kb-column-body::-webkit-scrollbar { width: 5px; }
+.kb-column-body::-webkit-scrollbar-track { background: transparent; }
+.kb-column-body::-webkit-scrollbar-thumb { background: var(--ink-ghost); border-radius: 3px; }
 .kb-column-body.kb-drag-over {
     background: var(--olive-glow);
     outline: 2px dashed var(--olive);
@@ -293,84 +413,140 @@
     padding: 1.2rem 0.5rem;
     font-style: italic;
 }
+.app-card, .kb-column-body {
+    -webkit-user-select: none;
+    user-select: none;
+}
 
 /* --- 卡片 --- */
 .app-card {
     background: var(--card);
     border: 1px solid var(--line);
+    border-left: 3px solid var(--stc, var(--line));
     border-radius: 8px;
-    padding: 0.7rem 0.8rem;
+    padding: 0.65rem 0.75rem;
     cursor: grab;
     transition: box-shadow 0.2s var(--ease), transform 0.2s var(--ease), border-color 0.2s var(--ease);
     position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+    min-height: 88px;
+}
+.app-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--stc, var(--line)), transparent 70%);
+    opacity: 0.65;
 }
 .app-card:hover {
-    box-shadow: var(--shadow-md);
-    border-color: var(--olive);
-    transform: translateY(-1px);
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--stc, var(--olive)) 18%, transparent), var(--shadow-sm);
+    border-color: color-mix(in srgb, var(--stc, var(--olive)) 55%, var(--line));
+    border-left-color: var(--stc, var(--olive));
+    transform: translateY(-2px);
 }
 .app-card:active { cursor: grabbing; }
 .app-card.card-dragging { opacity: 0.4; transform: rotate(2deg); }
-.app-card.priority-high { border-left: 3px solid var(--terra); }
-.app-card.priority-low { border-left: 3px solid var(--line); }
+.app-card.st-applied { --stc: var(--st-applied); }
+.app-card.st-assessment { --stc: var(--st-assessment); }
+.app-card.st-interview { --stc: var(--st-interview); }
+.app-card.st-offer { --stc: var(--st-offer); }
+.app-card.st-rejected { --stc: var(--st-rejected); }
+.app-card.st-withdrawn { --stc: var(--st-withdrawn); }
+.app-card.st-offer {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--st-offer) 6%, var(--card)), var(--card) 55%);
+}
+.app-card.st-rejected, .app-card.st-withdrawn { opacity: 0.88; }
+.app-card.st-rejected:hover, .app-card.st-withdrawn:hover { opacity: 1; }
 .card-top-row {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 0.5rem;
-    margin-bottom: 0.2rem;
+    gap: 0.4rem;
+    margin-bottom: 0.15rem;
 }
 .card-company {
     font-family: var(--font-serif);
-    font-size: 0.9rem;
+    font-size: 0.88rem;
     font-weight: 700;
     color: var(--ink);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 75%;
+    max-width: 78%;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.card-dot {
+    flex-shrink: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--stc, var(--ink-faint));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--stc, var(--ink-faint)) 18%, transparent);
 }
 .card-priority {
-    font-size: 0.66rem;
+    font-size: 0.64rem;
     font-weight: 700;
-    padding: 0.1rem 0.4rem;
+    padding: 0.08rem 0.35rem;
     border-radius: 8px;
     flex-shrink: 0;
     line-height: 1.4;
 }
-.card-priority.priority-high { background: var(--terra-soft); color: var(--terra-deep); }
-.card-priority.priority-medium { background: var(--olive-soft); color: var(--olive-dark); }
-.card-priority.priority-low { background: var(--paper-deep); color: var(--ink-faint); }
+.card-priority.priority-high { background: var(--st-rejected-soft); color: var(--st-rejected-deep); }
+.card-priority.priority-medium { background: var(--st-assessment-soft); color: var(--st-assessment-deep); }
+.card-priority.priority-low { background: var(--st-withdrawn-soft); color: var(--st-withdrawn-deep); }
+.app-card.priority-high:hover {
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--st-rejected) 22%, transparent), var(--shadow-sm);
+}
 .card-position {
     font-size: 0.8rem;
     color: var(--ink-soft);
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.3rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1.4;
 }
 .card-meta {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.4rem;
     font-size: 0.74rem;
     color: var(--ink-faint);
-    margin-bottom: 0.35rem;
+    margin-bottom: 0.3rem;
 }
-.card-salary { color: var(--terra-deep); font-weight: 600; }
+.card-salary { color: var(--st-offer-deep); font-weight: 600; }
 .card-countdown {
     font-size: 0.72rem;
-    padding: 0.25rem 0.5rem;
+    padding: 0.22rem 0.5rem;
     border-radius: 5px;
-    background: var(--olive-soft);
-    color: var(--olive-dark);
-    margin-bottom: 0.4rem;
+    background: color-mix(in srgb, var(--stc, var(--info)) 12%, var(--card));
+    color: color-mix(in srgb, var(--stc, var(--info)) 80%, var(--ink));
+    margin-bottom: 0.35rem;
     font-weight: 500;
 }
 .card-countdown.urgent {
-    background: var(--terra-soft);
-    color: var(--terra-deep);
+    background: var(--st-rejected-soft);
+    color: var(--st-rejected-deep);
+    font-weight: 600;
+}
+.card-countdown.unset {
+    background: var(--paper-deep);
+    color: var(--ink-faint);
+    font-style: italic;
+    font-weight: 400;
+}
+.card-stale {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--warn) 14%, transparent);
+    color: color-mix(in srgb, var(--warn) 75%, var(--ink));
+    margin-bottom: 0.35rem;
     font-weight: 600;
 }
 .card-actions {
@@ -395,6 +571,55 @@
     border-color: var(--olive);
     color: var(--olive-dark);
     background: var(--olive-soft);
+}
+
+/* --- 紧凑视图卡片 --- */
+.app-card.compact {
+    padding: 0.38rem 0.6rem;
+    min-height: 0;
+    flex-shrink: 0;
+}
+.app-card.compact .card-top-row {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-bottom: 0;
+}
+.app-card.compact .card-company {
+    font-size: 0.82rem;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: none;
+}
+.app-card.compact .card-position {
+    font-size: 0.76rem;
+    color: var(--ink-soft);
+    margin-bottom: 0;
+    margin-left: 0.2rem;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: none;
+}
+.app-card.compact .card-meta,
+.app-card.compact .card-countdown,
+.app-card.compact .card-stale,
+.app-card.compact .card-actions {
+    display: none;
+}
+.app-card.compact .card-priority {
+    font-size: 0.6rem;
+    padding: 0.05rem 0.3rem;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+/* 紧凑视图列内更密 */
+.kb-column-body.compact-mode {
+    gap: 0.25rem;
+    padding: 0.4rem;
 }
 
 /* --- 看板空态 --- */
@@ -489,7 +714,7 @@
 .kb-field input:focus, .kb-field select:focus, .kb-field textarea:focus {
     outline: none;
     border-color: var(--olive);
-    background: #fff;
+    background: var(--card);
     box-shadow: 0 0 0 3px var(--olive-glow);
 }
 .kb-field textarea { resize: vertical; min-height: 64px; }
@@ -510,7 +735,7 @@
 @media (max-width: 900px) {
     .kb-stats-bar, .kb-followups { grid-template-columns: repeat(2, 1fr); }
     .kb-form-grid, .kb-field-group { grid-template-columns: 1fr; }
-    .kb-column { flex: 0 0 240px; }
+    .kb-column { flex: 0 0 220px; }
 }
 `;
         document.head.appendChild(style);
@@ -569,6 +794,33 @@
         return Math.floor(days / 365) + '年前';
     }
 
+    /** 投递时间：短格式 "MM-DD · 3天前"（跨年带年份），完整格式 "YYYY-MM-DD HH:mm" 用于悬浮提示 */
+    function formatAppliedAt(appliedAt) {
+        if (!appliedAt) return null;
+        const d = new Date(appliedAt);
+        if (isNaN(d.getTime())) return null;
+        const pad = n => String(n).padStart(2, '0');
+        const now = new Date();
+        const md = pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+        const sameYear = d.getFullYear() === now.getFullYear();
+        const datePart = sameYear ? md : String(d.getFullYear()).slice(2) + '-' + md;
+        const rel = formatDaysWaiting(appliedAt);
+        return {
+            short: rel && rel !== '待投递' ? datePart + ' · ' + rel : datePart,
+            full: d.getFullYear() + '-' + md + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()),
+        };
+    }
+
+    /** 已投递距今天数（用于停滞判定，与后端 STALE_THRESHOLD_DAYS=7 一致） */
+    function staleDays(app) {
+        if ((app.status || 'applied') !== 'applied') return 0;
+        const appliedAt = pick(app, 'applied_at');
+        if (!appliedAt) return 0;
+        const d = new Date(appliedAt);
+        if (isNaN(d.getTime())) return 0;
+        return Math.floor((Date.now() - d.getTime()) / 86400000);
+    }
+
     function formatCountdown(ts) {
         if (!ts) return { text: '', urgent: false };
         const d = new Date(ts);
@@ -592,6 +844,11 @@
 
     function fmtHours(h) {
         if (h == null) return '';
+        if (h < 0) {
+            const a = Math.abs(h);
+            if (a < 24) return '逾期 ' + Math.round(a) + ' 小时';
+            return '逾期 ' + Math.round(a / 24) + ' 天';
+        }
         if (h < 24) return Math.round(h) + '小时后';
         return Math.round(h / 24) + '天后';
     }
@@ -612,31 +869,42 @@
     function renderSkeleton() {
         return `
         <div class="view-container kb-view">
-            <div class="view-header">
-                <div class="header-eyebrow">DASHBOARD</div>
-                <h1>投递看板</h1>
-                <p>追踪所有求职投递的状态与进度</p>
+            <div class="kb-toolbar">
+                <div class="view-title-row">
+                    <span class="header-eyebrow">DASHBOARD</span>
+                    <h1>投递看板</h1>
+                    <p class="view-subtitle">追踪所有求职投递的状态与进度</p>
+                </div>
+                <div class="kb-search-wrap">
+                    <span class="kb-search-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+                    </span>
+                    <input type="text" id="kb-search" class="kb-search-input" placeholder="搜索公司或职位...">
+                </div>
+                <div class="kb-filter-wrap">
+                    <select id="kb-source-filter" class="kb-filter-select">
+                        <option value="">全部来源</option>
+                    </select>
+                    <select id="kb-priority-filter" class="kb-filter-select">
+                        <option value="">全部优先级</option>
+                        <option value="high">高</option>
+                        <option value="medium">中</option>
+                        <option value="low">低</option>
+                    </select>
+                    <div class="kb-filter-actions">
+                        <button class="btn btn-ghost btn-sm" id="kb-view-toggle" title="切换视图">
+                            <svg id="view-icon-card" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+                            <svg id="view-icon-compact" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                        </button>
+                        <button class="btn btn-ghost btn-sm" id="kb-import-btn">导入</button>
+                        <button class="btn btn-ghost btn-sm" id="kb-export-btn">导出</button>
+                        <button class="btn btn-primary btn-sm" id="kb-create-btn">+ 新建投递</button>
+                        <input type="file" id="kb-import-input" accept=".json,application/json" style="display:none">
+                    </div>
+                </div>
             </div>
             <div id="kb-stats"></div>
             <div id="kb-followups"></div>
-            <div class="kb-filter-bar">
-                <input type="text" id="kb-search" class="kb-search-input" placeholder="搜索公司或职位...">
-                <select id="kb-source-filter" class="kb-filter-select">
-                    <option value="">全部来源</option>
-                </select>
-                <select id="kb-priority-filter" class="kb-filter-select">
-                    <option value="">全部优先级</option>
-                    <option value="high">高</option>
-                    <option value="medium">中</option>
-                    <option value="low">低</option>
-                </select>
-                <div class="kb-filter-actions">
-                    <button class="btn btn-ghost btn-sm" id="kb-import-btn">导入</button>
-                    <button class="btn btn-ghost btn-sm" id="kb-export-btn">导出</button>
-                    <button class="btn btn-primary btn-sm" id="kb-create-btn">+ 新建投递</button>
-                    <input type="file" id="kb-import-input" accept=".json,application/json" style="display:none">
-                </div>
-            </div>
             <div id="kb-board" class="kb-board">${renderBoardSkeleton()}</div>
         </div>`;
     }
@@ -673,12 +941,12 @@
                 <div class="kb-stat-value" data-target="${total}">0</div>
                 <div class="kb-stat-sub">共 ${total} 条记录</div>
             </div>
-            <div class="kb-stat-card accent-olive">
+            <div class="kb-stat-card accent-info">
                 <div class="kb-stat-label">回复率</div>
                 <div class="kb-stat-value" data-target="${replyRate}" data-decimals="${rateDecimals(replyStr)}" data-suffix="%">0%</div>
                 <div class="kb-stat-sub">已投递中获得回复</div>
             </div>
-            <div class="kb-stat-card accent-terra">
+            <div class="kb-stat-card accent-success">
                 <div class="kb-stat-label">Offer 率</div>
                 <div class="kb-stat-value" data-target="${offerRate}" data-decimals="${rateDecimals(offerStr)}" data-suffix="%">0%</div>
                 <div class="kb-stat-sub">${offerCount} 个 offer</div>
@@ -703,6 +971,8 @@
 
     function renderFollowups() {
         const fu = normalizeFollowups(state.followups);
+        // 未安排时间 → 弱化；已逾期 → 警示
+        const timeCls = a => a.hours_until == null ? 'unscheduled' : (a.hours_until < 0 ? 'overdue' : '');
         const cards = [
             {
                 cls: 'stale', title: '停滞投递', icon: '⏰',
@@ -712,12 +982,14 @@
             {
                 cls: 'assessment', title: '待完成笔试', icon: '✍',
                 items: fu.assessments,
-                render: a => `${esc(a.company)} · ${esc(a.position)} — ${esc(fmtHours(a.hours_until))}`,
+                render: a => `${esc(a.company)} · ${esc(a.position)} — ${a.hours_until == null ? '未设置截止时间' : esc(fmtHours(a.hours_until))}`,
+                itemCls: timeCls,
             },
             {
                 cls: 'interview', title: '即将面试', icon: '🎤',
                 items: fu.interviews,
-                render: a => `${esc(a.company)} · ${esc(a.position)} — ${esc(fmtHours(a.hours_until))}`,
+                render: a => `${esc(a.company)} · ${esc(a.position)} — ${a.hours_until == null ? '未安排时间' : esc(fmtHours(a.hours_until))}`,
+                itemCls: timeCls,
             },
             {
                 cls: 'offer', title: '待回复 Offer', icon: '🎉',
@@ -728,11 +1000,18 @@
 
         return `<div class="kb-followups">${cards.map(c => {
             const empty = c.items.length === 0;
-            const list = empty
-                ? '<div class="kb-fu-empty">暂无提醒</div>'
-                : c.items.slice(0, 4).map(a =>
-                    `<div class="kb-fu-item" data-id="${esc(a.id)}" title="点击编辑">${c.render(a)}</div>`
-                ).join('');
+            let list;
+            if (empty) {
+                list = '<div class="kb-fu-empty">暂无提醒</div>';
+            } else {
+                list = c.items.slice(0, 4).map(a => {
+                    const extra = c.itemCls ? c.itemCls(a) : '';
+                    return `<div class="kb-fu-item ${extra}" data-id="${esc(a.id)}" title="点击编辑">${c.render(a)}</div>`;
+                }).join('');
+                if (c.items.length > 4) {
+                    list += `<div class="kb-fu-more">还有 ${c.items.length - 4} 项，双击看板卡片可编辑</div>`;
+                }
+            }
             return `
                 <div class="kb-followup-card ${c.cls} ${empty ? 'empty' : ''}">
                     <div class="kb-fu-head">
@@ -801,20 +1080,25 @@
             const k = a.status || 'applied';
             if (grouped[k]) grouped[k].push(a);
         });
+        // 每列按 sort_order 升序排列（拖拽排序持久化）
+        Object.keys(grouped).forEach(k => {
+            grouped[k].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        });
 
         board.innerHTML = STATUSES.map(s => renderColumn(s, grouped[s.key])).join('');
     }
 
     function renderColumn(s, apps) {
+        const isCompact = state.viewMode === 'compact';
         const cards = apps.map(renderCard).join('');
         return `
         <div class="kb-column" data-status="${s.key}">
             <div class="kb-column-header" style="--col-color:${s.color}">
-                <span class="kb-column-title">${s.label}</span>
+                <span class="kb-column-title"><span class="kb-col-dot"></span>${s.label}</span>
                 <span class="kb-column-count">${apps.length}</span>
             </div>
-            <div class="kb-column-body" data-status="${s.key}">
-                ${cards || '<div class="kb-col-empty">拖拽卡片到此列</div>'}
+            <div class="kb-column-body${isCompact ? ' compact-mode' : ''}" data-status="${s.key}">
+                ${cards || '<div class="kb-col-empty">拖拽卡片到此列，双击新建</div>'}
             </div>
         </div>`;
     }
@@ -822,43 +1106,67 @@
     function renderCard(app) {
         const priority = pick(app, 'priority') || 'medium';
         const priorityLabel = PRIORITY_LABELS[priority] || priority;
-        const salary = pick(app, 'salary_range', 'offer_salary');
-        const dateText = formatDaysWaiting(pick(app, 'applied_at'));
+        const status = app.status || 'applied';
+        const isCompact = state.viewMode === 'compact';
 
-        // 倒计时（按状态显示相关字段）
+        if (isCompact) {
+            return `
+            <div class="app-card compact st-${status} priority-${priority}" draggable="true" data-id="${esc(app.id)}" title="${esc(app.company || '未知公司')} — ${esc(app.position || '未知职位')}&#10;双击编辑详情">
+                <div class="card-top-row">
+                    <span class="card-company"><span class="card-dot"></span>${esc(app.company || '未知公司')}</span>
+                    <span class="card-position">${esc(app.position || '未知职位')}</span>
+                    <span class="card-priority priority-${priority}">${esc(priorityLabel)}</span>
+                </div>
+            </div>`;
+        }
+
+        const salary = pick(app, 'salary_range', 'offer_salary');
+        const applied = formatAppliedAt(pick(app, 'applied_at'));
+
+        // 倒计时（按状态显示相关字段；缺失时给出可操作的提示，与跟进提醒口径一致）
         const countdowns = [];
-        if (app.status === 'assessment') {
+        if (status === 'assessment') {
             const dl = pick(app, 'assessment_deadline');
             if (dl) countdowns.push({ label: '笔试', ts: dl });
+            else countdowns.push({ label: '笔试截止时间未设置', ts: null });
         }
-        if (app.status === 'interview') {
+        if (status === 'interview') {
             const it = pick(app, 'interview_time', 'next_interview_at');
             if (it) countdowns.push({ label: '面试', ts: it });
+            else countdowns.push({ label: '面试时间未安排', ts: null });
         }
-        if (app.status === 'offer') {
+        if (status === 'offer') {
             const od = pick(app, 'offer_deadline');
             if (od) countdowns.push({ label: 'Offer', ts: od });
         }
 
+        // 停滞标记：已投递超过 7 天未回复（与统计栏 / 跟进提醒「停滞投递」一致）
+        const sDays = staleDays(app);
+        const staleHtml = sDays >= 7
+            ? `<div class="card-stale" title="超过 7 天未回复，建议跟进">⏰ 停滞 ${sDays} 天</div>`
+            : '';
+
         const cdHtml = countdowns.map(c => {
+            if (!c.ts) return `<div class="card-countdown unset">${esc(c.label)}</div>`;
             const cd = formatCountdown(c.ts);
             const cls = cd.urgent ? 'card-countdown urgent' : 'card-countdown';
             return `<div class="${cls}">${esc(c.label)}: ${esc(cd.text)}</div>`;
         }).join('');
 
-        const canAdvance = PIPELINE.indexOf(app.status) >= 0 && PIPELINE.indexOf(app.status) < PIPELINE.length - 1;
+        const canAdvance = PIPELINE.indexOf(status) >= 0 && PIPELINE.indexOf(status) < PIPELINE.length - 1;
 
         return `
-        <div class="app-card priority-${priority}" draggable="true" data-id="${esc(app.id)}">
+        <div class="app-card st-${status} priority-${priority}" draggable="true" data-id="${esc(app.id)}" title="双击编辑详情">
             <div class="card-top-row">
-                <span class="card-company" title="${esc(app.company)}">${esc(app.company || '未知公司')}</span>
+                <span class="card-company" title="${esc(app.company)}"><span class="card-dot"></span>${esc(app.company || '未知公司')}</span>
                 <span class="card-priority priority-${priority}">${esc(priorityLabel)}</span>
             </div>
             <div class="card-position" title="${esc(app.position)}">${esc(app.position || '未知职位')}</div>
             <div class="card-meta">
                 ${salary ? `<span class="card-salary">${esc(salary)}</span>` : '<span></span>'}
-                <span class="card-date">${esc(dateText)}</span>
+                <span class="card-date" title="投递于 ${esc(applied ? applied.full : '未记录')}">${esc(applied ? applied.short : '')}</span>
             </div>
+            ${staleHtml}
             ${cdHtml}
             <div class="card-actions">
                 <button class="card-btn" data-action="edit">编辑</button>
@@ -871,7 +1179,8 @@
 
     function renderModal() {
         const a = state.editing || {};
-        const status = a.status || 'applied';
+        // 编辑用记录状态；新建用双击列传入的初始状态
+        const status = a.status || state.initialStatus || 'applied';
         const priority = a.priority || 'medium';
         const sources = Array.from(new Set(state.applications.map(x => x.source).filter(Boolean))).sort();
 
@@ -1032,8 +1341,9 @@
         });
     }
 
-    function openCreateModal() {
+    function openCreateModal(initialStatus) {
         state.editing = null;
+        state.initialStatus = initialStatus || 'applied';
         showModal();
     }
 
@@ -1082,6 +1392,7 @@
         setTimeout(() => el.remove(), 220);
         if (!skipEvent) document.removeEventListener('keydown', onModalKeydown);
         state.editing = null;
+        state.initialStatus = 'applied';
     }
 
     function collectFormData() {
@@ -1186,6 +1497,65 @@
             app.status = oldStatus;
             renderBoard();
             API.toast('状态更新失败: ' + e.message, 'error');
+        }
+    }
+
+    // ============ 排序 ============
+
+    /**
+     * 计算拖拽插入位置（基于鼠标 Y 坐标）
+     */
+    function getDropIndex(colBody, clientY) {
+        const cards = Array.from(colBody.querySelectorAll('.app-card:not(.card-dragging)'));
+        for (let i = 0; i < cards.length; i++) {
+            const rect = cards[i].getBoundingClientRect();
+            const mid = rect.top + rect.height / 2;
+            if (clientY < mid) return i;
+        }
+        return cards.length;
+    }
+
+    /**
+     * 同列或跨列排序：根据目标列的期望顺序重新分配 sort_order 并持久化
+     */
+    async function reorderInColumn(targetStatus, draggedAppId, insertIndex) {
+        const appsInColumn = state.applications
+            .filter(a => (a.status || 'applied') === targetStatus)
+            .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+        // 把拖拽项移到指定位置
+        const draggedIndex = appsInColumn.findIndex(a => a.id === draggedAppId);
+        if (draggedIndex >= 0) {
+            const [item] = appsInColumn.splice(draggedIndex, 1);
+            // 插入索引需考虑移除后的偏移
+            const adjustedIndex = insertIndex > draggedIndex ? insertIndex - 1 : insertIndex;
+            appsInColumn.splice(adjustedIndex, 0, item);
+        } else if (draggedAppId) {
+            // 跨列移入：从全局列表找到并加入
+            const item = state.applications.find(a => a.id === draggedAppId);
+            if (item) appsInColumn.splice(insertIndex, 0, item);
+        }
+
+        // 重新分配 sort_order（步长 10，留间隙）
+        const orders = appsInColumn.map((a, idx) => ({
+            id: a.id,
+            sort_order: idx * 10,
+        }));
+
+        // 乐观更新内存
+        orders.forEach(o => {
+            const app = state.applications.find(a => a.id === o.id);
+            if (app) app.sort_order = o.sort_order;
+        });
+        renderBoard();
+
+        try {
+            await API.patch('/applications/reorder', orders);
+        } catch (e) {
+            API.toast('排序保存失败: ' + e.message, 'error');
+            // 失败后下次加载会恢复后端顺序
+            await loadApplications();
+            renderBoard();
         }
     }
 
@@ -1351,6 +1721,20 @@
             importInput.value = '';
         });
 
+        // 视图切换
+        const viewToggle = root.querySelector('#kb-view-toggle');
+        if (viewToggle) {
+            viewToggle.addEventListener('click', () => {
+                state.viewMode = state.viewMode === 'card' ? 'compact' : 'card';
+                const iconCard = viewToggle.querySelector('#view-icon-card');
+                const iconCompact = viewToggle.querySelector('#view-icon-compact');
+                if (iconCard) iconCard.style.display = state.viewMode === 'card' ? '' : 'none';
+                if (iconCompact) iconCompact.style.display = state.viewMode === 'compact' ? '' : 'none';
+                viewToggle.title = state.viewMode === 'card' ? '切换到紧凑视图' : '切换到卡片视图';
+                renderBoard();
+            });
+        }
+
         // 看板事件委托（绑定在持久化的 board 元素上）
         const board = root.querySelector('#kb-board');
         bindBoardEvents(board);
@@ -1371,11 +1755,29 @@
             else if (action === 'advance') advanceStatus(app);
         });
 
-        // 拖拽
+        // 双击卡片直接编辑；双击列空白处按该列状态新建
+        board.addEventListener('dblclick', (e) => {
+            if (e.target.closest('.card-btn')) return;
+            const card = e.target.closest('.app-card');
+            if (card) {
+                const id = card.dataset.id;
+                const app = state.applications.find(a => a.id === id);
+                if (app) openEditModal(app);
+                return;
+            }
+            const col = e.target.closest('.kb-column-body');
+            if (col && col.dataset.status) {
+                openCreateModal(col.dataset.status);
+            }
+        });
+
+        // 拖拽：支持同列排序 + 跨列改状态
         board.addEventListener('dragstart', (e) => {
             const card = e.target.closest('.app-card');
             if (!card) return;
             draggedId = card.dataset.id;
+            const app = state.applications.find(a => a.id === draggedId);
+            draggedSourceStatus = app ? (app.status || 'applied') : null;
             card.classList.add('card-dragging');
             e.dataTransfer.effectAllowed = 'move';
             try { e.dataTransfer.setData('text/plain', draggedId); } catch (_) {}
@@ -1385,7 +1787,13 @@
             const card = e.target.closest('.app-card');
             if (card) card.classList.remove('card-dragging');
             draggedId = null;
+            draggedSourceStatus = null;
             board.querySelectorAll('.kb-drag-over').forEach(el => el.classList.remove('kb-drag-over'));
+            // 清理占位条
+            if (dragPlaceholder && dragPlaceholder.parentNode) {
+                dragPlaceholder.parentNode.removeChild(dragPlaceholder);
+            }
+            dragPlaceholder = null;
         });
 
         board.addEventListener('dragover', (e) => {
@@ -1393,6 +1801,22 @@
             if (!col) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
+
+            // 同列时显示插入占位条
+            if (draggedSourceStatus && col.dataset.status === draggedSourceStatus) {
+                const idx = getDropIndex(col, e.clientY);
+                if (!dragPlaceholder) {
+                    dragPlaceholder = document.createElement('div');
+                    dragPlaceholder.className = 'kb-drag-placeholder';
+                    dragPlaceholder.style.cssText = 'height:3px;background:var(--olive);border-radius:2px;margin:4px 0;pointer-events:none;transition:none;';
+                }
+                const cards = Array.from(col.querySelectorAll('.app-card:not(.card-dragging)'));
+                if (idx >= cards.length) {
+                    col.appendChild(dragPlaceholder);
+                } else {
+                    col.insertBefore(dragPlaceholder, cards[idx]);
+                }
+            }
         });
 
         board.addEventListener('dragenter', (e) => {
@@ -1412,11 +1836,46 @@
             const col = e.target.closest('.kb-column-body');
             if (!col) return;
             col.classList.remove('kb-drag-over');
+            if (dragPlaceholder && dragPlaceholder.parentNode) {
+                dragPlaceholder.parentNode.removeChild(dragPlaceholder);
+            }
+            dragPlaceholder = null;
+
             const id = draggedId || (function () {
                 try { return e.dataTransfer.getData('text/plain'); } catch (_) { return ''; }
             })();
             const newStatus = col.dataset.status;
-            if (id && newStatus) changeStatus(id, newStatus);
+            if (!id || !newStatus) return;
+
+            const app = state.applications.find(a => a.id === id);
+            if (!app) return;
+
+            const insertIndex = getDropIndex(col, e.clientY);
+
+            if (draggedSourceStatus === newStatus) {
+                // 同列：只排序
+                reorderInColumn(newStatus, id, insertIndex);
+            } else {
+                // 跨列：先改状态，再排序
+                const oldStatus = app.status;
+                app.status = newStatus;
+                // 清理原列 sort_order 避免冲突
+                app.sort_order = 999999;
+                renderBoard();
+
+                API.patch('/applications/' + encodeURIComponent(id) + '/status?new_status=' + encodeURIComponent(newStatus))
+                    .then(() => {
+                        loadStats();
+                        loadFollowups();
+                        // 状态变更成功后，在新列中排序
+                        return reorderInColumn(newStatus, id, insertIndex);
+                    })
+                    .catch((err) => {
+                        app.status = oldStatus;
+                        renderBoard();
+                        API.toast('状态更新失败: ' + err.message, 'error');
+                    });
+            }
         });
     }
 

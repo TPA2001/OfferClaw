@@ -208,6 +208,7 @@ async def get_profile_completion(
     basic_keys = [
         "name", "gender", "birth", "phone", "email", "location",
         "ethnicity", "political_status", "marital_status", "native_place",
+        "household_type", "height", "weight", "health",
         "wechat", "qq", "website", "github", "linkedin",
         "english_level", "driving_license", "job_status",
     ]
@@ -339,6 +340,10 @@ async def get_profile_flatten(
     flat["political_status"] = b.get("political_status", "")
     flat["marital_status"] = b.get("marital_status", "")
     flat["native_place"] = b.get("native_place", "")
+    flat["household_type"] = b.get("household_type", "")
+    flat["height"] = b.get("height", "")
+    flat["weight"] = b.get("weight", "")
+    flat["health"] = b.get("health", "")
     flat["wechat"] = b.get("wechat", "")
     flat["qq"] = b.get("qq", "")
     flat["website"] = b.get("website", "")
@@ -363,12 +368,18 @@ async def get_profile_flatten(
         flat["latest_school"] = latest.get("school", "")
         flat["latest_major"] = latest.get("major", "")
         flat["latest_degree"] = latest.get("degree", "")
+        flat["latest_school_type"] = latest.get("school_type", "")
+        flat["latest_edu_form"] = latest.get("edu_form", "")
+        flat["latest_courses"] = latest.get("courses", "")
         flat["latest_edu_start"] = latest.get("start_date", "")
         flat["latest_edu_end"] = latest.get("end_date", "")
     else:
         flat["latest_school"] = ""
         flat["latest_major"] = ""
         flat["latest_degree"] = ""
+        flat["latest_school_type"] = ""
+        flat["latest_edu_form"] = ""
+        flat["latest_courses"] = ""
         flat["latest_edu_start"] = ""
         flat["latest_edu_end"] = ""
 

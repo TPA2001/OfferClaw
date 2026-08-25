@@ -267,7 +267,13 @@ class OpenAIProvider(LLMProvider):
                     json=payload,
                     headers=self._headers(),
                 ) as resp:
-                    resp.raise_for_status()
+                    # 流式响应中不能直接用 raise_for_status()（会触发 "without read()" 错误）
+                    if not resp.is_success:
+                        await resp.aread()
+                        try:
+                            resp.raise_for_status()
+                        except httpx.HTTPStatusError as e:
+                            self._handle_http_error(e)
                     async for line in resp.aiter_lines():
                         if not line or not line.startswith("data: "):
                             continue

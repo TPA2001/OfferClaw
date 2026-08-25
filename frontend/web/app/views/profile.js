@@ -33,6 +33,14 @@
     const WORK_TYPES = ['全职', '兼职', '实习'];
     const AVAILABILITIES = ['随时', '一周内', '一个月内'];
     const GENDERS = ['男', '女'];
+    // 央国企网申常见枚举
+    const POLITICAL_STATUSES = ['中共党员', '中共预备党员', '共青团员', '群众', '民主党派'];
+    const MARITAL_STATUSES = ['未婚', '已婚', '离异'];
+    const HOUSEHOLD_TYPES = ['城镇户籍', '农村户籍'];
+    const ETHNICITIES = ['汉族', '蒙古族', '满族', '朝鲜族', '回族', '壮族', '维吾尔族', '藏族', '苗族', '彝族', '其他'];
+    // 教育经历：院校层次 & 教育形式（央国企常考）
+    const SCHOOL_TYPES = ['985/双一流', '211/双一流', '重点大学', '普通本科', '海外院校', '专科院校'];
+    const EDU_FORMS = ['全日制', '非全日制', '统招', '成人教育', '自学考试', '网络教育', '职业教育'];
 
     const LEVEL_COLORS = {
         '了解': 'var(--ink-faint)',
@@ -225,7 +233,7 @@
     outline: none;
     border-color: var(--olive);
     box-shadow: 0 0 0 3px var(--olive-glow);
-    background: #fff;
+    background: var(--card);
 }
 .skill-add-select {
     padding: 0.5rem 0.6rem;
@@ -331,7 +339,7 @@
     outline: none;
     border-color: var(--olive);
     box-shadow: 0 0 0 3px var(--olive-glow);
-    background: #fff;
+    background: var(--card);
 }
 
 /* --- JSON 备份 --- */
@@ -439,6 +447,84 @@
     font-size: 0.85rem;
     word-break: break-all;
 }
+.empty-custom-hint {
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+    line-height: 1.6;
+    margin: 0 0 0.6rem;
+}
+.section-custom-card {
+    margin-top: 1.2rem;
+    border-style: dashed;
+}
+.section-custom-card .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.card-badge {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--olive);
+    background: var(--olive-soft);
+    padding: 0.1rem 0.55rem;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+/* --- 条目级自定义字段（记录卡片内部） --- */
+.btn-xs {
+    padding: 0.12rem 0.5rem;
+    font-size: 0.72rem;
+    border-radius: 5px;
+}
+.entry-custom-fields {
+    margin-top: 0.8rem;
+    padding-top: 0.7rem;
+    border-top: 1px dashed var(--line-soft);
+}
+.entry-custom-head {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 0.6rem;
+}
+.entry-custom-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+}
+.entry-custom-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.7rem;
+    background: var(--paper-light);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+}
+.entry-custom-key {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--olive-dark);
+}
+.entry-custom-val {
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+}
+.entry-custom-add {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.entry-custom-add .skill-add-input {
+    flex: 1;
+    min-width: 140px;
+}
 
 @media (max-width: 700px) {
     .profile-toolbar { flex-direction: column; align-items: stretch; }
@@ -456,6 +542,7 @@
             basic: {
                 name: '', gender: '', age: '', birth: '', phone: '', email: '', location: '',
                 ethnicity: '', political_status: '', marital_status: '', native_place: '',
+                household_type: '', height: '', weight: '', health: '',
                 wechat: '', qq: '', website: '', github: '', linkedin: '',
                 english_level: '', driving_license: '', job_status: '', avatar: '', job_intent: ''
             },
@@ -508,10 +595,14 @@
             school: e.school || '',
             degree: e.degree || '',
             major: e.major || '',
+            school_type: e.school_type || '',
+            edu_form: e.edu_form || '',
+            courses: e.courses || '',
             start_date: e.start_date || '',
             end_date: e.end_date || '',
             gpa: e.gpa || '',
             description: e.description || '',
+            custom_fields: (e.custom_fields && typeof e.custom_fields === 'object') ? e.custom_fields : {},
         };
     }
 
@@ -525,6 +616,7 @@
             description: e.description || '',
             achievements: Array.isArray(e.achievements) ? e.achievements :
                 (typeof e.achievements === 'string' ? e.achievements : ''),
+            custom_fields: (e.custom_fields && typeof e.custom_fields === 'object') ? e.custom_fields : {},
         };
     }
 
@@ -539,6 +631,7 @@
             url: e.url || '',
             tech_stack: Array.isArray(e.tech_stack) ? e.tech_stack.join(', ') :
                 (e.tech_stack || ''),
+            custom_fields: (e.custom_fields && typeof e.custom_fields === 'object') ? e.custom_fields : {},
         };
     }
 
@@ -549,6 +642,7 @@
             issuer: e.issuer || '',
             date: e.date || '',
             score: e.score || '',
+            custom_fields: (e.custom_fields && typeof e.custom_fields === 'object') ? e.custom_fields : {},
         };
     }
 
@@ -668,7 +762,9 @@
     function updateCompletion() {
         const fill = root.querySelector('#completion-fill');
         const pct = root.querySelector('#completion-pct');
-        const overall = Math.max(0, Math.min(100, state.completion.overall || 0));
+        // 后端 /profiles/completion 返回 percentage 字段；兼容旧字段 overall
+        const overall = Math.max(0, Math.min(100,
+            state.completion.percentage != null ? state.completion.percentage : (state.completion.overall || 0)));
         if (fill) fill.style.width = overall + '%';
         if (pct) {
             pct.textContent = overall + '%';
@@ -696,6 +792,11 @@
             case 'job_intent':   html = renderJobIntentTab(); break;
             case 'custom':       html = renderCustomTab(); break;
             case 'sensitive':    html = renderSensitiveTab(); break;
+        }
+        // 对象型分类（单块表单）在底部追加「分类自定义字段」区块；
+        // 列表型分类（教育/工作/项目/证书）的自定义字段在每个条目内部维护。
+        if (tab !== 'sensitive' && tab !== 'education' && tab !== 'experience' && tab !== 'projects' && tab !== 'certificates') {
+            html += renderSectionCustomFields(tab);
         }
         container.innerHTML = '<div class="tab-panel">' + html + '</div>';
         bindPanelEvents();
@@ -759,19 +860,45 @@
                 </div>
                 <div class="form-field">
                     <label>民族</label>
-                    <input type="text" data-section="basic" data-field="ethnicity" value="${esc(b.ethnicity)}" placeholder="如 汉族">
+                    <input type="text" data-section="basic" data-field="ethnicity" value="${esc(b.ethnicity)}" placeholder="如 汉族" list="ethnicity-options">
+                    <datalist id="ethnicity-options">${ETHNICITIES.map(e => `<option value="${e}">`).join('')}</datalist>
                 </div>
                 <div class="form-field">
                     <label>政治面貌</label>
-                    <input type="text" data-section="basic" data-field="political_status" value="${esc(b.political_status)}" placeholder="如 共青团员 / 党员">
+                    <select data-section="basic" data-field="political_status">
+                        <option value="">请选择</option>
+                        ${POLITICAL_STATUSES.map(ps => `<option value="${ps}" ${b.political_status === ps ? 'selected' : ''}>${ps}</option>`).join('')}
+                    </select>
                 </div>
                 <div class="form-field">
                     <label>婚姻状况</label>
-                    <input type="text" data-section="basic" data-field="marital_status" value="${esc(b.marital_status)}" placeholder="如 未婚">
+                    <select data-section="basic" data-field="marital_status">
+                        <option value="">请选择</option>
+                        ${MARITAL_STATUSES.map(ms => `<option value="${ms}" ${b.marital_status === ms ? 'selected' : ''}>${ms}</option>`).join('')}
+                    </select>
                 </div>
                 <div class="form-field">
                     <label>籍贯</label>
                     <input type="text" data-section="basic" data-field="native_place" value="${esc(b.native_place)}" placeholder="如 山东济南">
+                </div>
+                <div class="form-field">
+                    <label>户口类型</label>
+                    <select data-section="basic" data-field="household_type">
+                        <option value="">请选择</option>
+                        ${HOUSEHOLD_TYPES.map(ht => `<option value="${ht}" ${b.household_type === ht ? 'selected' : ''}>${ht}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label>身高 (cm)</label>
+                    <input type="number" data-section="basic" data-field="height" value="${esc(b.height)}" placeholder="如 175" min="0" max="250">
+                </div>
+                <div class="form-field">
+                    <label>体重 (kg)</label>
+                    <input type="number" data-section="basic" data-field="weight" value="${esc(b.weight)}" placeholder="如 65" min="0" max="300">
+                </div>
+                <div class="form-field">
+                    <label>健康状况</label>
+                    <input type="text" data-section="basic" data-field="health" value="${esc(b.health)}" placeholder="如 健康 / 良好">
                 </div>
                 <div class="form-field">
                     <label>微信</label>
@@ -839,6 +966,20 @@
                             </select>
                         </div>
                         <div class="form-field">
+                            <label>院校类型</label>
+                            <select data-section="education" data-index="${i}" data-field="school_type">
+                                <option value="">请选择</option>
+                                ${SCHOOL_TYPES.map(st => `<option value="${st}" ${e.school_type === st ? 'selected' : ''}>${st}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>教育形式</label>
+                            <select data-section="education" data-index="${i}" data-field="edu_form">
+                                <option value="">请选择</option>
+                                ${EDU_FORMS.map(ef => `<option value="${ef}" ${e.edu_form === ef ? 'selected' : ''}>${ef}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-field">
                             <label>专业</label>
                             <input type="text" data-section="education" data-index="${i}" data-field="major" value="${esc(e.major)}" placeholder="如 计算机科学">
                         </div>
@@ -855,10 +996,15 @@
                             <input type="text" data-section="education" data-index="${i}" data-field="end_date" value="${esc(e.end_date)}" placeholder="如 2024-06 或 至今">
                         </div>
                         <div class="form-field full">
+                            <label>主修课程</label>
+                            <input type="text" data-section="education" data-index="${i}" data-field="courses" value="${esc(e.courses)}" placeholder="如 数据结构、操作系统、计算机网络（逗号分隔）">
+                        </div>
+                        <div class="form-field full">
                             <label>描述</label>
-                            <textarea data-section="education" data-index="${i}" data-field="description" placeholder="主修课程、学术成就等">${esc(e.description)}</textarea>
+                            <textarea data-section="education" data-index="${i}" data-field="description" placeholder="主修课程、学术成就、获得荣誉等">${esc(e.description)}</textarea>
                         </div>
                     </div>
+                    ${renderEntryCustomFields('education', e, i)}
                 </div>`;
             });
         }
@@ -910,6 +1056,7 @@
                             <textarea data-section="experience" data-index="${i}" data-field="achievements" data-type="text-array" placeholder="每行一条成就，如：&#10;优化了 XX 接口性能提升 50%&#10;主导了 XX 项目的从 0 到 1">${esc(achievementsToText(e.achievements))}</textarea>
                         </div>
                     </div>
+                    ${renderEntryCustomFields('experience', e, i)}
                 </div>`;
             });
         }
@@ -965,6 +1112,7 @@
                             <textarea data-section="projects" data-index="${i}" data-field="description" placeholder="项目背景、你的贡献、技术亮点">${esc(e.description)}</textarea>
                         </div>
                     </div>
+                    ${renderEntryCustomFields('projects', e, i)}
                 </div>`;
             });
         }
@@ -1088,6 +1236,7 @@
                             <input type="text" data-section="certificates" data-index="${i}" data-field="score" value="${esc(e.score)}" placeholder="如 优秀 / 90">
                         </div>
                     </div>
+                    ${renderEntryCustomFields('certificates', e, i)}
                 </div>`;
             });
         }
@@ -1178,12 +1327,155 @@
         }
     }
 
-    function renderCustomTab() {
+    // --- 分类内自定义字段（每个标签页底部统一区块） ---
+
+    const SECTION_CUSTOM_LABELS = {
+        basic: '基本信息',
+        education: '教育经历',
+        experience: '工作经历',
+        projects: '项目经历',
+        skills: '技能',
+        summary: '自我评价',
+        certificates: '证书',
+        job_intent: '求职意向',
+    };
+
+    // 匹配「分类:字段名」格式的 key（分类内自定义字段的前缀）
+    const SECTION_PREFIX_RE = /^basic:|^education:|^experience:|^projects:|^skills:|^summary:|^certificates:|^job_intent:/;
+
+    /** 从 extra_fields 中取某分类下已添加的自定义字段（key 带 `section:` 前缀以隔离分类） */
+    function sectionCustomOf(section) {
         const extra = state.profile.extra_fields || {};
-        const keys = Object.keys(extra);
+        const prefix = section + ':';
+        const out = {};
+        Object.keys(extra).forEach((k) => {
+            if (k.indexOf(prefix) === 0) out[k.slice(prefix.length)] = extra[k];
+        });
+        return out;
+    }
+
+    function renderSectionCustomFields(section) {
+        const label = SECTION_CUSTOM_LABELS[section];
+        if (!label) return '';
+        const custom = sectionCustomOf(section);
+        const keys = Object.keys(custom);
         let rows = '';
         if (keys.length === 0) {
-            rows = '<div class="empty-card"><span class="empty-emoji">🧩</span><h3>暂无自定义字段</h3><p>添加任意「字段名 → 值」，例如：党员转正时间 → 2022-07、外语能力 → 日语 N2。填表时会按字段名自动匹配网申表单。</p></div>';
+            rows = '<p class="empty-custom-hint">本分类暂无自定义字段。可添加该分类下未内置的网申字段，例如：奖惩情况、实习单位性质等。</p>';
+        } else {
+            rows = keys.map((k) =>
+                `<div class="custom-row">
+                    <div class="custom-key">${esc(k)}</div>
+                    <div class="custom-val">${esc(custom[k])}</div>
+                    <button class="btn btn-danger btn-sm" data-action="delete-section-custom" data-section="${section}" data-key="${esc(k)}">删除</button>
+                </div>`
+            ).join('');
+        }
+        return `
+        <div class="card section-custom-card">
+            <div class="card-header">
+                <h2 class="card-title">${label} · 自定义字段</h2>
+                <span class="card-badge">按需补充</span>
+            </div>
+            <p class="custom-hint">这些字段仅作用于「${label}」分类，会同步到后端并按字段名自动匹配网申表单。</p>
+            <div class="custom-add-row">
+                <input type="text" id="sec-custom-key-${section}" class="skill-add-input" placeholder="字段名，如：奖惩情况">
+                <input type="text" id="sec-custom-val-${section}" class="skill-add-input" placeholder="字段值，如：校级三好学生">
+                <button class="btn btn-primary btn-sm" data-action="add-section-custom" data-section="${section}">添加</button>
+            </div>
+            <div class="custom-list">${rows}</div>
+        </div>`;
+    }
+
+    function addSectionCustomField(section) {
+        const keyEl = root.querySelector('#sec-custom-key-' + section);
+        const valEl = root.querySelector('#sec-custom-val-' + section);
+        if (!keyEl || !valEl) return;
+        const key = keyEl.value.trim();
+        const val = valEl.value.trim();
+        if (!key) { API.toast('请填写字段名', 'warn'); return; }
+        if (!state.profile.extra_fields) state.profile.extra_fields = {};
+        const fullKey = section + ':' + key;
+        if (Object.prototype.hasOwnProperty.call(state.profile.extra_fields, fullKey)) {
+            API.toast('该字段名已在此分类下存在', 'warn'); return;
+        }
+        state.profile.extra_fields[fullKey] = val;
+        markDirty();
+        renderTabPanel();
+        API.toast('已添加自定义字段', 'info', 1200);
+    }
+
+    function deleteSectionCustomField(section, key) {
+        if (!state.profile.extra_fields) return;
+        delete state.profile.extra_fields[section + ':' + key];
+        markDirty();
+        renderTabPanel();
+        API.toast('已删除', 'success', 1200);
+    }
+
+    // --- 条目级自定义字段（教育/工作/项目/证书 的单条记录内部） ---
+
+    /** 渲染单条记录内部的「该条目的自定义字段」区块 */
+    function renderEntryCustomFields(section, entry, index) {
+        const cf = (entry && entry.custom_fields && typeof entry.custom_fields === 'object') ? entry.custom_fields : {};
+        const keys = Object.keys(cf);
+        let rows = '';
+        if (keys.length > 0) {
+            rows = keys.map((k) =>
+                `<div class="entry-custom-row">
+                    <span class="entry-custom-key">${esc(k)}</span>
+                    <span class="entry-custom-val">${esc(cf[k])}</span>
+                    <button class="btn btn-danger btn-xs" data-action="delete-entry-custom" data-section="${section}" data-index="${index}" data-key="${esc(k)}">删除</button>
+                </div>`
+            ).join('');
+        }
+        return `
+        <div class="entry-custom-fields">
+            <div class="entry-custom-head">该条目的自定义字段</div>
+            <div class="entry-custom-list">${rows}</div>
+            <div class="entry-custom-add">
+                <input type="text" id="ecf-key-${section}-${index}" class="skill-add-input" placeholder="字段名，如：学院 / 奖惩情况">
+                <input type="text" id="ecf-val-${section}-${index}" class="skill-add-input" placeholder="字段值">
+                <button class="btn btn-ghost btn-xs" data-action="add-entry-custom" data-section="${section}" data-index="${index}">添加</button>
+            </div>
+        </div>`;
+    }
+
+    function addEntryCustomField(section, index) {
+        const item = state.profile[section] && state.profile[section][index];
+        if (!item) return;
+        const keyEl = root.querySelector('#ecf-key-' + section + '-' + index);
+        const valEl = root.querySelector('#ecf-val-' + section + '-' + index);
+        if (!keyEl || !valEl) return;
+        const key = keyEl.value.trim();
+        const val = valEl.value.trim();
+        if (!key) { API.toast('请填写字段名', 'warn'); return; }
+        if (!item.custom_fields || typeof item.custom_fields !== 'object') item.custom_fields = {};
+        if (Object.prototype.hasOwnProperty.call(item.custom_fields, key)) {
+            API.toast('该字段已在此条目存在', 'warn'); return;
+        }
+        item.custom_fields[key] = val;
+        markDirty();
+        renderTabPanel();
+        API.toast('已在条目内添加字段', 'info', 1200);
+    }
+
+    function deleteEntryCustomField(section, index, key) {
+        const item = state.profile[section] && state.profile[section][index];
+        if (!item || !item.custom_fields) return;
+        delete item.custom_fields[key];
+        markDirty();
+        renderTabPanel();
+        API.toast('已删除', 'success', 1200);
+    }
+
+    function renderCustomTab() {
+        // 仅展示不带「分类:」前缀的全局自定义字段；各分类内的字段在各标签页底部管理
+        const extra = state.profile.extra_fields || {};
+        const keys = Object.keys(extra).filter((k) => !SECTION_PREFIX_RE.test(k));
+        let rows = '';
+        if (keys.length === 0) {
+            rows = '<div class="empty-card"><span class="empty-emoji">🧩</span><h3>暂无全局自定义字段</h3><p>添加任意「字段名 → 值」，例如：党员转正时间 → 2022-07、外语能力 → 日语 N2。填表时会按字段名自动匹配网申表单。</p><p>如需在特定分类下补充字段，请切换到对应标签页，在底部「分类 · 自定义字段」区域添加。</p></div>';
         } else {
             rows = keys.map((k) =>
                 `<div class="custom-row">
@@ -1196,9 +1488,9 @@
         return `
         <div class="card">
             <div class="card-header">
-                <h2 class="card-title">自定义字段</h2>
+                <h2 class="card-title">全局自定义字段</h2>
             </div>
-            <p class="custom-hint">这些字段会同步到后端（用于自动填表），也可在扩展里按字段名匹配任意网申表单字段，覆盖标准画像未列举的信息。</p>
+            <p class="custom-hint">这些字段会同步到后端（用于自动填表），也可在扩展里按字段名匹配任意网申表单字段，覆盖标准画像未列举的信息。分类专属字段请在各标签页底部添加。</p>
             <div class="custom-add-row">
                 <input type="text" id="custom-key-input" class="skill-add-input" placeholder="字段名，如：外语能力">
                 <input type="text" id="custom-value-input" class="skill-add-input" placeholder="字段值，如：日语 N2">
@@ -1399,6 +1691,14 @@
                 addCustomField();
             } else if (action === 'delete-custom') {
                 deleteCustomField(btn.dataset.key);
+            } else if (action === 'add-section-custom') {
+                addSectionCustomField(btn.dataset.section);
+            } else if (action === 'delete-section-custom') {
+                deleteSectionCustomField(btn.dataset.section, btn.dataset.key);
+            } else if (action === 'add-entry-custom') {
+                addEntryCustomField(btn.dataset.section, parseInt(btn.dataset.index, 10));
+            } else if (action === 'delete-entry-custom') {
+                deleteEntryCustomField(btn.dataset.section, parseInt(btn.dataset.index, 10), btn.dataset.key);
             } else if (action === 'save-sensitive') {
                 saveLocalSensitiveFromUI();
             }
@@ -1411,6 +1711,38 @@
                 if (e.key === 'Enter') { e.preventDefault(); addCustomField(); }
             });
         }
+
+        // 分类内自定义字段：任一输入框回车快速添加
+        Object.keys(SECTION_CUSTOM_LABELS).forEach((sec) => {
+            const secVal = panel.querySelector('#sec-custom-val-' + sec);
+            if (secVal) {
+                secVal.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); addSectionCustomField(sec); }
+                });
+            }
+            const secKey = panel.querySelector('#sec-custom-key-' + sec);
+            if (secKey) {
+                secKey.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); addSectionCustomField(sec); }
+                });
+            }
+        });
+
+        // 条目级自定义字段：任一输入框回车快速添加
+        ['education', 'experience', 'projects', 'certificates'].forEach((sec) => {
+            panel.querySelectorAll('[id^="ecf-key-' + sec + '-"]').forEach((el) => {
+                const idx = el.id.split('-').pop();
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); addEntryCustomField(sec, parseInt(idx, 10)); }
+                });
+            });
+            panel.querySelectorAll('[id^="ecf-val-' + sec + '-"]').forEach((el) => {
+                const idx = el.id.split('-').pop();
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); addEntryCustomField(sec, parseInt(idx, 10)); }
+                });
+            });
+        });
 
         // 技能添加
         const skillInput = panel.querySelector('#skill-name-input');
@@ -1479,10 +1811,10 @@
 
     function addEntry(section) {
         const templates = {
-            education: { school: '', degree: '', major: '', start_date: '', end_date: '', gpa: '', description: '' },
-            experience: { company: '', position: '', start_date: '', end_date: '', description: '', achievements: [] },
-            projects: { name: '', role: '', description: '', start_date: '', end_date: '', url: '', tech_stack: [] },
-            certificates: { name: '', issuer: '', date: '', score: '' },
+            education: { school: '', degree: '', major: '', school_type: '', edu_form: '', courses: '', start_date: '', end_date: '', gpa: '', description: '', custom_fields: {} },
+            experience: { company: '', position: '', start_date: '', end_date: '', description: '', achievements: [], custom_fields: {} },
+            projects: { name: '', role: '', description: '', start_date: '', end_date: '', url: '', tech_stack: [], custom_fields: {} },
+            certificates: { name: '', issuer: '', date: '', score: '', custom_fields: {} },
         };
         if (!templates[section]) return;
         state.profile[section].push(templates[section]);
@@ -1571,10 +1903,10 @@
         try {
             const [profile, completion] = await Promise.all([
                 API.get('/profiles/'),
-                API.get('/profiles/completion').catch(() => ({ overall: 0, sections: {} })),
+                API.get('/profiles/completion').catch(() => ({ percentage: 0, overall: 0, sections: {} })),
             ]);
             state.profile = normalizeProfile(profile);
-            state.completion = completion || { overall: 0, sections: {} };
+            state.completion = completion || { percentage: 0, overall: 0, sections: {} };
             state.dirty = false;
             state.loading = false;
             renderAll();
@@ -1583,7 +1915,7 @@
             state.error = e.message || '加载失败';
             // 初始化空画像供编辑
             state.profile = emptyProfile();
-            state.completion = { overall: 0, sections: {} };
+            state.completion = { percentage: 0, overall: 0, sections: {} };
             state.dirty = false;
             root.innerHTML = renderShell();
             bindEvents();
@@ -1598,7 +1930,7 @@
     async function loadCompletion() {
         try {
             const data = await API.get('/profiles/completion');
-            state.completion = data || { overall: 0, sections: {} };
+            state.completion = data || { percentage: 0, overall: 0, sections: {} };
             updateCompletion();
         } catch (e) {
             // 静默失败
