@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OfferClaw 网页端上线改造分析报告</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #f7f6f3;
+    color: #27251f;
+    line-height: 1.7;
+    font-size: 15px;
+  }
+  .container { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 26px; font-weight: 600; margin-bottom: 8px; color: #1a1a1a; }
+  .subtitle { color: #666; font-size: 14px; margin-bottom: 32px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 2px solid #e0ddd5; }
+  h3 { font-size: 16px; font-weight: 600; margin: 24px 0 12px; }
+  p { margin-bottom: 12px; }
+  .meta { display: flex; gap: 24px; margin-bottom: 24px; font-size: 13px; color: #888; }
+  .meta span { display: flex; align-items: center; gap: 6px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; margin-right: 4px; }
+  .p0 { background: #fee2e2; color: #991b1b; }
+  .p1 { background: #fef3c7; color: #854d0e; }
+  .p2 { background: #dbeafe; color: #1e40af; }
+  .p3 { background: #d1fae5; color: #065f46; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+  th { background: #f0eee8; padding: 10px 12px; text-align: left; font-weight: 600; border-bottom: 2px solid #ddd9d0; }
+  td { padding: 10px 12px; border-bottom: 1px solid #e8e6e0; vertical-align: top; }
+  tr:nth-child(even) td { background: #faf9f6; }
+  .card { background: #fff; border: 1px solid #e8e6e0; border-radius: 8px; padding: 20px; margin: 16px 0; }
+  .card.warn { border-color: #f5c4b3; background: #fef5f0; }
+  .card.tip { border-color: #9fe1cb; background: #f0faf5; }
+  ul, ol { margin: 8px 0 16px 20px; }
+  li { margin-bottom: 6px; }
+  code { background: #f0eee8; padding: 2px 6px; border-radius: 3px; font-size: 13px; font-family: "Cascadia Code", "Fira Code", monospace; }
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e0ddd5; font-size: 13px; color: #999; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>OfferClaw 网页端上线改造分析报告</h1>
+  <div class="meta">
+    <span>生成日期：2026-08-26</span>
+    <span>项目版本：v1.2.0</span>
+    <span>分析范围：全项目代码 + 架构文档</span>
+  </div>
+
+  <h2>一、项目现状概述</h2>
+  <p>OfferClaw 是一个 Agent 驱动的求职管理平台，当前架构为 <strong>FastAPI 后端 + 原生 JS 前端 + Chrome 扩展</strong>。项目目前以 <strong>PyInstaller 单文件桌面端</strong>形式分发，所有功能围绕<strong>单用户本地运行</strong>设计：</p>
+  <ul>
+    <li>鉴权层为 <code>open</code> 模式，所有请求固定为 <code>local-user</code>，无真实用户体系</li>
+    <li>数据库使用 SQLite 单文件，存储在 <code>backend/data/offerclaw.db</code></li>
+    <li>Playwright 以本地子进程方式运行，用于 Boss 搜索和智能填表</li>
+    <li>授权采用机器绑定 JWT（MAC 指纹 + 离线验签）</li>
+    <li>限流器为内存滑动窗口，仅支持单进程</li>
+    <li>前端无构建系统，由 <code>python -m http.server</code> 或 FastAPI StaticFiles 托管</li>
+  </ul>
+
+  <h2>二、需要改造的 8 大模块</h2>
+
+  <h3>1. <span class="badge p0">P0</span> 用户体系与鉴权（最核心）</h3>
+  <div class="card warn">
+    <p><strong>现状问题：</strong><code>auth.py</code> 硬编码 <code>LOCAL_USER_ID = "local-user"</code>，所有请求视为同一用户。数据模型中 <code>user_id</code> 字段虽已预留（<code>String(64), index=True</code>），但无 User 表、无注册/登录/密码/会话管理。</p>
+    <p><strong>需要做的工作：</strong></p>
+    <ul>
+      <li>新建 <code>User</code> 模型（id/email/password_hash/created_at/last_login/subscription_tier）</li>
+      <li>实现注册/登录 API（密码哈希用 bcrypt/argon2，JWT 签发 + refresh token）</li>
+      <li>可选接入 OAuth 第三方登录（微信扫码 / GitHub / Google）</li>
+      <li>重写 <code>get_current_user()</code>：从 <code>Authorization: Bearer</code> 解析 JWT 获取真实 user_id</li>
+      <li>所有 API 路由的 <code>Depends(get_current_user)</code> 改为注入真实用户 ID</li>
+      <li>前端增加登录/注册页面，token 存 httpOnly cookie（非 localStorage，防 XSS）</li>
+      <li>CSRF 防护（SameSite cookie + CSRF token）</li>
+    </ul>
+  </div>
+
+  <h3>2. <span class="badge p0">P0</span> 数据库迁移（SQLite → PostgreSQL）</h3>
+  <div class="card">
+    <p><strong>现状问题：</strong>SQLite 单文件不支持并发写入，<code>database.py</code> 虽已预留 <code>DATABASE_URL</code> 环境变量切换，但多个模块有 SQLite 特定写法（<code>JSON</code> 类型用 <code>sqlalchemy.dialects.sqlite.JSON</code>，<code>check_same_thread</code> 参数）。</p>
+    <p><strong>需要做的工作：</strong></p>
+    <ul>
+      <li><code>Profile</code> 模型改用 <code>sqlalchemy.JSON</code>（通用类型，兼容 PG 的 JSONB）</li>
+      <li>移除 <code>connect_args={"check_same_thread": False}</code>（PG 不需要）</li>
+      <li>引入 Alembic 做 schema 版本管理（当前是 <code>auto_migrate</code> 手动列追加，不适合多实例）</li>
+      <li>连接池配置（<code>pool_size</code>、<code>max_overflow</code>、<code>pool_pre_ping</code>）</li>
+      <li>数据迁移脚本：将现有 SQLite 数据导入 PostgreSQL</li>
+    </ul>
+  </div>
+
+  <h3>3. <span class="badge p0">P0</span> 容器化与部署</h3>
+  <div class="card">
+    <p><strong>现状问题：</strong>README 明确标注 <code>Docker 部署 ❌ 未提供</code>。当前用 PyInstaller 打包为 exe，单机桌面运行。</p>
+    <p><strong>需要做的工作：</strong></p>
+    <ul>
+      <li>编写 <code>Dockerfile</code>（Python 3.11 slim + Playwright 系统依赖 + Chromium）</li>
+      <li>编写 <code>docker-compose.yml</code>（app + postgres + redis 三容器编排）</li>
+      <li>Nginx 反向代理配置（TLS 终结、静态文件服务、API 转发、SSE 代理）</li>
+      <li>前端构建为静态资源（Vite/esbuild），输出到 <code>dist/</code>，由 Nginx 或 FastAPI StaticFiles 托管</li>
+      <li>环境变量管理（secrets 不入镜像，通过 docker secrets / k8s secrets 注入）</li>
+      <li>CI/CD 流水线（GitHub Actions / GitLab CI：lint → test → build → push → deploy）</li>
+    </ul>
+  </div>
+
+  <h3>4. <span class="badge p1">P1</span> Playwright 服务化</h3>
+  <div class="card warn">
+    <p><strong>现状问题：</strong>Playwright 以本地子进程方式运行，每个请求同步等待浏览器操作完成。在网页端高并发场景下，单进程无法支撑多用户同时使用 Boss 搜索 / 智能填表功能。</p>
+    <p><strong>需要做的工作：</strong></p>
+    <ul>
+      <li>将 Playwright 操作抽离为独立微服务或任务队列（Celery / RQ / Dramatiq）</li>
+      <li>浏览器池管理（预启动多个 Chromium 实例，复用 context，隔离用户数据）</li>
+      <li>异步任务模式：前端提交任务 → 返回 task_id → 轮询/WebSocket 获取结果</li>
+      <li>超时与资源回收（单个任务最长执行时间、空闲浏览器自动关闭）</li>
+      <li>Boss 登录态管理：从本地浏览器 profile 改为服务端 session 池 + 用户扫码绑定</li>
+      <li>反爬风险：服务端 IP 被封后需要代理池策略</li>
+    </ul>
+    <p><strong>替代方案：</strong>将 Boss 搜索降级为纯 HTML 公开页解析（已有 <code>boss_html_search.py</code>），智能填表功能改为 Chrome 扩展端执行（已有扩展能力），Playwright 在服务端可选/受限使用。</p>
+  </div>
+
+  <h3>5. <span class="badge p1">P1</span> 授权模型重构（机器绑定 → SaaS 订阅）</h3>
+  <div class="card">
+    <p><strong>现状问题：</strong><code>license.py</code> 的机器绑定模式（MAC 指纹 + 离线 JWT 验签）不适合网页端。网页端用户不绑定机器，需要的是账户级订阅/配额管理。</p>
+    <p><strong>需要做的工作：</strong></p>
+    <ul>
+      <li>新建 <code>Subscription</code> 模型（user_id/plan/started_at/expires_at/usage_quota/used_count）</li>
+      <li>订阅层级：免费版（限制功能/配额）/ 基础版 / 专业版</li>
+      <li>用量计费：LLM 调用次数、Playwright 任务次数、Agent 对话轮数</li>
+      <li>移除或重构 <code>license_gate_middleware</code>：从机器授权 → 用户订阅校验</li>
+      <li>支付接入（微信支付 / 支付宝）</li>
+      <li>复用已有 <code>subscription.py</code> 框架（当前为 Mock，需实现真实逻辑）</li>
+    </ul>
+  </div>
+
+  <h3>6. <span class="badge p2">P2</span> 前端改造</h3>
+  <div class="card">
+    <p><strong>现状问题：</strong>前端为原生 HTML/CSS/JS，无构建系统、无组件化、无类型检查。<code>api.js</code> 中 API 基址依赖 <code>location.hostname</code> 判断环境，<code>config.js</code> 中 TOKEN 硬编码为 <code>internal-beta</code>。</p>
+    <p><strong>需要做的工作：</strong></p>
+    <ul>
+      <li>引入前端框架（推荐 Vue 3 + Vite，迁移成本低；或 React + Vite）</li>
+      <li>将现有 7 个视图（chat/kanban/jobs/profile/smart-fill/interview/settings）迁移为组件</li>
+      <li>路由系统（Vue Router / React Router），替代当前手写 hash router</li>
+      <li>状态管理（Pinia / Zustand），管理用户登录态、主题偏好等</li>
+      <li>构建产物部署到 CDN，API 请求走相对路径（Nginx 反代到后端）</li>
+      <li>移除前端硬编码 <code>TOKEN</code>，改用 httpOnly cookie 自动携带</li>
+    </ul>
+    <p><strong>轻量方案：</strong>保持原生 JS，仅加 Vite 做构建 + 代码分割 + 环境变量注入，不做框架迁移。适合快速上线 MVP。</p>
+  </div>
+
+  <h3>7. <span class="badge p2">P2</span> 安全加固</h3>
+  <div class="card warn">
+    <p><strong>现状问题：</strong>当前为内测模式，CORS 配置宽松，无 HTTPS，无安全头，SSE 无鉴权。</p>
+    <p><strong>需要做的工作：</strong></p>
+    <ul>
+      <li>HTTPS 全站强制（HSTS header）</li>
+      <li>CORS 精确配置（只允许正式域名，移除 localhost 和通配符）</li>
+      <li>安全头：CSP / X-Frame-Options / X-Content-Type-Options / Referrer-Policy</li>
+      <li>SSE 端点鉴权（当前 Agent 对话 SSE 无 session 校验）</li>
+      <li>输入验证与 XSS 防护（已有 <code>esc()</code> 函数，需确保所有动态内容使用）</li>
+      <li>SQL 注入防护（SQLAlchemy ORM 已参数化，需审计 raw query）</li>
+      <li>速率限制改用 Redis 后端（当前内存版不支持多实例）</li>
+      <li>密钥管理：LLM API Key 不再由用户在前端配置，改由服务端统一管理</li>
+    </ul>
+  </div>
+
+  <h3>8. <span class="badge p2">P2</span> 隐私合规与敏感数据处理</h3>
+  <div class="card warn">
+    <p><strong>现状问题：</strong>敏感信息（身份证/住址/银行卡）仅存浏览器端，后端 <code>sanitizer.py</code> 强制剔除。网页端若用户换设备/清缓存，敏感数据丢失。</p>
+    <p><strong>需要做的工作：</strong></p>
+    <ul>
+      <li>端到端加密方案：服务端存储加密后的敏感数据（用户密码派生密钥，服务端不可解密）</li>
+      <li>用户隐私协议与数据处理说明</li>
+      <li>GDPR/个人信息保护法合规：数据导出、删除、匿名化</li>
+      <li>Chrome 扩展适配：扩展从连本地后端改为连线上后端，API 基址可配置</li>
+    </ul>
+  </div>
+
+  <h2>三、工作量估算与优先级</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>模块</th><th>优先级</th><th>工作量（人天）</th><th>阻塞关系</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>数据库迁移 PG + Alembic</td><td>P0</td><td>3-5</td><td>—</td></tr>
+      <tr><td>Docker + Nginx + TLS</td><td>P0</td><td>3-5</td><td>—</td></tr>
+      <tr><td>Redis（限流/缓存/会话）</td><td>P0</td><td>2</td><td>Docker</td></tr>
+      <tr><td>用户注册/登录/JWT</td><td>P1</td><td>5-8</td><td>PG</td></tr>
+      <tr><td>多租户数据隔离审计</td><td>P1</td><td>3-5</td><td>用户体系</td></tr>
+      <tr><td>Playwright 服务化/任务队列</td><td>P1</td><td>8-12</td><td>Redis</td></tr>
+      <tr><td>授权模型 SaaS 重构</td><td>P1</td><td>5-8</td><td>用户体系</td></tr>
+      <tr><td>前端改造（Vite/框架）</td><td>P2</td><td>10-15</td><td>—</td></tr>
+      <tr><td>安全加固（CORS/安全头/SSE鉴权）</td><td>P2</td><td>3-5</td><td>用户体系</td></tr>
+      <tr><td>隐私合规与加密存储</td><td>P2</td><td>5-8</td><td>—</td></tr>
+      <tr><td>CI/CD 流水线</td><td>P2</td><td>3-5</td><td>Docker</td></tr>
+      <tr><td>监控告警 + 日志收集</td><td>P3</td><td>3-5</td><td>—</td></tr>
+      <tr><td>移动端适配</td><td>P3</td><td>5-10</td><td>前端改造</td></tr>
+    </tbody>
+  </table>
+  <p><strong>总估算：约 60-95 人天</strong>（不含测试调优和迭代）。一个全栈开发者约 3-4 个月可完成核心改造上线。</p>
+
+  <h2>四、建议的上线策略</h2>
+  <div class="card tip">
+    <h3>阶段一：MVP 快速验证（4-6 周）</h3>
+    <ul>
+      <li>Docker 化 + PG + Redis 基础设施</li>
+      <li>用户注册/登录（仅邮箱密码）</li>
+      <li>前端仅加 Vite 构建，不迁框架</li>
+      <li>砍掉 Playwright 功能（Boss 搜索降级为 HTML 解析，智能填表保留扩展端）</li>
+      <li>部署到云服务器，邀请内测用户</li>
+    </ul>
+  </div>
+  <div class="card tip">
+    <h3>阶段二：完整功能（4-8 周）</h3>
+    <ul>
+      <li>Playwright 服务化（任务队列 + 浏览器池）</li>
+      <li>SaaS 订阅 + 支付</li>
+      <li>前端迁移到 Vue/React</li>
+      <li>安全加固 + 隐私合规</li>
+      <li>CI/CD + 监控</li>
+    </ul>
+  </div>
+  <div class="card tip">
+    <h3>阶段三：运营优化（持续）</h3>
+    <ul>
+      <li>移动端适配 / PWA</li>
+      <li>性能优化（CDN、缓存、DB 索引调优）</li>
+      <li>用户反馈驱动迭代</li>
+    </ul>
+  </div>
+
+  <div class="footer">
+    本报告基于 OfferClaw 项目源码（后端 145 个 Python 文件 + 前端 17 个文件 + Chrome 扩展 35 个文件）分析生成。
+  </div>
+</div>
+</body>
+</html>
