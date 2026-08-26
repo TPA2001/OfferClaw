@@ -59,12 +59,12 @@ hiddenimports = [
     # sqlalchemy 方言
     'sqlalchemy.dialects.sqlite',
     # 项目内可能被动态引用的子模块（保险起见显式列）
-    'app.api.automation', 'app.api.license', 'app.api.profiles', 'app.api.jobs',
-    'app.api.interview', 'app.api.kanban', 'app.api.settings', 'app.api.agent',
+    'app.api.automation', 'app.api.license', 'app.api.profile', 'app.api.applications',
+    'app.api.journal', 'app.api.settings', 'app.api.agent',
     'app.services.smart_fill', 'app.services.auto_filler', 'app.services.boss_search',
     'app.services.resume_service', 'app.services.playwright_runtime',
     'app.automation.form_extractor', 'app.automation.field_matcher',
-    'app.models.profile', 'app.models.job', 'app.models.interview',
+    'app.models.profile', 'app.models.application',
     'app.core.license', 'app.core.migrations', 'app.core.paths',
     'app.core.database', 'app.core.llm', 'app.core.config_store',
 ] + pw_hidden
