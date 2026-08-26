@@ -31,9 +31,9 @@ if sys.platform == "win32":
         pass
 
 if __name__ == "__main__":
-    # 内测阶段：源码（非打包）运行默认开放授权门控，无需提交密钥即可使用全部功能。
-    # 正式发布为 frozen 打包构建，不受影响；如需显式关闭，设置 OFFERCLAW_DEV=0。
-    if not getattr(sys, "frozen", False) and "OFFERCLAW_DEV" not in os.environ:
+    # 免费分发：默认开启 OFFERCLAW_DEV=1（开放模式），授权门控全部放行，无需激活码。
+    # 源码与打包(exe)一致生效；如需关闭，显式设置 OFFERCLAW_DEV=0 或 OFFERCLAW_LICENSE_GATE=1。
+    if "OFFERCLAW_DEV" not in os.environ:
         os.environ["OFFERCLAW_DEV"] = "1"
 
     import uvicorn

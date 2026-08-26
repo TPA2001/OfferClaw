@@ -262,7 +262,7 @@ build_release.bat        # 生成单文件可执行程序（dist/）
 ```
 
 - 打包产物自带前端静态资源（`_MEIPASS/frontend/web`）与本地数据目录（`exe 同目录/data`）
-- 正式发布为 frozen 构建，走授权校验；源码模式默认 `OFFERCLAW_DEV=1` 开放授权门控（内测）
+- **授权门控默认关闭**（免费分发，无需激活码）：`OFFERCLAW_LICENSE_GATE` 未设置时全部功能直接可用；如需启用授权校验，设置 `OFFERCLAW_LICENSE_GATE=1`（此时走 JWT 密钥激活，见 `app/core/license.py`）
 
 ---
 

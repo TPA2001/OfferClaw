@@ -1,13 +1,16 @@
-"""离线签名密钥授权模块
+"""离线签名密钥授权模块（默认关闭，免费分发无需激活码）
 
-产品化授权机制：
+免费分发 / 内测：授权门控默认不启用（is_gate_enabled() 返回 False），
+所有功能直接开放，无需任何激活码。
+
+如需启用授权校验（付费分发场景），设置环境变量 OFFERCLAW_LICENSE_GATE=1：
 - 密钥为 JWT（RS256 签名），开发者用私钥签发，App 内嵌公钥验签
 - 离线校验：无需联网，本地验签 + 过期 + 机器绑定 + 功能分级
 - 用户部署后通过 /api/v1/license/activate 提交密钥，激活态缓存到 data/license.dat
 
 密钥约束：过期时间(exp) + 功能分级(features) + 机器绑定(machine)
 威胁模型：私钥仅开发者持有，用户无法伪造密钥；公钥内嵌可被提取但仅用于验签
-开发便利：设置环境变量 OFFERCLAW_DEV=1 可绕过授权门控（仅供开发/测试，发布构建勿设）
+开发便利：设置环境变量 OFFERCLAW_DEV=1 可绕过授权门控（仅供开发/测试）
 """
 import os
 import uuid
@@ -150,6 +153,15 @@ def verify_license(token: str, check_machine: bool = True) -> LicenseInfo:
         issued_at=int(payload.get("iat") or 0),
         raw_token=token,
     )
+
+
+# ── 授权门控开关（默认关闭 = 不搞激活码）────────────────────
+def is_gate_enabled() -> bool:
+    """授权门控是否启用（默认 False：免费分发，无需激活码）
+
+    只有显式设置 OFFERCLAW_LICENSE_GATE=1 时才启用授权校验。
+    """
+    return os.getenv("OFFERCLAW_LICENSE_GATE", "").strip() in ("1", "true", "True", "yes")
 
 
 # ── 激活态缓存 ───────────────────────────────────────────────────────────

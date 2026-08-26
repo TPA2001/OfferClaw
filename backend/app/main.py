@@ -118,16 +118,22 @@ app.include_router(journal.router)
 app.include_router(settings.router)
 
 
-# === 授权门控中间件：未激活/过期/功能未授权 → 403 ===
+# === 授权门控中间件（默认关闭 = 无需激活码，全部放行）===
 @app.middleware("http")
 async def license_gate_middleware(request: Request, call_next):
-    """产品授权门控
+    """产品授权门控（默认不启用）
 
-    - 始终放行：根/健康检查/授权接口/文档
-    - 未激活或已过期：拒绝其余请求，引导到激活页
-    - 已激活但该路径所需功能未授权：拒绝并提示升级
-    - 开发模式(OFFERCLAW_DEV=1)：全部放行
+    - 默认（OFFERCLAW_LICENSE_GATE 未设置）：全部放行，无需激活码
+    - 显式设置 OFFERCLAW_LICENSE_GATE=1 时启用：
+        始终放行：根/健康检查/授权接口/文档
+        未激活或已过期：拒绝其余请求，引导到激活页
+        已激活但该路径所需功能未授权：拒绝并提示升级
+        开发模式(OFFERCLAW_DEV=1)：全部放行
     """
+    # 免费分发：授权门控默认关闭，不搞激活码
+    if not license_mod.is_gate_enabled():
+        return await call_next(request)
+
     # 始终放行的路径前缀（健康检查、文档、授权接口）
     _PUBLIC_PREFIXES = (
         "/health", "/docs", "/openapi.json", "/redoc",
