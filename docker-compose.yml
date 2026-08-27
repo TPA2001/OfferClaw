@@ -1,0 +1,26 @@
+# OfferClaw 网页服务编排
+# 用法：docker compose up -d --build
+# 首次启动后访问 http://localhost:8000 ，注册账号即可使用
+services:
+  offerclaw:
+    build: .
+    container_name: offerclaw
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # 生产必改：强随机密钥（生成方式：openssl rand -hex 32）
+      - SECRET_KEY=${SECRET_KEY:-change-me-to-a-random-secret}
+      - AUTH_MODE=jwt
+      # SQLite 数据文件放在卷中，升级容器不丢数据
+      - DATABASE_URL=sqlite:////data/offerclaw.db
+      # 账号售卖开关：设置后注册必须携带邀请码（REGISTRATION_INVITE_CODE=xxx）
+      # - REGISTRATION_INVITE_CODE=invite-code-here
+      # LLM（可选，Agent 功能需要；不配则 AI 功能为 Mock 模式）
+      # - AGENT_API_KEY=sk-xxx
+      # - AGENT_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+      # - AGENT_MODEL=glm-4.5
+      # CORS（同域部署不需要改；跨域前端部署时配置具体来源）
+      # - CORS_ORIGINS=https://your-domain.com
+    volumes:
+      - ./data:/data

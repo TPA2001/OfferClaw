@@ -1,4 +1,7 @@
-"""路径解析 - 统一处理 PyInstaller 打包模式与开发模式的目录定位
+"""路径解析 - 统一处理 Docker/打包模式与开发模式的目录定位
+
+Docker 模式：
+- 静态目录 = OFFERCLAW_STATIC_DIR 环境变量（如 /app/frontend/web）
 
 打包模式（frozen）：
 - 应用目录 = sys.executable 所在目录（exe 旁边）
@@ -10,6 +13,7 @@
 - 数据目录 = backend/data
 - 静态目录 = 项目根 / frontend / web
 """
+import os
 import sys
 from pathlib import Path
 
@@ -29,7 +33,7 @@ def app_dir() -> Path:
 
 
 def data_dir() -> Path:
-    """可写数据目录（SQLite、license 缓存、迁移备份）"""
+    """可写数据目录（SQLite、迁移备份）"""
     d = app_dir() / "data"
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -37,6 +41,10 @@ def data_dir() -> Path:
 
 def static_dir() -> Path:
     """前端静态文件目录（只读）"""
+    # Docker/自定义部署：优先使用环境变量指定
+    env_dir = os.getenv("OFFERCLAW_STATIC_DIR", "").strip()
+    if env_dir:
+        return Path(env_dir)
     if is_frozen():
         # spec 里 datas: ('frontend/web', 'frontend/web') → _MEIPASS/frontend/web
         return Path(sys._MEIPASS) / "frontend" / "web"

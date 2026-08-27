@@ -1,0 +1,20 @@
+# 构建上下文排除：大文件/无关目录/本地数据
+.git
+.gitignore
+.workbuddy
+docs
+offerclaw-extension
+AI-Resume-Form-Filling-Assistant-master
+backend/dist
+backend/build
+backend/data
+backend/offerclaw.db
+backend/offerclaw.spec
+backend/build_release.bat
+backend/tests
+backend/pyproject.toml
+backend/run.py
+*.log
+__pycache__
+*.pyc
+.pytest_cache
