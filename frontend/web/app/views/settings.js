@@ -18,7 +18,7 @@
         name: 'OfferClaw',
         version: '',
         repo: 'https://github.com/your-org/offerclaw',
-        description: 'AI 驱动的求职助手 — Agent + 投递看板 + 智能填表 + 面试复盘',
+        description: '求职投递看板：投递管理 + 画像 + 面试复盘 + Agent 助手',
     };
 
     // ============ 状态 ============
@@ -383,6 +383,7 @@
         ${renderHealthSection()}
         ${renderLlmSection()}
         ${renderStatsSection()}
+        ${renderAccountSection()}
         ${renderAboutSection()}
         ${renderDangerSection()}`;
     }
@@ -706,6 +707,32 @@
                 <span class="about-value"><a href="${esc(PROJECT_INFO.repo)}" target="_blank" rel="noopener noreferrer">GitHub 仓库 ↗</a></span>
             </div>
             <div class="about-desc">${esc(PROJECT_INFO.description)}</div>
+        </div>`;
+    }
+
+    // --- 账号安全 ---
+
+    function renderAccountSection() {
+        const user = API.currentUser();
+        return `
+        <div class="settings-section">
+            <div class="section-title">
+                <span class="title-icon">🔐</span>
+                <span>账号安全</span>
+            </div>
+            <div class="about-row">
+                <span class="about-label">当前账号</span>
+                <span class="about-value">${esc(user ? user.username : '')}</span>
+            </div>
+            <div class="about-row" style="flex-direction:column;align-items:flex-start;gap:0.6rem;">
+                <span class="about-label" style="margin:0;">修改密码</span>
+                <div style="display:flex;gap:0.5rem;flex-wrap:wrap;width:100%;">
+                    <input type="password" id="pwd-old" placeholder="原密码" style="flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--border, #d8d6cf);border-radius:8px;font-size:13px;background:transparent;color:inherit;">
+                    <input type="password" id="pwd-new" placeholder="新密码（至少 8 位）" style="flex:1;min-width:140px;padding:8px 10px;border:1px solid var(--border, #d8d6cf);border-radius:8px;font-size:13px;background:transparent;color:inherit;">
+                    <button class="btn btn-primary btn-sm" id="btn-change-password" style="white-space:nowrap;">修改密码</button>
+                </div>
+                <div class="msg" id="msg-change-password" style="font-size:12.5px;min-height:18px;"></div>
+            </div>
         </div>`;
     }
 
@@ -1056,6 +1083,10 @@
         const resetBtn = root.querySelector('#btn-reset-data');
         if (resetBtn) resetBtn.addEventListener('click', resetData);
 
+        // 修改密码
+        const changePwdBtn = root.querySelector('#btn-change-password');
+        if (changePwdBtn) changePwdBtn.addEventListener('click', changePassword);
+
         // 主题卡片
         root.querySelectorAll('.theme-card').forEach(card => {
             card.addEventListener('click', () => {
@@ -1082,6 +1113,37 @@
         // LLM 配置保存
         const saveLlmBtn = root.querySelector('#btn-save-llm');
         if (saveLlmBtn) saveLlmBtn.addEventListener('click', saveLlmConfig);
+    }
+
+    // ============ 账号安全 ============
+
+    async function changePassword() {
+        const oldPwd = root.querySelector('#pwd-old');
+        const newPwd = root.querySelector('#pwd-new');
+        const msg = root.querySelector('#msg-change-password');
+        if (!oldPwd || !newPwd || !msg) return;
+        const oldVal = oldPwd.value.trim();
+        const newVal = newPwd.value;
+        if (!oldVal || !newVal) {
+            msg.className = 'msg error';
+            msg.textContent = '请填写原密码和新密码';
+            return;
+        }
+        if (newVal.length < 8) {
+            msg.className = 'msg error';
+            msg.textContent = '新密码至少 8 位';
+            return;
+        }
+        try {
+            await API.auth.changePassword(oldVal, newVal);
+            oldPwd.value = '';
+            newPwd.value = '';
+            msg.className = 'msg success';
+            msg.textContent = '密码已修改，登录状态已刷新';
+        } catch (err) {
+            msg.className = 'msg error';
+            msg.textContent = err.message || '修改失败';
+        }
     }
 
     // ============ 挂载 / 清理 ============
