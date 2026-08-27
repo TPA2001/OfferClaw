@@ -23,7 +23,7 @@
      * 解析当前 hash
      */
     function parseHash() {
-        const hash = global.location.hash.slice(1) || '/chat';
+        const hash = global.location.hash.slice(1) || '/kanban';
         const [path, queryStr] = hash.split('?');
         const params = {};
         if (queryStr) {
@@ -32,7 +32,7 @@
                 params[decodeURIComponent(k)] = decodeURIComponent(v || '');
             });
         }
-        return { path: path || '/chat', params };
+        return { path: path || '/kanban', params };
     }
 
     /**
