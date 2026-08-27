@@ -3,8 +3,9 @@ pytest 配置
 
 测试策略：
 - 使用 SQLite in-memory 数据库，隔离且快速
-- 内测模式：单用户，无鉴权依赖
-- 通过 fixture 提供干净的 db session 和测试 client
+- AUTH_MODE=jwt：与生产一致的真实鉴权
+  - client fixture：覆盖 get_current_user → test_user_id（旧业务测试保持单用户语义）
+  - client_auth fixture：仅覆盖 get_db，走真实 JWT 流程（账号体系测试用）
 """
 import os
 import sys
@@ -12,8 +13,10 @@ from pathlib import Path
 
 # 设置测试环境变量（必须在导入 app 之前）
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["AUTH_MODE"] = "jwt"
+os.environ["SECRET_KEY"] = "test-secret-key-for-offerclaw"
+os.environ["AUTH_RESET_TOKEN_IN_RESPONSE"] = "1"  # 找回密码令牌直接返回，便于测试
 os.environ["OPENAI_API_KEY"] = ""  # 强制使用 MockProvider
-os.environ["OFFERCLAW_DEV"] = "1"  # 测试绕过授权门控（开发模式）
 
 # 让 backend 目录可被导入
 backend_dir = str(Path(__file__).parent.parent)
@@ -27,6 +30,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
+from app.core.auth import get_current_user
 from app.main import app
 
 
@@ -49,19 +53,34 @@ def db_session():
         Base.metadata.drop_all(bind=engine)
 
 
-@pytest.fixture(scope="function")
-def client(db_session):
-    """测试客户端，覆盖 get_db 依赖注入"""
+def _make_client(db_session, override_auth: bool):
+    """构造测试客户端；override_auth=True 时覆盖鉴权依赖（固定本地用户）"""
     def override_get_db():
         try:
             yield db_session
         finally:
-            pass  # session 由 db_session fixture 管理
+            pass
 
-    app.dependency_overrides[get_db] = override_get_db
+    overrides = {get_db: override_get_db}
+    if override_auth:
+        overrides[get_current_user] = lambda: "test-user-001"
+
+    app.dependency_overrides.update(overrides)
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="function")
+def client(db_session):
+    """业务测试客户端：单用户语义（跳过真实鉴权）"""
+    yield from _make_client(db_session, override_auth=True)
+
+
+@pytest.fixture(scope="function")
+def client_auth(db_session):
+    """账号体系测试客户端：真实 JWT 鉴权"""
+    yield from _make_client(db_session, override_auth=False)
 
 
 @pytest.fixture

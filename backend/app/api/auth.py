@@ -228,6 +228,9 @@ async def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db
         raise APIError(40000, "重置令牌无效")
 
     expires_at = user.reset_token_expires_at
+    if expires_at is not None and expires_at.tzinfo is None:
+        # SQLite 读取 DateTime(timezone=True) 会丢失 tz 信息，按 UTC 处理
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
     if expires_at is None or expires_at < datetime.now(timezone.utc):
         # 顺手清理过期令牌
         user.reset_token_hash = None

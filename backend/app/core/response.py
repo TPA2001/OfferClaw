@@ -37,7 +37,13 @@ _CODE_TO_HTTP = {
     0:      200,
     40000:  400,
     40100:  401,
+    40101:  401,  # 登录已过期
+    40102:  401,  # 账号已停用
+    40103:  401,  # 密码已变更，需重新登录
     40300:  403,
+    40301:  403,  # 未激活
+    40302:  403,  # 已过期
+    40303:  403,  # 功能未授权
     40400:  404,
     40900:  409,
     42200:  422,
@@ -48,7 +54,11 @@ _CODE_TO_HTTP = {
     50400:  504,
 }
 
-_HTTP_TO_CODE = {v: k for k, v in _CODE_TO_HTTP.items()}
+# 反向映射：HTTP -> 业务码。同一 HTTP 码有多个子码时保留整百的基准码
+_HTTP_TO_CODE = {}
+for _c, _h in _CODE_TO_HTTP.items():
+    if _h not in _HTTP_TO_CODE:
+        _HTTP_TO_CODE[_h] = _c
 
 
 def _http_status_for(code: int) -> int:
