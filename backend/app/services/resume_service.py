@@ -17,8 +17,6 @@ import logging
 import re
 from typing import Optional
 
-from playwright.async_api import async_playwright
-
 from app.core.llm import LLMProvider, LLMResponse, Message
 
 logger = logging.getLogger("offerclaw.resume_service")
@@ -94,40 +92,29 @@ class ResumeService:
             }
 
     async def _fetch_page_text(self, url: str) -> str:
-        """用 Playwright 抓取页面可见文本"""
+        """抓取招聘页面的可见文本（无浏览器依赖，httpx + HTML 提取）"""
         try:
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                page = await browser.new_page()
-                try:
-                    await page.goto(url, wait_until="networkidle", timeout=30000)
-                except Exception:
-                    try:
-                        await page.goto(url, timeout=30000)
-                    except Exception as e:
-                        logger.warning(f"页面加载失败: {e}")
-                        return ""
-                # 提取主体可见文本，去除 script/style
-                text = await page.evaluate(
-                    """() => {
-                        // 优先取招聘详情容器
-                        const selectors = [
-                            '.job-detail', '.job-detail-section', '.detail-content',
-                            '.job-content', '.position-content', '.job-sec-text',
-                            'article', '.content', 'main'
-                        ];
-                        for (const sel of selectors) {
-                            const el = document.querySelector(sel);
-                            if (el && el.innerText.length > 200) return el.innerText;
-                        }
-                        return document.body.innerText;
-                    }"""
-                )
-                await browser.close()
-                # 清理多余空白
-                return re.sub(r'\n{3,}', '\n\n', text or "").strip()
+            import httpx
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                              "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+                "Accept-Language": "zh-CN,zh;q=0.9",
+            }
+            async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=headers) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+            html = resp.text
+            # 去除 script/style 及其内容
+            html = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
+            # 标签 → 换行/空格
+            html = re.sub(r"<[^>]+>", "\n", html)
+            # HTML 实体解码
+            import html as html_mod
+            text = html_mod.unescape(html)
+            text = re.sub(r"\n{3,}", "\n\n", text)
+            return text.strip()
         except Exception as e:
-            logger.error(f"页面抓取失败: {e}")
+            logger.warning(f"页面抓取失败（httpx）: {e}")
             return ""
 
     # ============ 岗位真实性判断 ============

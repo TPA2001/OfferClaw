@@ -6,7 +6,6 @@
 - boss_search.BossSearchService     Boss 搜索（三级降级链）
 - smart_fill.SmartFillService       智能填写（字段提取编排）
 - auto_filler.AutoFillerService     自动填表执行（CDP-based）
-- playwright_runtime                Playwright 运行时管理
 """
 
 # 注意：不在此处统一导出，保持 "按需从具体模块导入" 的约定，
