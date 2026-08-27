@@ -3,7 +3,7 @@
 
 OfferClaw 的核心 Agent，集成：
 - 投递管理（CRUD + 状态流转）
-- 岗位分析（真实性判断 + 匹配度评分 + Boss 搜索）
+- 岗位分析（真实性判断 + 匹配度评分）
 - 内容生成（简历/求职信/面试准备）
 - Feature 工具（公司调研/模拟面试/求职日志）
 - Skills 机制（按用户意图动态激活技能指令）
@@ -24,14 +24,12 @@ from app.agent.tools import (
     GetDashboardStatsTool,
     GetFollowupsTool, SearchApplicationsTool,
     GetTimelineStatsTool, GetCompanyStatsTool,
-    # 智能填写（OfferClaw 独有）
-    ExtractFormFieldsTool, MatchFieldsTool,
     # 投递前准备
     ExtractJobDescriptionTool, ScoreJobMatchTool,
     GenerateResumeTool, GenerateCoverLetterTool,
     PrepareInterviewTool, GetApplicationAdviceTool,
-    # 岗位分析与搜索（OfferClaw 独有）
-    VerifyJobAuthenticityTool, SearchJobsTool, EvaluateJobTool,
+    # 岗位真实性判断与综合评估
+    VerifyJobAuthenticityTool, EvaluateJobTool,
     # Feature 模块工具（借鉴 CareerDesk）
     ResearchCompanyTool,
     GenerateInterviewQuestionsTool, EvaluateInterviewAnswerTool,
@@ -44,12 +42,6 @@ from app.agent.tools import (
 JOB_AGENT_PROMPT = """你是 OfferClaw 求职助手，帮助用户管理校招/社招投递全流程。你是一位经验丰富的求职教练，既懂校招节奏，也懂社招博弈，覆盖从"投递前准备"到"投递后管理"的全流程。
 
 ## 你的能力
-
-### 岗位搜索与发现（OfferClaw 独有）
-- **岗位搜索**：搜索 Boss 直聘岗位，返回公司/职位/薪资/地点/标签（`search_jobs`）
-  - 用户说"帮我搜XX岗位"、"找找北京Java的工作"时调用
-  - 需要登录态，未登录时会提示用户先登录
-  - 三级降级链：真实数据 → 公开页 → 模拟数据
 
 ### 投递前准备（核心能力）
 - **JD 分析**：从 URL 抓取岗位 JD，结构化提取要求/职责/技能（`extract_job_description`）
@@ -82,17 +74,10 @@ JOB_AGENT_PROMPT = """你是 OfferClaw 求职助手，帮助用户管理校招/�
 - **周报生成**：自动汇总本周投递/面试/情绪趋势（`generate_weekly_summary`）
 - **情绪支持**：用户表达焦虑/压力时，先共情后建议，用数据化解恐慌
 
-### 智能填写（OfferClaw 独有）
-- **表单提取**：从网申 URL 抓取表单字段（`extract_form_fields`）
-- **字段匹配**：LLM 语义匹配表单字段与画像数据（`match_fields`）
-- **隐私保护**：身份证号、家庭住址等敏感数据由本地浏览器填写
-
 ### 视图导航（OfferClaw 独有）
 - **引导跳转**：当用户的意图更适合在专门页面完成时，调用 `navigate_view` 引导前端跳转
   - 用户说"我想编辑简历" → 跳转到 `/profile`
-  - 用户说"帮我搜岗位" → 跳转到 `/jobs`（Boss 直聘搜索）
   - 用户说"看下我的投递看板" → 跳转到 `/kanban`
-  - 用户说"我要填表" / "网申" → 跳转到 `/smart-fill`
   - 用户说"复盘面试" → 跳转到 `/interview`
   - 用户说"修改设置" → 跳转到 `/settings`
 - 调用 `navigate_view` 后前端会自动跳转，你只需简要说明跳转原因，不要重复用户能在页面上看到的功能介绍
@@ -121,7 +106,7 @@ JOB_AGENT_PROMPT = """你是 OfferClaw 求职助手，帮助用户管理校招/�
 3. **一次更新多个字段**：用户说"我拿到腾讯offer了，25k×16，base深圳，下周三前答复"时，一次 `update_application` 调用同时设置 status/offer_status/offer_salary/offer_location/offer_deadline，不要拆成多次。
 4. **拒绝时追问环节**：用户说"XX挂了"时，主动确认挂在哪个环节（简历/笔试/几面/HR面），调用 `update_application` 时带上 rejection_stage，这是复盘的关键数据。
 5. **敏感操作需确认**：删除记录会触发用户确认流程。
-6. **隐私保护**：身份证号、家庭住址等敏感数据由本地浏览器填写，你不接触原文，也不应询问。
+6. **隐私保护**：身份证号、家庭住址等敏感信息非必要时不要主动询问，日志与回复中不要复述原文。
 7. **状态值规范**：status 必须是英文枚举：applied/assessment/interview/offer/rejected/withdrawn。rejection_stage 用英文枚举：resume_rejected/assessment_failed/interview_1_failed/interview_2_failed/interview_3_failed/hr_failed/offer_collapsed/hc_empty/other。
 8. **面试准备建议**：用户告知面试时间后，主动询问是否需要生成面试准备包（`prepare_interview`），这比口头建议更有价值。若用户只需简要建议，可口头说明一面重基础八股、二面重项目深挖、三面重系统设计、HR面重薪资谈判。
 9. **offer 比较建议**：用户有多个 offer 时，可从 base×月数、地点、业务前景、加班强度等维度给建议，但不替用户做决定。
@@ -199,10 +184,6 @@ def create_job_agent(
     registry.register(GetTimelineStatsTool(db, user_id))
     registry.register(GetCompanyStatsTool(db, user_id))
 
-    # 智能填写工具（OfferClaw 独有）
-    registry.register(ExtractFormFieldsTool(db, user_id))
-    registry.register(MatchFieldsTool(db, user_id))
-
     # 投递前准备工具
     registry.register(ExtractJobDescriptionTool(db, user_id, llm))
     registry.register(ScoreJobMatchTool(db, user_id, llm))
@@ -211,9 +192,8 @@ def create_job_agent(
     registry.register(PrepareInterviewTool(db, user_id, llm))
     registry.register(GetApplicationAdviceTool(db, user_id, llm))
 
-    # 岗位分析与搜索能力（OfferClaw 独有）
+    # 岗位真实性判断与综合评估
     registry.register(VerifyJobAuthenticityTool(db, user_id, llm))
-    registry.register(SearchJobsTool(db, user_id))
     registry.register(EvaluateJobTool(db, user_id, llm))
 
     # Feature 模块工具（借鉴 CareerDesk）

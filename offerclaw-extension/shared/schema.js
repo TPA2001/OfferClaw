@@ -22,11 +22,25 @@
     // 投递状态枚举（与后端 applications API 一致）
     APPLICATION_STATUSES: {
       applied: "已投递",
-      assessment: "笔试中",
+      assessment: "笔试/测评中",
       interview: "面试中",
       offer: "已录用",
       rejected: "已拒绝",
       withdrawn: "已撤回"
+    },
+
+    // 笔试/测评类型（仅 status=assessment）
+    ASSESSMENT_TYPES: ["在线编程", "行测", "性格测评", "AI能力测评", "其他"],
+
+    // 面试类型（仅 status=interview；ai=AI面试 / human=真人面）
+    INTERVIEW_TYPES: {
+      ai: "AI面试",
+      human: "真人面"
+    },
+
+    // 面试轮次标签（0=AI面）
+    INTERVIEW_ROUND_LABELS: {
+      0: "AI面", 1: "一面", 2: "二面", 3: "三面", 4: "HR面", 5: "加面"
     },
 
     APPLICATION_PRIORITIES: {
@@ -44,10 +58,7 @@
         basic: {
           name: "", gender: "", age: "", birth: "",
           phone: "", email: "", location: "",
-          ethnicity: "", nationality: "", hukou: "", current_city: "",
-          political_status: "", marital_status: "", native_place: "",
-          current_company: "", current_title: "", years_experience: "",
-          height: "", weight: "",
+          ethnicity: "", political_status: "", marital_status: "", native_place: "",
           wechat: "", qq: "", website: "", github: "", linkedin: "",
           english_level: "", driving_license: "", job_status: "",
           job_intent: "", avatar: ""
@@ -55,6 +66,8 @@
         education: [],
         experience: [],
         projects: [],
+        papers: [],
+        awards: [],
         skills: [],
         summary: { strengths: "", interests: "" },
         certificates: [],

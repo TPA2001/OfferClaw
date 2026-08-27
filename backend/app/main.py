@@ -1,31 +1,11 @@
 """
 OfferClaw Backend Application
-Job Application Management System with Smart Form Filling
+求职投递看板（多用户账号版）：投递管理 + 画像 + 日志 + Agent
 """
 
 import os
-import sys
-import asyncio
-import json
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
-
-# ============================================================================
-# Windows 事件循环策略修正（必须在 uvicorn/FastAPI import 之前）
-# ============================================================================
-# 问题：uvicorn 在 --reload 模式下会设置 WindowsSelectorEventLoopPolicy，
-#       而 SelectorEventLoop 不支持 asyncio.create_subprocess_exec，
-#       导致 Playwright 启动 node 子进程时报 NotImplementedError。
-# 修正：强制使用 ProactorEventLoop（支持子进程），并 monkeypatch
-#       uvicorn 的 asyncio_setup，防止它覆盖回 SelectorEventLoop。
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    try:
-        import uvicorn.loops.asyncio as _oc_uvicorn_loop
-        _oc_uvicorn_loop.asyncio_setup = lambda use_subprocess=False: None
-    except ImportError:
-        pass
 
 # 加载 .env 文件中的环境变量（本地开发用；生产环境由进程环境注入）
 try:
@@ -43,7 +23,7 @@ from app.core.database import engine, Base, SessionLocal
 from app.core.response import (
     APIError, business_code_for_http, ok as ok_response,
 )
-from app.api import automation, profile, agent, applications, journal, settings, license as license_api
+from app.api import auth, profile, agent, applications, journal, settings
 
 # Configure logging
 logging.basicConfig(
@@ -53,7 +33,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("offerclaw")
 
-# === 启动时校验配置（内测模式：单用户，无鉴权）===
+# === 启动时校验鉴权配置（jwt 多用户 / open 本地单用户）===
 from app.core.auth import validate_auth_config, AUTH_MODE
 _auth_warnings = validate_auth_config()
 for w in _auth_warnings:
@@ -62,6 +42,7 @@ for w in _auth_warnings:
 # Create database tables
 from app.models.profile import Profile           # noqa: F401
 from app.models.application import Application, AgentSession  # noqa: F401
+from app.models.user import User                  # noqa: F401
 Base.metadata.create_all(bind=engine)
 logger.info("Database tables created")
 
@@ -70,16 +51,12 @@ logger.info("Database tables created")
 from app.core.migrations import auto_migrate
 auto_migrate(engine, Base.metadata)
 
-# === 授权激活：启动时加载本机激活态 ===
-from app.core import license as license_mod
-license_mod.init_license()
-
 
 # Create FastAPI app
 app = FastAPI(
     title="OfferClaw",
-    description="Job Application Management System with Smart Form Filling",
-    version="1.1.0"
+    description="Job Application Management System",
+    version="2.0.0"
 )
 
 # CORS middleware
@@ -100,77 +77,18 @@ if "*" in allow_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
-    # 允许 OfferClaw 官方浏览器扩展跨域调用（Origin = chrome-extension://<id>）
-    # CORS spec 不支持 chrome-extension://* 通配，必须用正则
-    allow_origin_regex=r"chrome-extension://.*",
     allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Register routers
-app.include_router(license_api.router)      # 授权激活（无需鉴权，始终可达）
-app.include_router(automation.router)
+app.include_router(auth.router)            # 账号：注册/登录/改密/找回密码（公开）
 app.include_router(profile.router)
 app.include_router(agent.router)
 app.include_router(applications.router)
 app.include_router(journal.router)
 app.include_router(settings.router)
-
-
-# === 授权门控中间件（默认关闭 = 无需激活码，全部放行）===
-@app.middleware("http")
-async def license_gate_middleware(request: Request, call_next):
-    """产品授权门控（默认不启用）
-
-    - 默认（OFFERCLAW_LICENSE_GATE 未设置）：全部放行，无需激活码
-    - 显式设置 OFFERCLAW_LICENSE_GATE=1 时启用：
-        始终放行：根/健康检查/授权接口/文档
-        未激活或已过期：拒绝其余请求，引导到激活页
-        已激活但该路径所需功能未授权：拒绝并提示升级
-        开发模式(OFFERCLAW_DEV=1)：全部放行
-    """
-    # 免费分发：授权门控默认关闭，不搞激活码
-    if not license_mod.is_gate_enabled():
-        return await call_next(request)
-
-    # 始终放行的路径前缀（健康检查、文档、授权接口）
-    _PUBLIC_PREFIXES = (
-        "/health", "/docs", "/openapi.json", "/redoc",
-        "/api/v1/license",
-    )
-    path = request.url.path
-    if any(path == p or path.startswith(p + "/") for p in _PUBLIC_PREFIXES):
-        return await call_next(request)
-    # 非 API 路径放行：前端静态资源/SPA 路由由 StaticFiles 处理，激活页必须可访问
-    if not path.startswith("/api/"):
-        return await call_next(request)
-
-    if license_mod.is_dev_mode():
-        return await call_next(request)
-
-    if not license_mod.is_activated():
-        info = license_mod.get_license()
-        code = 40302 if (info and info.is_expired()) else 40301
-        msg = "授权已过期，请重新激活" if code == 40302 else "产品未激活，请提交授权密钥"
-        return JSONResponse(
-            status_code=403,
-            content={"code": code, "message": msg, "detail": {"need_activation": True}},
-        )
-
-    # 已激活：校验路径所需功能
-    required_feature = license_mod.require_feature_for_path(path)
-    if required_feature and not license_mod.is_feature_enabled(required_feature):
-        return JSONResponse(
-            status_code=403,
-            content={
-                "code": 40303,
-                "message": f"当前授权未包含「{required_feature}」功能，请联系开发者升级",
-                "detail": {"required_feature": required_feature, "need_upgrade": True},
-            },
-        )
-
-    return await call_next(request)
 
 
 # === 全局异常处理器：统一错误响应信封 ===
@@ -293,22 +211,6 @@ async def health():
             "database_error": db_error,
             "llm_provider": llm_status,
             "auth_mode": AUTH_MODE,
-            "license_activated": license_mod.is_activated(),
-            "license_dev_mode": license_mod.is_dev_mode(),
-        },
-    }
-
-
-@app.get("/api/v1/status")
-async def api_status():
-    """扩展状态接口：轻量级连接检测（无需鉴权，无需激活）"""
-    return {
-        "code": 0,
-        "message": "ok",
-        "data": {
-            "version": "1.1.0",
-            "backend_url": "http://localhost:8000",
-            "running": True,
         },
     }
 

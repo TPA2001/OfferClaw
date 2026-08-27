@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 · OfferClaw</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: #f7f6f3; color: #27251f; min-height: 100vh;
+            display: flex; align-items: center; justify-content: center; padding: 24px;
+        }
+        .card {
+            width: 380px; max-width: 100%;
+            background: #fff; border: 1px solid #e8e6e0; border-radius: 16px;
+            padding: 32px 32px 24px; box-shadow: 0 8px 30px rgba(39, 37, 31, 0.06);
+        }
+        .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+        .brand-mark {
+            width: 34px; height: 34px; border-radius: 9px;
+            background: #2563eb; color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 600; font-size: 14px;
+        }
+        .brand-name { font-size: 17px; font-weight: 600; color: #27251f; }
+        .subtitle { font-size: 13px; color: #888780; margin-bottom: 22px; }
+        .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid #ecebe6; }
+        .tab {
+            flex: 1; text-align: center; padding: 10px 0; cursor: pointer;
+            font-size: 14px; color: #888780; border-bottom: 2px solid transparent;
+            transition: color .15s, border-color .15s; background: none; border-top: none; border-left: none; border-right: none;
+        }
+        .tab.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 500; }
+        .field { margin-bottom: 14px; }
+        .field label { display: block; font-size: 12.5px; color: #5f5e5a; margin-bottom: 6px; }
+        .field input {
+            width: 100%; padding: 10px 12px; font-size: 14px;
+            border: 1px solid #d8d6cf; border-radius: 8px; outline: none;
+            transition: border-color .15s, box-shadow .15s; background: #fff; color: #27251f;
+        }
+        .field input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+        .btn {
+            width: 100%; padding: 11px; font-size: 14.5px; font-weight: 500;
+            border: none; border-radius: 8px; cursor: pointer; color: #fff;
+            background: #2563eb; transition: background .15s, opacity .15s;
+        }
+        .btn:hover { background: #1d4ed8; }
+        .btn:disabled { opacity: .6; cursor: not-allowed; }
+        .msg { min-height: 20px; font-size: 13px; margin-top: 10px; }
+        .msg.error { color: #dc2626; }
+        .msg.success { color: #16a34a; }
+        .msg.info { color: #888780; }
+        .hint { font-size: 12px; color: #b4b2a9; margin-top: 16px; text-align: center; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="brand">
+            <div class="brand-mark">OC</div>
+            <div class="brand-name">OfferClaw</div>
+        </div>
+        <div class="subtitle">求职投递看板 · 多用户账号服务</div>
+
+        <div class="tabs" id="tabs">
+            <button class="tab active" data-tab="login">登录</button>
+            <button class="tab" data-tab="register">注册</button>
+            <button class="tab" data-tab="forgot">找回密码</button>
+        </div>
+
+        <!-- 登录 -->
+        <form id="form-login" data-name="login">
+            <div class="field">
+                <label for="login-account">用户名或邮箱</label>
+                <input id="login-account" type="text" autocomplete="username" placeholder="请输入用户名或邮箱">
+            </div>
+            <div class="field">
+                <label for="login-password">密码</label>
+                <input id="login-password" type="password" autocomplete="current-password" placeholder="请输入密码">
+            </div>
+            <button class="btn" type="submit">登 录</button>
+            <div class="msg" id="msg-login"></div>
+        </form>
+
+        <!-- 注册 -->
+        <form id="form-register" data-name="register" class="hidden">
+            <div class="field">
+                <label for="reg-username">用户名</label>
+                <input id="reg-username" type="text" autocomplete="username" placeholder="2-32 位字母/数字/下划线/中文">
+            </div>
+            <div class="field">
+                <label for="reg-email">邮箱</label>
+                <input id="reg-email" type="email" autocomplete="email" placeholder="用于找回密码">
+            </div>
+            <div class="field">
+                <label for="reg-password">密码</label>
+                <input id="reg-password" type="password" autocomplete="new-password" placeholder="至少 8 位">
+            </div>
+            <div class="field">
+                <label for="reg-invite">邀请码（选填）</label>
+                <input id="reg-invite" type="text" placeholder="如有邀请码请填写">
+            </div>
+            <button class="btn" type="submit">注 册</button>
+            <div class="msg" id="msg-register"></div>
+        </form>
+
+        <!-- 找回密码 -->
+        <form id="form-forgot" data-name="forgot" class="hidden">
+            <div class="field">
+                <label for="forgot-email">注册邮箱</label>
+                <input id="forgot-email" type="email" autocomplete="email" placeholder="请输入注册邮箱">
+            </div>
+            <div class="field hidden" id="forgot-extra">
+                <label for="forgot-token">重置令牌</label>
+                <input id="forgot-token" type="text" placeholder="向管理员获取重置令牌">
+            </div>
+            <div class="field hidden" id="forgot-newpass-wrap">
+                <label for="forgot-newpass">新密码</label>
+                <input id="forgot-newpass" type="password" autocomplete="new-password" placeholder="至少 8 位">
+            </div>
+            <button class="btn" type="submit" id="forgot-btn">获取重置令牌</button>
+            <div class="msg" id="msg-forgot"></div>
+        </form>
+
+        <div class="hint" id="bottom-hint"></div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app/api.js"></script>
+    <script>
+        (function () {
+            const API = window.OfferClawAPI;
+            const $ = (id) => document.getElementById(id);
+
+            // 已登录直接进首页
+            if (API.isLoggedIn()) {
+                location.href = 'index.html';
+                return;
+            }
+            // 会话过期提示
+            const params = new URLSearchParams(location.search);
+            if (params.get('reason') === 'expired') {
+                $('msg-login').className = 'msg error';
+                $('msg-login').textContent = '登录已过期，请重新登录';
+            }
+
+            // Tab 切换
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(t => t.addEventListener('click', () => {
+                tabs.forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+                ['login', 'register', 'forgot'].forEach(name => {
+                    $('form-' + name).classList.toggle('hidden', name !== t.dataset.tab);
+                });
+                $('bottom-hint').textContent = '';
+            }));
+
+            function show(id, text, type) {
+                const el = $(id);
+                el.className = 'msg ' + (type || 'info');
+                el.textContent = text;
+            }
+            function setBusy(btn, busy, text) {
+                btn.disabled = busy;
+                if (busy) { btn.dataset.text = btn.textContent; btn.textContent = text || '处理中...'; }
+                else { btn.textContent = btn.dataset.text || btn.textContent; }
+            }
+
+            // 登录
+            $('form-login').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const account = $('login-account').value.trim();
+                const password = $('login-password').value;
+                if (!account || !password) return show('msg-login', '请输入账号和密码', 'error');
+                const btn = $('form-login').querySelector('button[type=submit]');
+                setBusy(btn, true);
+                try {
+                    await API.auth.login(account, password);
+                    location.href = 'index.html';
+                } catch (err) {
+                    show('msg-login', err.message, 'error');
+                } finally { setBusy(btn, false); }
+            });
+
+            // 注册
+            $('form-register').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const username = $('reg-username').value.trim();
+                const email = $('reg-email').value.trim();
+                const password = $('reg-password').value;
+                const invite_code = $('reg-invite').value.trim() || undefined;
+                if (!username || !email || !password) return show('msg-register', '请填写完整信息', 'error');
+                const btn = $('form-register').querySelector('button[type=submit]');
+                setBusy(btn, true);
+                try {
+                    await API.auth.register({ username, email, password, invite_code });
+                    location.href = 'index.html';
+                } catch (err) {
+                    show('msg-register', err.message, 'error');
+                } finally { setBusy(btn, false); }
+            });
+
+            // 找回密码：两步（1 获取令牌 → 2 重置）
+            let resetToken = '';
+            $('form-forgot').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = $('forgot-email').value.trim();
+                const btn = $('forgot-btn');
+                if (!resetToken) {
+                    if (!email) return show('msg-forgot', '请输入注册邮箱', 'error');
+                    setBusy(btn, true, '生成中...');
+                    try {
+                        const data = await API.auth.forgotPassword(email);
+                        if (data && data.delivered === 'response' && data.reset_token) {
+                            resetToken = data.reset_token;
+                            show('msg-forgot', '重置令牌已生成（调试模式直接下发）', 'success');
+                            $('forgot-extra').classList.remove('hidden');
+                            $('forgot-newpass-wrap').classList.remove('hidden');
+                            $('forgot-token').value = resetToken;
+                            $('forgot-btn').textContent = '重置密码';
+                        } else {
+                            $('forgot-extra').classList.remove('hidden');
+                            $('forgot-newpass-wrap').classList.remove('hidden');
+                            show('msg-forgot', '已生成重置令牌，请联系管理员获取令牌后填写', 'success');
+                            $('forgot-btn').textContent = '重置密码';
+                            resetToken = 'pending';
+                        }
+                    } catch (err) {
+                        show('msg-forgot', err.message, 'error');
+                    } finally { setBusy(btn, false); }
+                    return;
+                }
+                // 第二步：重置
+                const tokenInput = $('forgot-token').value.trim();
+                const newPassword = $('forgot-newpass').value;
+                if (!tokenInput || !newPassword) return show('msg-forgot', '请填写令牌和新密码', 'error');
+                setBusy(btn, true, '重置中...');
+                try {
+                    await API.auth.resetPassword(tokenInput, newPassword);
+                    show('msg-forgot', '密码已重置，已自动登录，正在跳转...', 'success');
+                    setTimeout(() => location.href = 'index.html', 800);
+                } catch (err) {
+                    show('msg-forgot', err.message, 'error');
+                } finally { setBusy(btn, false); }
+            });
+        })();
+    </script>
+</body>
+</html>

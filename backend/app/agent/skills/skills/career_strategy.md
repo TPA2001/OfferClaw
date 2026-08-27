@@ -51,7 +51,7 @@ tools:
 ### 用户说"不知道该投什么"时：
 1. 调用 `query_applications` 看历史投递方向
 2. 基于画像的求职意向（job_intent）推荐方向
-3. 用 `search_jobs` 搜索匹配岗位（若有 Boss 登录态）
+3. 让用户手动在招聘平台搜索目标岗位，或用 `query_applications` 盘点已有投递
 4. 给出冲刺/匹配/保底三档建议
 
 ## 校招时间线策略

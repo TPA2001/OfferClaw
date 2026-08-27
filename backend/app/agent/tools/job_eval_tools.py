@@ -1,14 +1,12 @@
 """
-岗位分析与搜索工具
+岗位分析工具
 
 补齐 agent 在岗位筛选环节的核心能力：
 - verify_job_authenticity：岗位真实性判断（识别中介/培训贷/虚假招聘）
-- search_jobs：Boss 直聘岗位搜索（封装 BossSearchService 为 agent 工具）
 - evaluate_job：岗位综合评估（一次性完成真实性 + 匹配度 + 投递建议）
 
 设计原则：
 - 真实性判断和匹配度评分可独立调用，也可通过 evaluate_job 一次性串联
-- Boss 搜索复用现有 BossSearchService 的三级降级链（wapi→HTML→mock）
 - 所有工具返回结构化 data，agent 可直接用于生成回复
 """
 
@@ -163,108 +161,6 @@ class VerifyJobAuthenticityTool(BaseTool):
             return ToolResult(success=False, error=f"真实性判断失败: {e}")
 
 
-# ====================================================================
-# 2. Boss 直聘岗位搜索
-# ====================================================================
-
-class SearchJobsTool(BaseTool):
-    """搜索 Boss 直聘岗位（封装 BossSearchService 为 agent 工具）"""
-
-    name = "search_jobs"
-    description = (
-        "搜索 Boss 直聘岗位，返回岗位列表（公司/职位/薪资/地点/标签/HR）。"
-        "当用户说'帮我搜XX岗位'、'找找北京Java的工作'、'有哪些远程岗位'、'搜一下产品经理'时调用。"
-        "注意：会启动浏览器抓取，耗时 5-15 秒。需要登录态才能搜到真实数据，未登录时返回降级数据或提示登录。"
-        "参数：keyword（搜索关键词，必需），city（城市，可选，默认全国），page（页码，默认1）。"
-    )
-    parameters = {
-        "type": "object",
-        "properties": {
-            "keyword": {"type": "string", "description": "搜索关键词（如 Java后端/前端开发/产品经理）"},
-            "city": {"type": "string", "description": "城市（如 北京/上海/杭州/深圳），不填则全国"},
-            "page": {"type": "integer", "description": "页码，默认1"},
-        },
-        "required": ["keyword"],
-    }
-
-    def __init__(self, db: Session, user_id: str, llm: LLMProvider = None):
-        self.db = db
-        self.user_id = user_id
-        self.llm = llm
-
-    async def execute(
-        self,
-        keyword: str,
-        city: Optional[str] = None,
-        page: int = 1,
-    ) -> ToolResult:
-        from app.services.boss_search import get_boss_search_service
-
-        if not keyword or not keyword.strip():
-            return ToolResult(success=False, error="搜索关键词不能为空")
-
-        service = get_boss_search_service()
-        try:
-            result = await service.search(
-                keyword=keyword.strip(),
-                city=city,
-                page=page,
-                use_real=True,
-                user_id=self.user_id,
-            )
-
-            jobs = result.get("jobs", [])
-            total = result.get("total", len(jobs))
-            source = result.get("source", "unknown")
-            need_login = result.get("need_login", False)
-
-            # 构造 agent 易读的摘要
-            source_label = {
-                "real": "真实数据", "html": "公开页", "mock": "模拟数据",
-                "need_login": "需登录", "unknown": "未知",
-            }.get(source, source)
-
-            if need_login:
-                return ToolResult(success=True, data={
-                    "message": f"Boss 直聘需要登录后才能搜索「{keyword}」。请先在「智能填写」页面点击「登录 Boss」按钮完成登录，然后我再帮你搜索。",
-                    "need_login": True,
-                    "login_url": result.get("login_url", ""),
-                    "keyword": keyword,
-                    "city": city,
-                    "jobs": [],
-                    "total": 0,
-                })
-
-            # 摘要前 5 个岗位
-            top_jobs = jobs[:5]
-            job_lines = []
-            for i, j in enumerate(top_jobs, 1):
-                job_lines.append(
-                    f"{i}. {j.get('company', '?')} - {j.get('title', '?')} "
-                    f"| {j.get('salary', '?')} | {j.get('city', '?')}"
-                )
-            summary = "\n".join(job_lines) if job_lines else "暂无结果"
-
-            message = f"搜索「{keyword}」{city or '全国'}：找到 {total} 个岗位（数据来源：{source_label}）\n\n{summary}"
-            if total > 5:
-                message += f"\n\n（仅展示前 5 个，共 {total} 个）"
-
-            return ToolResult(success=True, data={
-                "message": message,
-                "keyword": keyword,
-                "city": city,
-                "page": page,
-                "source": source,
-                "total": total,
-                "jobs": jobs,
-                "need_login": need_login,
-            })
-        except Exception as e:
-            logger.error(f"Boss 搜索失败: {e}", exc_info=True)
-            return ToolResult(success=False, error=f"岗位搜索失败: {e}")
-
-
-# ====================================================================
 # 3. 岗位综合评估（真实性 + 匹配度 + 投递建议）
 # ====================================================================
 

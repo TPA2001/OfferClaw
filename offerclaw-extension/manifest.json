@@ -1,19 +1,22 @@
 {
   "manifest_version": 3,
   "name": "OfferClaw 填表助手",
-  "version": "2.0.0",
-  "description": "AI 驱动的智能填表助手：粘贴简历文本，AI 解析并自动填写网页表单（不自动提交）",
+  "version": "0.0.3",
+  "description": "网申表单智能填写 + 投递记录 + 本地画像：所有匹配在浏览器本地完成，画像与敏感数据不出本地（后端可选）",
   "minimum_chrome_version": "114",
-  "permissions": [
-    "storage",
-    "scripting",
-    "sidePanel"
-  ],
+  "permissions": ["storage", "activeTab", "tabs", "sidePanel"],
   "host_permissions": ["http://*/*", "https://*/*"],
+  "web_accessible_resources": [
+    {
+      "resources": ["templates/*.json", "icons/*.png"],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ],
   "action": {
     "default_icon": {
       "128": "icons/icon128.png"
-    }
+    },
+    "default_title": "OfferClaw 填表助手"
   },
   "icons": {
     "128": "icons/icon128.png"
@@ -23,5 +26,26 @@
   },
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": [
+        "shared/schema.js",
+        "shared/storage.js",
+        "shared/config.js",
+        "shared/privacy.js",
+        "shared/profile-matcher.js",
+        "shared/scanner.js",
+        "shared/fill-runtime.js",
+        "shared/api-client.js",
+        "shared/profile-sync.js",
+        "modules/site-matcher.js",
+        "modules/template-manager.js",
+        "content.js"
+      ],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
 }

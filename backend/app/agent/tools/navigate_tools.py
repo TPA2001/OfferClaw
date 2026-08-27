@@ -19,17 +19,13 @@ NAVIGATE_TARGETS = {
         "label": "投递看板",
         "description": "查看/管理投递记录、拖拽改状态、看统计",
     },
-    "/jobs": {
-        "label": "岗位搜索",
-        "description": "Boss直聘岗位搜索、保存岗位到看板",
+    "/dashboard": {
+        "label": "数据概览",
+        "description": "投递漏斗、渠道与趋势统计",
     },
     "/profile": {
         "label": "简历画像",
         "description": "编辑求职画像、教育/工作/项目经历、技能",
-    },
-    "/smart-fill": {
-        "label": "智能填表",
-        "description": "自动提取招聘表单字段、匹配画像、一键填写",
     },
     "/interview": {
         "label": "面试复盘",
@@ -54,8 +50,8 @@ class NavigateViewTool(BaseTool):
     description = (
         "引导用户跳转到功能页面。"
         "当用户的意图更适合在专门的功能页面完成时调用（而不是在对话中纯文字交互）。"
-        "可选目标：/kanban（投递看板）、/jobs（岗位搜索）、/profile（简历画像）、"
-        "/smart-fill（智能填表）、/interview（面试复盘）、/settings（设置）。"
+        "可选目标：/kanban（投递看板）、/dashboard（数据概览）、/profile（简历画像）、"
+        "/interview（面试复盘）、/settings（设置）。"
         "调用后前端会自动跳转到对应页面。"
         "参数：target（目标路由，必需），message（给用户的说明，可选）。"
     )

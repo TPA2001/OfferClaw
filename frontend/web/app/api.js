@@ -1,22 +1,55 @@
 /**
  * OfferClaw 统一 API 客户端
- * 封装 REST 调用、SSE 流式读取、统一响应信封处理
+ * 封装 REST 调用、SSE 流式读取、统一响应信封处理、JWT 鉴权
+ *
+ * 鉴权：Token 存 localStorage('oc_token')，所有请求自动带 Authorization: Bearer
+ * 401 业务码（40100/40101/40103 等）自动跳转登录页（login.html 上不跳）
  */
 (function (global) {
     'use strict';
 
     const CONFIG = global.OFFERCLAW_CONFIG || {
-        API_BASE: (global.OFFERCLAW_API_BASE || 'http://localhost:8000'),
-        TOKEN: (global.OFFERCLAW_TOKEN || 'demo-token'),
+        API_BASE: (global.OFFERCLAW_API_BASE || ''),
     };
+    const TOKEN_KEY = 'oc_token';
+    const USER_KEY = 'oc_user';
 
     const API_V1 = CONFIG.API_BASE + '/api/v1';
+
+    /**
+     * 读取当前登录 Token
+     */
+    function token() {
+        try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+    }
+
+    function setToken(t) {
+        try {
+            if (t) localStorage.setItem(TOKEN_KEY, t);
+            else localStorage.removeItem(TOKEN_KEY);
+        } catch (e) {}
+    }
+
+    function currentUser() {
+        try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); } catch (e) { return null; }
+    }
+
+    function setCurrentUser(u) {
+        try {
+            if (u) localStorage.setItem(USER_KEY, JSON.stringify(u));
+            else localStorage.removeItem(USER_KEY);
+        } catch (e) {}
+    }
+
+    function isLoggedIn() {
+        return !!token();
+    }
 
     /**
      * 统一 headers（含鉴权）
      */
     function headers(extra) {
-        const h = { 'Authorization': 'Bearer ' + CONFIG.TOKEN };
+        const h = { 'Authorization': 'Bearer ' + token() };
         if (extra) Object.assign(h, extra);
         return h;
     }
@@ -41,16 +74,18 @@
     }
 
     /**
-     * 授权门控拦截：403 + license 业务码 → 跳激活页
-     * - 40301 未激活 / 40302 已过期 → 跳转 license.html
-     * - 40303 功能未授权 → 不跳转，交由调用方提示升级
+     * 鉴权拦截：401 业务码 → 清除登录态并跳转登录页（登录页自身不跳）
+     * - 40100 未登录/令牌无效 / 40101 过期 / 40103 密码已变更 → 跳登录
+     * - 40102 账号停用 → 不清 token，交由页面提示
      */
-    function gateCheck(status, errBody) {
-        if (status !== 403 || !errBody) return;
+    function authRedirect(status, errBody) {
+        if (status !== 401 || !errBody) return;
         const code = errBody.code;
-        if (code === 40301 || code === 40302) {
-            if (!/\/license\.html(\?.*)?$/.test(location.pathname)) {
-                location.href = 'license.html' + (code === 40302 ? '?reason=expired' : '');
+        if (code === 40100 || code === 40101 || code === 40103) {
+            if (!/\/login\.html(\?.*)?$/.test(location.pathname)) {
+                setToken('');
+                setCurrentUser(null);
+                location.href = 'login.html' + (code === 40101 ? '?reason=expired' : '');
             }
         }
     }
@@ -69,7 +104,7 @@
             });
             if (!resp.ok) {
                 const body = await resp.json().catch(() => ({}));
-                gateCheck(resp.status, body);
+                authRedirect(resp.status, body);
                 throw Object.assign(new Error(body.message || `HTTP ${resp.status}`), { code: body.code, status: resp.status });
             }
             return checkEnvelope(await resp.json());
@@ -93,7 +128,7 @@
             });
             if (!resp.ok) {
                 const errBody = await resp.json().catch(() => ({}));
-                gateCheck(resp.status, errBody);
+                authRedirect(resp.status, errBody);
                 throw Object.assign(new Error(errBody.message || `HTTP ${resp.status}`), { code: errBody.code, status: resp.status });
             }
             const json = await resp.json();
@@ -118,7 +153,7 @@
             });
             if (!resp.ok) {
                 const errBody = await resp.json().catch(() => ({}));
-                gateCheck(resp.status, errBody);
+                authRedirect(resp.status, errBody);
                 throw Object.assign(new Error(errBody.message || `HTTP ${resp.status}`), { code: errBody.code, status: resp.status });
             }
             return checkEnvelope(await resp.json());
@@ -142,7 +177,7 @@
             });
             if (!resp.ok) {
                 const errBody = await resp.json().catch(() => ({}));
-                gateCheck(resp.status, errBody);
+                authRedirect(resp.status, errBody);
                 throw Object.assign(new Error(errBody.message || `HTTP ${resp.status}`), { code: errBody.code, status: resp.status });
             }
             return checkEnvelope(await resp.json());
@@ -165,7 +200,7 @@
             });
             if (!resp.ok) {
                 const errBody = await resp.json().catch(() => ({}));
-                gateCheck(resp.status, errBody);
+                authRedirect(resp.status, errBody);
                 throw Object.assign(new Error(errBody.message || `HTTP ${resp.status}`), { code: errBody.code, status: resp.status });
             }
             return checkEnvelope(await resp.json());
@@ -194,7 +229,7 @@
             });
             if (!resp.ok) {
                 const errBody = await resp.json().catch(() => ({}));
-                gateCheck(resp.status, errBody);
+                authRedirect(resp.status, errBody);
                 throw Object.assign(new Error(errBody.message || `HTTP ${resp.status}`), { code: errBody.code, status: resp.status });
             }
             const reader = resp.body.getReader();
@@ -205,7 +240,7 @@
                 if (done) break;
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n');
-                buffer = lines.pop(); // 保留最后不完整的行
+                buffer = lines.pop();
                 for (const line of lines) {
                     if (!line.startsWith('data: ')) continue;
                     const payload = line.slice(6).trim();
@@ -265,40 +300,52 @@
         }, duration);
     }
 
-    // ============ 授权激活 API ============
-    // 直接走 /api/v1/license/*（不走门控，本身即公开接口）
-    async function licenseStatus() {
-        const resp = await fetch(API_V1 + '/license/status', { headers: headers() });
-        const json = await resp.json();
-        return json.data;
+    // ============ 账号 API ============
+    async function authLogin(account, password) {
+        const data = await post('/auth/login', { account, password });
+        setToken(data.token);
+        setCurrentUser(data.user);
+        return data.user;
     }
-    async function licenseActivate(key) {
-        const resp = await fetch(API_V1 + '/license/activate', {
-            method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ key }),
-        });
-        const json = await resp.json();
-        if (!resp.ok) {
-            const e = new Error(json.message || '激活失败');
-            e.code = json.code; e.detail = json.detail; throw e;
-        }
-        return json.data;
+    async function authRegister(payload) {
+        const data = await post('/auth/register', payload);
+        setToken(data.token);
+        setCurrentUser(data.user);
+        return data.user;
     }
-    async function licenseDeactivate() {
-        const resp = await fetch(API_V1 + '/license/deactivate', {
-            method: 'POST', headers: jsonHeaders(), body: '{}',
-        });
-        const json = await resp.json();
-        return json.data;
+    async function authMe() {
+        const user = await get('/auth/me');
+        setCurrentUser(user);
+        return user;
     }
-    async function licenseMachine() {
-        const resp = await fetch(API_V1 + '/license/machine', { headers: headers() });
-        const json = await resp.json();
-        return json.data;
+    async function authChangePassword(old_password, new_password) {
+        const data = await post('/auth/change-password', { old_password, new_password });
+        setToken(data.token); // 改密后签发新 token，旧 token 失效
+        return data.user;
+    }
+    async function authForgotPassword(email) {
+        return post('/auth/forgot-password', { email });
+    }
+    async function authResetPassword(token, new_password) {
+        const data = await post('/auth/reset-password', { token, new_password });
+        setToken(data.token);
+        setCurrentUser(data.user);
+        return data.user;
+    }
+    function authLogout() {
+        setToken('');
+        setCurrentUser(null);
+        location.href = 'login.html';
     }
 
     global.OfferClawAPI = {
         CONFIG,
         API_V1,
+        token,
+        setToken,
+        currentUser,
+        setCurrentUser,
+        isLoggedIn,
         headers,
         jsonHeaders,
         get,
@@ -310,11 +357,14 @@
         health,
         esc,
         toast,
-        license: {
-            status: licenseStatus,
-            activate: licenseActivate,
-            deactivate: licenseDeactivate,
-            machine: licenseMachine,
+        auth: {
+            login: authLogin,
+            register: authRegister,
+            me: authMe,
+            changePassword: authChangePassword,
+            forgotPassword: authForgotPassword,
+            resetPassword: authResetPassword,
+            logout: authLogout,
         },
     };
 })(window);

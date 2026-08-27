@@ -19,7 +19,7 @@ tools:
   - verify_job_authenticity
   - evaluate_job
   - extract_job_description
-  - search_jobs
+  - query_applications
 ---
 
 # 岗位真实性判断技能（OfferClaw 独有）

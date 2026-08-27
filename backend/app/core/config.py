@@ -40,8 +40,15 @@ class Settings(BaseSettings):
     )
 
     # ===== 鉴权 =====
-    auth_mode: str = Field(default="demo", alias="AUTH_MODE")
+    # jwt = 多用户账号模式（网页服务默认）；open = 单用户本地模式（仅本地开发）
+    auth_mode: str = Field(default="jwt", alias="AUTH_MODE")
     secret_key: str = Field(default="dev-secret-key-12345", alias="SECRET_KEY")
+    # 访问令牌有效期（小时），默认 7 天
+    auth_token_ttl_hours: int = Field(default=168, alias="AUTH_TOKEN_TTL_HOURS")
+    # 注册邀请码（设置后注册必须携带；用于账号售卖场景控制注册入口）
+    registration_invite_code: Optional[str] = Field(default=None, alias="REGISTRATION_INVITE_CODE")
+    # 找回密码令牌直接随响应返回（仅限内网调试，生产保持关闭）
+    auth_reset_token_in_response: bool = Field(default=False, alias="AUTH_RESET_TOKEN_IN_RESPONSE")
 
     # ===== CORS =====
     cors_origins: str = Field(
@@ -75,12 +82,6 @@ class Settings(BaseSettings):
 
     # ===== LLM 重试 =====
     llm_max_retries: int = Field(default=3, alias="LLM_MAX_RETRIES")
-
-    # ===== Playwright =====
-    playwright_headless: bool = Field(default=True, alias="PLAYWRIGHT_HEADLESS")
-
-    # ===== Boss 搜索 =====
-    boss_search_timeout: int = Field(default=15, alias="BOSS_SEARCH_TIMEOUT")
 
     # ===== 计算属性 =====
 

@@ -16,8 +16,6 @@ Agent Skills 模块
 - 与 OfferClaw 独有能力结合：Boss 搜索、智能填表、岗位真实性判断
 
 OfferClaw 独有 skills（CareerDesk 没有）：
-- boss_search: Boss 直聘搜索策略
-- smart_fill: 智能表单填写
 - job_verify: 岗位真实性判断
 
 借鉴 CareerDesk 新增的 skills：

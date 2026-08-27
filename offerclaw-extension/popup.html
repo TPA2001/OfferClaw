@@ -1,236 +1,203 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OfferClaw 填表助手</title>
-    <link rel="stylesheet" href="popup.css" />
-  </head>
-  <body>
-    <div class="app">
-      <header class="app-header">
-        <div class="brand">
-          <img class="logo-icon" src="icons/icon128.png" alt="OfferClaw 图标" />
-          <span class="title">OfferClaw 填表助手</span>
-          <div class="status-badge">
-            <span class="status-dot" id="statusDot"></span>
-            <span class="status-text" id="statusText">等待开始</span>
-          </div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OfferClaw填表助手</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="oc-header">
+    <div class="oc-logo">OfferClaw<span class="oc-logo-suffix">填表助手</span></div>
+    <div class="oc-status" id="backendStatus">检测中…</div>
+  </header>
+
+  <nav class="oc-nav">
+    <button class="oc-tab active" data-tab="fill">填写</button>
+    <button class="oc-tab" data-tab="apps">投递</button>
+    <button class="oc-tab" data-tab="profile">画像</button>
+    <button class="oc-tab" data-tab="settings">设置</button>
+    <button class="oc-tab" data-tab="templates">模板</button>
+  </nav>
+
+  <main class="oc-main">
+    <!-- 填写面板 -->
+    <section class="oc-panel active" id="panel-fill">
+      <div class="oc-card">
+        <div class="oc-card-title">智能填写当前页</div>
+        <p class="oc-hint">在网申表单页点击下方按钮，扫描字段并自动填写（不会自动提交）。所有匹配在本地完成，画像不上传。</p>
+        <div class="oc-mode-row" id="fillModeRow">
+          <button type="button" class="oc-mode active" data-mode="all">整页</button>
+          <button type="button" class="oc-mode" data-mode="section">当前区块</button>
+          <button type="button" class="oc-mode" data-mode="selection">选中字段</button>
         </div>
-        <div class="header-actions">
-          <button class="icon-btn" id="openSettingsBtn" title="模型设置">
-            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      <main class="app-content">
-        <div class="tabs" id="tabs">
-          <button class="tab active" data-tab="fill">自动填充</button>
-          <button class="tab" data-tab="resume">标准简历</button>
-        </div>
-
-        <section class="tab-panel active" id="tab-fill">
-          <div class="stats-grid stats-grid-3">
-            <div class="stat-card">
-              <span class="stat-value" id="fieldCount">0</span>
-              <span class="stat-label">识别字段</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-value" id="mappedCount">0</span>
-              <span class="stat-label">已映射</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-value" id="filledCount">0</span>
-              <span class="stat-label">已填充</span>
-            </div>
-          </div>
-
-          <div class="steps-area">
-            <button class="btn btn-primary btn-lg" id="startFillBtn">
-              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m2 10H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z" />
-              </svg>
-              <span id="startFillBtnText">开始填充</span>
-            </button>
-            <button class="btn btn-outline btn-lg" id="startIncrementalFillBtn">
-              <span id="startIncrementalFillBtnText">增量填入</span>
-            </button>
-            <button class="btn btn-outline btn-lg" id="startSelectionFillBtn">
-              <span id="startSelectionFillBtnText">选区填入</span>
-            </button>
-            <button class="btn btn-outline btn-lg" id="clearMappingCacheBtn">
-              清理映射缓存
-            </button>
-            <div class="tip" id="fillTip" hidden></div>
-          </div>
-        </section>
-
-        <section class="tab-panel" id="tab-resume">
-          <div class="section-block">
-            <div class="section-header section-header-normal">
-              <span>简历配置</span>
-            </div>
-            <div class="tip">
-              简历字段较多，推荐在独立网页里编辑。新页面会复用当前扩展里的同一份标准简历数据。
-            </div>
-            <div class="resume-launch-card">
-              <div class="resume-launch-copy">
-                <div class="resume-launch-title">在宽页面里配置个人简历</div>
-                <div class="resume-launch-desc">
-                  更适合填写长文本、工作经历、教育经历和项目说明，保存后会立即同步到自动填充流程。
-                </div>
-              </div>
-              <button class="btn btn-primary" id="openResumeEditorBtn">打开简历配置页</button>
-            </div>
-            <div class="resume-summary-grid" id="resumeSummaryGrid"></div>
-          </div>
-
-          <div class="resume-sidepanel-legacy" hidden>
-            <div class="section-block">
-              <div class="section-header section-header-normal">
-                <span>标准化简历字段</span>
-                <div class="section-actions">
-                  <button class="btn-text" id="reloadResumeBtn">重新加载</button>
-                </div>
-              </div>
-              <div class="tip">
-                主流程以这份标准简历为准。请尽量填写完整，尤其是基本信息、工作经历、教育经历和求职偏好。
-              </div>
-              <div class="resume-editor-layout">
-                <aside class="resume-nav" id="resumeNav"></aside>
-                <div class="resume-form-host" id="resumeFormHost"></div>
-              </div>
-              <div class="action-row">
-                <button class="btn btn-primary" id="saveResumeBtn">保存标准简历</button>
-              </div>
-            </div>
-
-            <div class="section-block">
-              <div class="section-header section-header-normal">
-                <span>导入辅助（可选）</span>
-              </div>
-              <div class="tip">
-                你仍然可以粘贴原始简历文本或上传 PDF，用 AI 预填上面的标准字段；导入后请自行检查并保存。
-              </div>
-              <div class="form-group">
-                <label for="resumeImportText">原始简历文本</label>
-                <textarea
-                  id="resumeImportText"
-                  class="textarea"
-                  placeholder="粘贴原始简历文本，或上传 PDF 后自动填入这里。"
-                ></textarea>
-              </div>
-              <div class="action-row">
-                <button class="btn btn-primary" id="importResumeBtn">AI 导入到标准简历</button>
-                <button class="btn btn-outline" id="uploadPdfBtn">上传 PDF 并导入</button>
-              </div>
-              <input type="file" id="resumePdfFile" accept="application/pdf" hidden />
-            </div>
-          </div>
-        </section>
-
-        <div class="log-section">
-          <div class="section-header">
-            <span>运行日志</span>
-            <div class="section-actions">
-              <button class="btn-text" id="selectLogDirectoryBtn">选择项目目录</button>
-              <button class="btn-text" id="clearLog">清空</button>
-            </div>
-          </div>
-          <div class="tip" id="logExportStatus">
-            未配置自动导出。点击"选择项目目录"后，填充诊断日志会自动保存到所选目录下的 debug-logs/。
-          </div>
-          <div class="log-container" id="logContent">
-            <div class="log-item log-info">
-              <span class="log-time">--:--</span>
-              <span class="log-msg">
-                先在"标准简历"里填写或导入资料，再到"自动填充"执行映射和填表。
-              </span>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      <div class="modal" id="settingsModal">
-        <div class="modal-backdrop" id="closeSettingsBackdrop"></div>
-        <div class="modal-content">
-          <div class="modal-header">
-            <h3>DeepSeek / OpenAI 兼容模型配置</h3>
-            <button class="icon-btn" id="closeSettingsBtn">
-              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <div class="modal-body">
-            <div class="model-list" id="modelList"></div>
-            <button class="btn btn-outline btn-block" id="addModelBtn">
-              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-              </svg>
-              <span>添加自定义模型</span>
-            </button>
-          </div>
-        </div>
+        <button class="oc-btn primary" id="btnFill">扫描并智能填写</button>
+        <button class="oc-btn ghost" id="btnClear">清除高亮</button>
+        <div id="fillResult" class="oc-result"></div>
       </div>
-
-      <div class="modal" id="editModelModal">
-        <div class="modal-backdrop" id="closeEditBackdrop"></div>
-        <div class="modal-content">
-          <div class="modal-header">
-            <h3 id="editModalTitle">添加模型</h3>
-            <button class="icon-btn" id="closeEditBtn">
-              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <div class="modal-body">
-            <div class="form-group">
-              <label for="editName">模型名称</label>
-              <input type="text" id="editName" placeholder="DeepSeek" />
-            </div>
-            <div class="form-group">
-              <label for="editBaseUrl">Base URL</label>
-              <input type="text" id="editBaseUrl" placeholder="https://api.deepseek.com/v1" />
-            </div>
-            <div class="form-group">
-              <label for="editApiKey">API Key</label>
-              <div class="input-wrapper">
-                <input type="password" id="editApiKey" placeholder="sk-..." />
-                <button class="toggle-visibility" id="toggleEditApiKey">
-                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="editModel">模型 ID</label>
-              <input type="text" id="editModel" placeholder="deepseek-chat" />
-            </div>
-            <div class="config-status" id="editStatus"></div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-primary btn-block" id="saveModelBtn">保存</button>
-          </div>
-        </div>
+      <div class="oc-card">
+        <div class="oc-card-title">使用统计</div>
+        <div class="oc-stats" id="extStats">—</div>
       </div>
-    </div>
-    <script src="libs/pdfjs/pdf.min.js"></script>
-    <script src="shared/resume/resume-schema.js"></script>
-    <script src="shared/resume/resume-storage.js"></script>
-    <script src="shared/resume/model-storage.js"></script>
-    <script src="shared/resume/ai-client.js"></script>
-    <script src="shared/resume/resume-prompts.js"></script>
-    <script src="shared/resume/log-export.js"></script>
-    <script src="shared/resume/log-visibility.js"></script>
-    <script src="shared/resume/content-bridge.js"></script>
-    <script src="popup.js"></script>
-  </body>
+    </section>
+
+    <!-- 投递记录面板 -->
+    <section class="oc-panel" id="panel-apps">
+      <div class="oc-card">
+        <div class="oc-card-title">投递记录</div>
+        <div class="oc-row">
+          <select id="appStatusFilter" class="oc-input"></select>
+          <button class="oc-btn ghost" id="btnRefreshApps">刷新</button>
+        </div>
+        <div id="appsList" class="oc-list"></div>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">新建投递</div>
+        <input class="oc-input" id="newCompany" placeholder="公司" />
+        <input class="oc-input" id="newPosition" placeholder="职位" />
+        <input class="oc-input" id="newJobUrl" placeholder="岗位链接（可选）" />
+        <select class="oc-input" id="newStatus"></select>
+        <select class="oc-input" id="newPriority"></select>
+        <textarea class="oc-input" id="newNotes" placeholder="备注（可选）"></textarea>
+        <button class="oc-btn primary" id="btnCreateApp">创建</button>
+      </div>
+    </section>
+
+    <!-- 画像面板（本地数据库） -->
+    <section class="oc-panel" id="panel-profile">
+      <div class="oc-card">
+        <div class="oc-card-title">画像完成度</div>
+        <div id="profileCompletion" class="oc-completion">—</div>
+        <div id="profileSource" class="oc-hint">—</div>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">基本信息（存本地数据库）</div>
+        <div class="oc-form-grid" id="basicForm">
+          <label class="oc-label">姓名</label>
+          <input class="oc-input" id="pf-name" placeholder="如：张三" />
+          <label class="oc-label">性别</label>
+          <select class="oc-input" id="pf-gender">
+            <option value="">未填</option>
+            <option value="男">男</option>
+            <option value="女">女</option>
+          </select>
+          <label class="oc-label">年龄</label>
+          <input class="oc-input" id="pf-age" type="number" placeholder="如：26" />
+          <label class="oc-label">出生日期</label>
+          <input class="oc-input" id="pf-birth" placeholder="如：2000-01" />
+          <label class="oc-label">手机号</label>
+          <input class="oc-input" id="pf-phone" type="tel" placeholder="如：13800138000" />
+          <label class="oc-label">邮箱</label>
+          <input class="oc-input" id="pf-email" type="email" placeholder="如：you@example.com" />
+          <label class="oc-label">籍贯/所在地</label>
+          <input class="oc-input" id="pf-location" placeholder="如：山东济南" />
+          <label class="oc-label">求职方向</label>
+          <input class="oc-input" id="pf-job_intent" placeholder="如：AI Agent 开发" />
+          <label class="oc-label">民族</label>
+          <input class="oc-input" id="pf-ethnicity" placeholder="如：汉族" />
+          <label class="oc-label">政治面貌</label>
+          <input class="oc-input" id="pf-political_status" placeholder="如：中共党员" />
+          <label class="oc-label">婚姻状况</label>
+          <input class="oc-input" id="pf-marital_status" placeholder="如：未婚" />
+          <label class="oc-label">籍贯</label>
+          <input class="oc-input" id="pf-native_place" placeholder="如：山东济南" />
+          <label class="oc-label">微信</label>
+          <input class="oc-input" id="pf-wechat" placeholder="微信号" />
+          <label class="oc-label">QQ</label>
+          <input class="oc-input" id="pf-qq" placeholder="QQ 号" />
+          <label class="oc-label">个人网站/作品集</label>
+          <input class="oc-input" id="pf-website" placeholder="https://..." />
+          <label class="oc-label">GitHub</label>
+          <input class="oc-input" id="pf-github" placeholder="用户名" />
+          <label class="oc-label">领英 LinkedIn</label>
+          <input class="oc-input" id="pf-linkedin" placeholder="profile 链接或 ID" />
+          <label class="oc-label">英语水平</label>
+          <input class="oc-input" id="pf-english_level" placeholder="如：CET-6 / 雅思 6.5" />
+          <label class="oc-label">驾照</label>
+          <input class="oc-input" id="pf-driving_license" placeholder="如：C1 / 无" />
+          <label class="oc-label">求职状态</label>
+          <input class="oc-input" id="pf-job_status" placeholder="如：离职-随时到岗" />
+        </div>
+        <button class="oc-btn primary" id="btnSaveBasic">保存基本信息</button>
+        <button class="oc-btn ghost" id="btnRefreshProfile">重新加载</button>
+        <button class="oc-btn ghost" id="btnSyncFromBackend">从后端同步画像</button>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">教育/工作/项目/论文/获奖（JSON 高级编辑）</div>
+        <p class="oc-hint">可粘贴从 OfferClaw Web 画像页导出的 JSON，或手动编辑。保存到本地数据库。</p>
+        <textarea class="oc-input oc-textarea" id="pfJsonExtra" placeholder='{"education":[...],"experience":[...],"projects":[...],"papers":[...],"awards":[...],"skills":[...],"summary":{...}}'></textarea>
+        <button class="oc-btn primary" id="btnSaveJson">保存 JSON</button>
+        <button class="oc-btn ghost" id="btnExportProfile">导出当前画像</button>
+      </div>
+    </section>
+
+    <!-- 设置面板 -->
+    <section class="oc-panel" id="panel-settings">
+      <div class="oc-card">
+        <div class="oc-card-title">数据存储模式</div>
+        <p class="oc-hint" id="modeHint">当前：<b>本地数据库模式</b>。所有画像、投递记录、敏感数据均存浏览器本地，无需后端。</p>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">后端连接（可选）</div>
+        <label class="oc-label">OfferClaw 后端地址</label>
+        <input class="oc-input" id="cfgBackend" placeholder="http://localhost:8000" />
+        <label class="oc-switch">
+          <input type="checkbox" id="cfgUseBackend" /> 启用后端（默认关闭，纯本地即可使用）
+        </label>
+        <button class="oc-btn primary" id="btnSaveConfig">保存配置</button>
+        <button class="oc-btn ghost" id="btnTestConn">测试连接</button>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">敏感数据（仅存本地）</div>
+        <label class="oc-label">身份证号</label>
+        <input class="oc-input" id="sensIdCard" type="password" />
+        <label class="oc-label">家庭住址</label>
+        <input class="oc-input" id="sensHomeAddress" type="password" />
+        <label class="oc-label">银行卡号</label>
+        <input class="oc-input" id="sensBankCard" type="password" />
+        <label class="oc-label">护照号</label>
+        <input class="oc-input" id="sensPassport" type="password" />
+        <label class="oc-label">紧急联系人</label>
+        <input class="oc-input" id="sensEmergencyContact" placeholder="姓名（仅存本地）" />
+        <label class="oc-label">紧急联系人电话</label>
+        <input class="oc-input" id="sensEmergencyPhone" placeholder="电话（仅存本地）" />
+        <button class="oc-btn primary" id="btnSaveSensitive">保存到本地</button>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">数据维护</div>
+        <button class="oc-btn ghost" id="btnExport">导出全部本地数据</button>
+        <button class="oc-btn danger" id="btnReset">重置本地数据</button>
+      </div>
+    </section>
+
+    <!-- 站点模板面板 -->
+    <section class="oc-panel" id="panel-templates">
+      <div class="oc-card">
+        <div class="oc-card-title">站点模板</div>
+        <p class="oc-hint">模板按 URL 匹配站点，把字段名/占位文本映射到本地画像字段，命中后优先使用，提高该站点填写准确率。模板存本地。</p>
+        <button class="oc-btn primary" id="btnLoadTemplates">重新加载模板</button>
+        <div id="templateList" class="oc-list"></div>
+      </div>
+      <div class="oc-card">
+        <div class="oc-card-title">导入/保存模板</div>
+        <textarea class="oc-input oc-textarea" id="templateJsonInput" placeholder='{"siteId":"my_site","siteName":"我的站点","urlPatterns":["https://abc.example/*"],"fields":[{"label":"姓名","profile":"basic.name"},{"label":"性别","profile":"basic.gender"}]}'></textarea>
+        <button class="oc-btn primary" id="btnSaveTemplate">保存到本地模板库</button>
+        <div id="templateMsg" class="oc-hint"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="shared/schema.js"></script>
+  <script src="shared/storage.js"></script>
+  <script src="shared/config.js"></script>
+  <script src="shared/privacy.js"></script>
+  <script src="shared/profile-matcher.js"></script>
+  <script src="shared/scanner.js"></script>
+  <script src="shared/fill-runtime.js"></script>
+  <script src="shared/api-client.js"></script>
+  <script src="shared/profile-sync.js"></script>
+  <script src="modules/site-matcher.js"></script>
+  <script src="modules/template-manager.js"></script>
+  <script src="popup.js"></script>
+</body>
 </html>
