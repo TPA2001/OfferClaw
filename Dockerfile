@@ -1,6 +1,6 @@
 # OfferClaw 网页服务镜像（多用户账号版，无 Playwright 依赖）
-# 使用 DaoCloud 镜像加速（大陆网络直连 Docker Hub 不通）；若仍失败可换 dockerproxy.com / docker.1ms.run
-FROM docker.m.daocloud.io/library/python:3.11-slim
+# 使用 1ms.run 镜像加速（大陆网络直连 Docker Hub 不通；备选 docker.m.daocloud.io）
+FROM docker.1ms.run/library/python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
