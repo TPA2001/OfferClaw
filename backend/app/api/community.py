@@ -67,6 +67,23 @@ POST_CATEGORIES = {
 VALID_TARGET_TYPES = ("post", "jobshare")
 VALID_ACTIONS = ("like", "collect")
 
+# 投递分享行业标签（前端下拉 + 列表徽章）
+RECRUIT_CATEGORIES = {
+    "internet": "互联网",
+    "game": "游戏",
+    "soe": "央国企",
+    "foreign": "外企",
+    "banking": "银行金融",
+    "new_energy": "新能源",
+    "manufacturing": "智能制造",
+    "ai": "人工智能",
+    "consumer": "消费零售",
+    "other": "其他",
+}
+
+# 无具体岗位时的占位（兼容旧库 position NOT NULL 约束；前端据此显示「官网招聘入口」）
+DEFAULT_POSITION = "官网招聘"
+
 # 举报隐藏阈值：同一内容 pending 举报数达到该值自动隐藏
 REPORT_HIDE_THRESHOLD = 3
 
@@ -327,9 +344,11 @@ class CommentCreate(BaseModel):
 
 
 class JobShareCreate(BaseModel):
+    """投递分享：公司官网招聘入口（岗位可空，行业标签必选）"""
     company: str
-    position: str
+    position: Optional[str] = None
     apply_url: str
+    category: str = "other"
     city: Optional[str] = None
     salary: Optional[str] = None
     deadline: Optional[str] = None
@@ -340,6 +359,7 @@ class JobShareUpdate(BaseModel):
     company: Optional[str] = None
     position: Optional[str] = None
     apply_url: Optional[str] = None
+    category: Optional[str] = None
     city: Optional[str] = None
     salary: Optional[str] = None
     deadline: Optional[str] = None
@@ -395,11 +415,14 @@ def _serialize_comment(c: PostComment, username: str) -> dict:
 
 
 def _serialize_job(job: CommunityJobShare, username: str, my: dict = None) -> dict:
+    category = job.category or "other"
     return {
         "id": job.id,
         "company": job.company,
         "position": job.position,
         "apply_url": job.apply_url,
+        "category": category,
+        "category_label": RECRUIT_CATEGORIES.get(category, "其他"),
         "city": job.city,
         "salary": job.salary,
         "deadline": _iso(job.deadline),
@@ -725,17 +748,17 @@ async def create_job_share(
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """分享岗位（限流 + 链接校验 + AI 预审）"""
+    """分享投递入口（公司官网招聘链接，岗位可空；限流 + 链接校验 + AI 预审）"""
     company = (body.company or "").strip()
-    position = (body.position or "").strip()
     if not company:
         raise BadRequestError("公司名不能为空")
     if len(company) > JOB_COMPANY_MAX:
         raise BadRequestError(f"公司名不能超过 {JOB_COMPANY_MAX} 字")
-    if not position:
-        raise BadRequestError("岗位名不能为空")
-    if len(position) > JOB_POSITION_MAX:
+    position = (body.position or "").strip() or None
+    if position and len(position) > JOB_POSITION_MAX:
         raise BadRequestError(f"岗位名不能超过 {JOB_POSITION_MAX} 字")
+    if body.category not in RECRUIT_CATEGORIES:
+        raise BadRequestError(f"无效行业标签: {body.category}")
     apply_url = validate_apply_url(body.apply_url)
     deadline = _parse_dt(body.deadline)
     description = (body.description or "").strip() or None
@@ -743,13 +766,15 @@ async def create_job_share(
         raise BadRequestError(f"备注不能超过 {JOB_DESC_MAX} 字")
     _check_rate(user_id, "jobshare")
 
-    passed = await _ai_precheck(f"{company} {position}", description or "")
+    passed = await _ai_precheck(f"{company} {position or ''}", description or "")
     job = CommunityJobShare(
         id=str(uuid.uuid4()),
         user_id=user_id,
         company=company,
-        position=position,
+        # 无具体岗位时存占位值，兼容旧库 position NOT NULL 约束
+        position=position or DEFAULT_POSITION,
         apply_url=apply_url,
+        category=body.category,
         city=(body.city or "").strip() or None,
         salary=(body.salary or "").strip() or None,
         deadline=deadline,
@@ -768,6 +793,7 @@ async def create_job_share(
 
 @router.get("/job-shares")
 async def list_job_shares(
+    category: Optional[str] = Query(None, description="行业标签筛选"),
     city: Optional[str] = Query(None, max_length=50),
     expiring: bool = Query(False, description="只看 7 天内截止"),
     keyword: Optional[str] = Query(None, max_length=50),
@@ -777,10 +803,14 @@ async def list_job_shares(
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """岗位列表：城市/即将截止/搜索 + 最新/最热/截止排序"""
+    """投递分享列表：行业标签/城市/即将截止/搜索 + 最新/最热/截止排序"""
     q = db.query(CommunityJobShare).filter(
         CommunityJobShare.status.in_(["normal"])
     )
+    if category:
+        if category not in RECRUIT_CATEGORIES:
+            raise BadRequestError(f"无效行业标签: {category}")
+        q = q.filter(CommunityJobShare.category == category)
     if city:
         q = q.filter(CommunityJobShare.city == city.strip())
     if expiring:
@@ -942,14 +972,16 @@ async def update_job_share(
             raise BadRequestError(f"公司名不能超过 {JOB_COMPANY_MAX} 字")
         job.company = company
     if body.position is not None:
-        position = body.position.strip()
-        if not position:
-            raise BadRequestError("岗位名不能为空")
-        if len(position) > JOB_POSITION_MAX:
+        position = body.position.strip() or None
+        if position and len(position) > JOB_POSITION_MAX:
             raise BadRequestError(f"岗位名不能超过 {JOB_POSITION_MAX} 字")
-        job.position = position
+        job.position = position or DEFAULT_POSITION
     if body.apply_url is not None:
         job.apply_url = validate_apply_url(body.apply_url)
+    if body.category is not None:
+        if body.category not in RECRUIT_CATEGORIES:
+            raise BadRequestError(f"无效行业标签: {body.category}")
+        job.category = body.category
     if body.city is not None:
         job.city = body.city.strip() or None
     if body.salary is not None:

@@ -69,7 +69,14 @@ class PostComment(Base):
 
 
 class CommunityJobShare(Base):
-    """岗位分享表（网申广场）"""
+    """投递分享表（公司官网招聘入口分享，不局限于单个岗位）
+
+    语义：分享的是一个「公司招聘入口」（官网招聘链接），可能包含多个岗位。
+    - company: 公司名（必填）
+    - position: 具体岗位（可空；为空时存占位值「官网招聘」，兼容旧库 NOT NULL 约束）
+    - apply_url: 官网招聘链接（创建时校验 http/https + 域名）
+    - category: 行业标签（互联网/游戏/央国企/外企/银行金融/新能源/智能制造/人工智能/消费零售/其他）
+    """
 
     __tablename__ = "community_job_shares"
 
@@ -77,8 +84,9 @@ class CommunityJobShare(Base):
     user_id = Column(String(64), nullable=False, index=True)  # 分享者
 
     company = Column(String(200), nullable=False, index=True)
-    position = Column(String(200), nullable=False)
-    apply_url = Column(Text, nullable=False)  # 网申官网链接（创建时校验 http/https + 域名）
+    position = Column(String(200), nullable=True)  # 可空：官网招聘入口可无具体岗位
+    apply_url = Column(Text, nullable=False)  # 官网招聘链接（创建时校验 http/https + 域名）
+    category = Column(String(50), nullable=True, index=True)  # 行业标签
     city = Column(String(50), nullable=True)
     salary = Column(String(100), nullable=True)
     deadline = Column(DateTime(timezone=True), nullable=True, index=True)

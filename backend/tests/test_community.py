@@ -281,7 +281,7 @@ class TestReport:
         assert r.json()["data"]["status"] == "normal"
 
 
-# ============ 岗位分享 ============
+# ============ 岗位分享（投递分享） ============
 
 class TestJobShare:
     def test_url_validation(self, client):
@@ -303,6 +303,49 @@ class TestJobShare:
         r = _create_job(client, apply_url="https://career.example.com/apply?src=1")
         assert r.status_code == 200
         assert r.json()["data"]["status"] == "normal"
+
+    def test_position_optional_default(self, client):
+        """岗位可空：不填 position 时存占位「官网招聘」，前端据此显示官网招聘入口"""
+        r = _create_job(client, position="")
+        assert r.status_code == 200
+        assert r.json()["data"]["position"] == "官网招聘"
+        # 不传 position 字段同理
+        r = _create_job(client, company="纯官网入口公司", position="")
+        assert r.status_code == 200
+        assert r.json()["data"]["position"] == "官网招聘"
+
+    def test_category_validation_and_label(self, client):
+        # 无效标签
+        r = _create_job(client, category="hack")
+        assert r.status_code == 400
+        # 有效标签（央国企）
+        r = _create_job(client, company="国家电网", position="", category="soe")
+        assert r.status_code == 200
+        data = r.json()["data"]
+        assert data["category"] == "soe"
+        assert data["category_label"] == "央国企"
+        # 默认标签
+        r = _create_job(client, company="默认标签公司")
+        assert r.json()["data"]["category"] == "other"
+        assert r.json()["data"]["category_label"] == "其他"
+
+    def test_list_filter_by_category(self, client):
+        _create_job(client, company="腾讯", category="internet")
+        _create_job(client, company="米哈游", category="game")
+        _create_job(client, company="国家电网", category="soe")
+
+        r = client.get("/api/v1/community/job-shares", params={"category": "internet"})
+        assert r.status_code == 200
+        items = r.json()["data"]["items"]
+        assert len(items) == 1 and items[0]["company"] == "腾讯"
+        assert items[0]["category_label"] == "互联网"
+
+        r = client.get("/api/v1/community/job-shares", params={"category": "game"})
+        assert r.json()["data"]["items"][0]["company"] == "米哈游"
+
+        # 无效标签筛选
+        r = client.get("/api/v1/community/job-shares", params={"category": "hack"})
+        assert r.status_code == 400
 
     def test_redirect_counts_and_validates(self, client):
         job_id = _create_job(client).json()["data"]["id"]
