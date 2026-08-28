@@ -338,6 +338,45 @@
         location.href = 'login.html';
     }
 
+    // ============ 社区 / 岗位分享 ============
+
+    async function communityListPosts(params) {
+        const qs = new URLSearchParams(params || {}).toString();
+        return get('/community/posts' + (qs ? '?' + qs : ''));
+    }
+    async function communityGetPost(id) { return get('/community/posts/' + encodeURIComponent(id)); }
+    async function communityCreatePost(body) { return post('/community/posts', body); }
+    async function communityUpdatePost(id, body) { return put('/community/posts/' + encodeURIComponent(id), body); }
+    async function communityDeletePost(id) { return del('/community/posts/' + encodeURIComponent(id)); }
+    async function communityListComments(id, limit) {
+        return get('/community/posts/' + encodeURIComponent(id) + '/comments?limit=' + (limit || 200));
+    }
+    async function communityCreateComment(id, body) {
+        return post('/community/posts/' + encodeURIComponent(id) + '/comments', body);
+    }
+    async function communityDeleteComment(id) { return del('/community/comments/' + encodeURIComponent(id)); }
+
+    async function communityListJobs(params) {
+        const qs = new URLSearchParams(params || {}).toString();
+        return get('/community/job-shares' + (qs ? '?' + qs : ''));
+    }
+    async function communityGetJob(id) { return get('/community/job-shares/' + encodeURIComponent(id)); }
+    async function communityCreateJob(body) { return post('/community/job-shares', body); }
+    async function communityUpdateJob(id, body) { return put('/community/job-shares/' + encodeURIComponent(id), body); }
+    async function communityDeleteJob(id) { return del('/community/job-shares/' + encodeURIComponent(id)); }
+    async function communityRedirectJob(id) {
+        return get('/community/job-shares/' + encodeURIComponent(id) + '/redirect');
+    }
+    async function communityJobToApplication(id) {
+        return post('/community/job-shares/' + encodeURIComponent(id) + '/to-application');
+    }
+    async function communityExpireJob(id) {
+        return post('/community/job-shares/' + encodeURIComponent(id) + '/expire');
+    }
+
+    async function communityReact(body) { return post('/community/reactions', body); }
+    async function communityReport(body) { return post('/community/reports', body); }
+
     global.OfferClawAPI = {
         CONFIG,
         API_V1,
@@ -365,6 +404,26 @@
             forgotPassword: authForgotPassword,
             resetPassword: authResetPassword,
             logout: authLogout,
+        },
+        community: {
+            listPosts: communityListPosts,
+            getPost: communityGetPost,
+            createPost: communityCreatePost,
+            updatePost: communityUpdatePost,
+            deletePost: communityDeletePost,
+            listComments: communityListComments,
+            createComment: communityCreateComment,
+            deleteComment: communityDeleteComment,
+            listJobs: communityListJobs,
+            getJob: communityGetJob,
+            createJob: communityCreateJob,
+            updateJob: communityUpdateJob,
+            deleteJob: communityDeleteJob,
+            redirectJob: communityRedirectJob,
+            jobToApplication: communityJobToApplication,
+            expireJob: communityExpireJob,
+            react: communityReact,
+            report: communityReport,
         },
     };
 })(window);

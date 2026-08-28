@@ -13,11 +13,14 @@
      * 注册所有视图
      */
     function registerViews() {
+        if (Views.overview)  Router.register('/overview', Views.overview);
         if (Views.kanban)   Router.register('/kanban', Views.kanban);
         if (Views.profile)  Router.register('/profile', Views.profile);
         if (Views.interview) Router.register('/interview', Views.interview);
+        if (Views.community) Router.register('/community', Views.community);
+        if (Views.jobShares) Router.register('/job-shares', Views.jobShares);
         if (Views.settings) Router.register('/settings', Views.settings);
-        // 未注册路由回落到投递看板
+        // 未注册路由回落到投递总览
     }
 
     /**

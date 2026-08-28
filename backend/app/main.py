@@ -23,7 +23,7 @@ from app.core.database import engine, Base, SessionLocal
 from app.core.response import (
     APIError, business_code_for_http, ok as ok_response,
 )
-from app.api import auth, profile, agent, applications, journal, settings
+from app.api import auth, profile, agent, applications, journal, settings, community
 
 # Configure logging
 logging.basicConfig(
@@ -43,6 +43,13 @@ for w in _auth_warnings:
 from app.models.profile import Profile           # noqa: F401
 from app.models.application import Application, AgentSession  # noqa: F401
 from app.models.user import User                  # noqa: F401
+from app.models.community import (                # noqa: F401
+    CommunityPost,
+    PostComment,
+    CommunityJobShare,
+    UserReaction,
+    ContentReport,
+)
 Base.metadata.create_all(bind=engine)
 logger.info("Database tables created")
 
@@ -89,6 +96,7 @@ app.include_router(agent.router)
 app.include_router(applications.router)
 app.include_router(journal.router)
 app.include_router(settings.router)
+app.include_router(community.router)   # 社区 + 岗位分享（全站共享 UGC）
 
 
 # === 全局异常处理器：统一错误响应信封 ===
