@@ -44,7 +44,7 @@
         adding: false,
         composerOpen: false,
         submitting: false,
-        form: { company: '', position: '', apply_url: '', category: 'internet', city: '', salary: '', deadline: '', description: '', editId: null },
+        form: { company: '', position: '', apply_url: '', category: 'internet', city: '', salary: '', deadline: '', referral_code: '', description: '', editId: null },
     };
 
     let root = null;
@@ -101,6 +101,18 @@
 .js-row-detail { display:inline-flex; align-items:center; gap:.3rem; padding:.3rem .7rem; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink-soft); font-size:.82rem; cursor:pointer; transition:all .15s var(--ease); }
 .js-row-detail:hover { color:var(--olive); border-color:var(--olive); }
 .js-row-detail svg { width:12px; height:12px; }
+
+/* 行内：分享人 + 内推码 */
+.js-row-sharer { display:flex; align-items:center; gap:.5rem; margin-top:.15rem; color:var(--ink-faint); font-size:.76rem; flex-wrap:wrap; }
+.js-row-code { display:inline-flex; align-items:center; gap:.3rem; padding:.05rem .5rem; border-radius:4px; background:var(--st-offer-soft, #eaf7f1); color:var(--st-offer, #059669); font-size:.74rem; cursor:pointer; }
+.js-row-code:hover { filter:brightness(.94); }
+.js-row-code svg { width:11px; height:11px; }
+
+/* 弹窗：内推码卡片 */
+.js-referral-card { display:flex; align-items:center; gap:.8rem; background:var(--st-offer-soft, #eaf7f1); border:1px solid color-mix(in srgb, var(--st-offer) 30%, transparent); border-radius:10px; padding:.8rem 1rem; margin-bottom:1rem; }
+.js-referral-card .rc-label { font-size:.76rem; color:var(--st-offer); font-weight:600; }
+.js-referral-card .rc-code { flex:1; font-family:var(--font-mono); font-size:.95rem; font-weight:500; color:var(--ink); word-break:break-all; }
+.js-referral-card button { flex-shrink:0; }
 
 /* 响应式：中等屏省略地点/截止 */
 @media (max-width: 1100px) { .js-col-city { display:none; } }
@@ -210,11 +222,18 @@
             ? `<div class="js-row-positions"><span class="js-row-tag-portal">官网招聘入口 · 点击查看全部在招岗位</span></div>`
             : `<div class="js-row-positions"><div class="js-row-position">${esc(pos)}</div></div>`;
         const d = j.deadline ? deadlineInfo(j.deadline) : null;
+        const sharer = j.author === 'OfferClaw'
+            ? 'OfferClaw 官方'
+            : (j.author || '匿名') + ' 分享';
         return `
 <div class="js-row" data-id="${j.id}" style="animation-delay:${Math.min(idx * 35, 280)}ms">
     <div class="js-row-info" data-act="open-detail">
         <div class="js-row-company">${esc(j.company)}<span class="js-row-meta">更新 ${esc(formatDate(j.updated_at || j.created_at))}</span></div>
         ${positionsHtml}
+        <div class="js-row-sharer">
+            <span>由 ${esc(sharer)}</span>
+            ${j.referral_code ? `<span class="js-row-code" data-act="copy-code" title="点击复制内推码">内推码 ${esc(j.referral_code)}</span>` : ''}
+        </div>
     </div>
     <div class="js-col js-col-cat"><span class="cat-pill" style="background:${cat.color}14;color:${cat.color}">${esc(cat.label)}</span></div>
     <div class="js-col js-col-city">${j.city ? esc(j.city) : '—'}</div>
@@ -258,7 +277,15 @@
             <span class="js-row-badge" style="background:${cat.color}18;color:${cat.color}">${esc(cat.label)}</span>
             ${esc(j.company)}
         </div>
-        <div class="js-modal-sub">${esc(pos)} · 由 ${esc(j.author)} 分享</div>
+        <div class="js-modal-sub">${esc(pos)} · 由 ${esc(j.author === 'OfferClaw' ? 'OfferClaw 官方' : (j.author || '匿名') + ' 分享')}</div>
+        ${j.referral_code ? `
+        <div class="js-referral-card">
+            <div>
+                <div class="rc-label">内推码</div>
+                <div class="rc-code">${esc(j.referral_code)}</div>
+            </div>
+            <button class="btn btn-sm btn-ghost" data-act="copy-code">复制</button>
+        </div>` : ''}
         <div class="js-detail-grid">
             <div class="js-detail-item"><div class="k">公司</div><div class="v">${esc(j.company)}</div></div>
             <div class="js-detail-item"><div class="k">行业</div><div class="v">${esc(cat.label)}</div></div>
@@ -303,7 +330,8 @@
             <div class="form-field"><label>城市（选填）</label><input id="js-f-city" maxlength="50" value="${esc(f.city)}" placeholder="北京"></div>
             <div class="form-field"><label>薪资范围（选填）</label><input id="js-f-salary" maxlength="100" value="${esc(f.salary)}" placeholder="20-30k"></div>
             <div class="form-field"><label>招聘截止日期（选填）</label><input id="js-f-deadline" type="date" value="${esc(f.deadline || '')}"></div>
-            <div class="form-field full"><label>备注（内推码 / 招聘要求等）</label><textarea id="js-f-desc" rows="3" maxlength="2000" placeholder="选填">${esc(f.description)}</textarea></div>
+            <div class="form-field"><label>内推码（选填）</label><input id="js-f-referral" maxlength="100" value="${esc(f.referral_code)}" placeholder="如 ABC123，让更多人用你的内推码"></div>
+            <div class="form-field full"><label>备注（招聘要求等）</label><textarea id="js-f-desc" rows="3" maxlength="2000" placeholder="选填">${esc(f.description)}</textarea></div>
         </div>
         <div class="js-warn">请只分享官方招聘链接，分享前请确认链接真实有效</div>
         <div class="js-tip">分享的投递入口将同步参与社区内容审核</div>
@@ -370,6 +398,11 @@
         if (act === 'close-composer') { state.composerOpen = false; render(); return; }
         if (act === 'close-detail') { state.detailOpen = false; render(); return; }
         if (act === 'submit-job') { submitJob(); return; }
+        if (act === 'copy-code') {
+            const j = state.current || (state.items.find(x => x.id === (row && row.dataset.id)) || null);
+            if (j && j.referral_code) copyText(j.referral_code);
+            return;
+        }
         // 行内直接执行（不打开弹窗）
         if (act === 'goto') {
             const id = row && row.dataset.id;
@@ -415,6 +448,7 @@
         if (t.id === 'js-f-city') f.city = t.value;
         if (t.id === 'js-f-salary') f.salary = t.value;
         if (t.id === 'js-f-deadline') f.deadline = t.value;
+        if (t.id === 'js-f-referral') f.referral_code = t.value;
         if (t.id === 'js-f-desc') f.description = t.value;
     }
 
@@ -426,6 +460,23 @@
         if (e.key === 'Enter' && e.target && (e.target.id === 'js-search' || e.target.id === 'js-city')) {
             state.page = 1;
             loadList();
+        }
+    }
+
+    function copyText(text) {
+        const done = () => API.toast('已复制到剪贴板');
+        const fail = () => {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); done(); } catch (e) { API.toast('复制失败，请手动复制', 'error'); }
+            document.body.removeChild(ta);
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(done, fail);
+        } else {
+            fail();
         }
     }
 
@@ -441,6 +492,7 @@
             city: j.city || '',
             salary: j.salary || '',
             deadline: j.deadline ? new Date(j.deadline).toISOString().slice(0, 10) : '',
+            referral_code: j.referral_code || '',
             description: j.description || '',
         };
         state.composerOpen = true;
@@ -460,6 +512,7 @@
             category: f.category || 'other',
             city: f.city.trim() || null,
             salary: f.salary.trim() || null,
+            referral_code: f.referral_code.trim() || null,
             description: f.description.trim() || null,
         };
         if (f.deadline) payload.deadline = new Date(f.deadline + 'T23:59:59+08:00').toISOString();

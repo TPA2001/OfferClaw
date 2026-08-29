@@ -347,6 +347,27 @@ class TestJobShare:
         r = client.get("/api/v1/community/job-shares", params={"category": "hack"})
         assert r.status_code == 400
 
+    def test_referral_code_roundtrip(self, client):
+        """内推码：创建时保存、返回、可编辑更新、超长拒绝"""
+        r = _create_job(client, company="内推公司", position="", referral_code="ABC123")
+        assert r.status_code == 200
+        data = r.json()["data"]
+        assert data["referral_code"] == "ABC123"
+
+        job_id = data["id"]
+        # 编辑更新内推码
+        r = client.put(f"/api/v1/community/job-shares/{job_id}",
+                       json={"referral_code": "XYZ999"})
+        assert r.status_code == 200
+        assert r.json()["data"]["referral_code"] == "XYZ999"
+        # 清空内推码
+        r = client.put(f"/api/v1/community/job-shares/{job_id}",
+                       json={"referral_code": ""})
+        assert r.json()["data"]["referral_code"] is None
+        # 超长拒绝
+        r = _create_job(client, company="超长内推", referral_code="X" * 101)
+        assert r.status_code == 400
+
     def test_redirect_counts_and_validates(self, client):
         job_id = _create_job(client).json()["data"]["id"]
         r = client.get(f"/api/v1/community/job-shares/{job_id}/redirect")

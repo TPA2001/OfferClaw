@@ -90,6 +90,7 @@ class CommunityJobShare(Base):
     city = Column(String(50), nullable=True)
     salary = Column(String(100), nullable=True)
     deadline = Column(DateTime(timezone=True), nullable=True, index=True)
+    referral_code = Column(String(100), nullable=True)  # 内推码（选填）
     description = Column(Text, nullable=True)
 
     # 状态：normal / hidden=违规或审核中 / deleted / expired=已过期

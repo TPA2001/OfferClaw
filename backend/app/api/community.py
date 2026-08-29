@@ -344,7 +344,7 @@ class CommentCreate(BaseModel):
 
 
 class JobShareCreate(BaseModel):
-    """投递分享：公司官网招聘入口（岗位可空，行业标签必选）"""
+    """投递分享：公司官网招聘入口（岗位可空，行业标签必选，内推码选填）"""
     company: str
     position: Optional[str] = None
     apply_url: str
@@ -352,6 +352,7 @@ class JobShareCreate(BaseModel):
     city: Optional[str] = None
     salary: Optional[str] = None
     deadline: Optional[str] = None
+    referral_code: Optional[str] = None
     description: Optional[str] = None
 
 
@@ -363,6 +364,7 @@ class JobShareUpdate(BaseModel):
     city: Optional[str] = None
     salary: Optional[str] = None
     deadline: Optional[str] = None
+    referral_code: Optional[str] = None
     description: Optional[str] = None
 
 
@@ -426,6 +428,7 @@ def _serialize_job(job: CommunityJobShare, username: str, my: dict = None) -> di
         "city": job.city,
         "salary": job.salary,
         "deadline": _iso(job.deadline),
+        "referral_code": job.referral_code,
         "description": job.description,
         "status": job.status,
         "author_id": job.user_id,
@@ -761,6 +764,9 @@ async def create_job_share(
         raise BadRequestError(f"无效行业标签: {body.category}")
     apply_url = validate_apply_url(body.apply_url)
     deadline = _parse_dt(body.deadline)
+    referral_code = (body.referral_code or "").strip() or None
+    if referral_code and len(referral_code) > 100:
+        raise BadRequestError("内推码不能超过 100 字符")
     description = (body.description or "").strip() or None
     if description and len(description) > JOB_DESC_MAX:
         raise BadRequestError(f"备注不能超过 {JOB_DESC_MAX} 字")
@@ -778,6 +784,7 @@ async def create_job_share(
         city=(body.city or "").strip() or None,
         salary=(body.salary or "").strip() or None,
         deadline=deadline,
+        referral_code=referral_code,
         description=description,
         status="normal" if passed else "hidden",
     )
@@ -988,6 +995,11 @@ async def update_job_share(
         job.salary = body.salary.strip() or None
     if body.deadline is not None:
         job.deadline = _parse_dt(body.deadline)
+    if body.referral_code is not None:
+        code = body.referral_code.strip() or None
+        if code and len(code) > 100:
+            raise BadRequestError("内推码不能超过 100 字符")
+        job.referral_code = code
     if body.description is not None:
         desc = body.description.strip() or None
         if desc and len(desc) > JOB_DESC_MAX:
