@@ -23,7 +23,7 @@
      * 解析当前 hash
      */
     function parseHash() {
-        const hash = global.location.hash.slice(1) || '/kanban';
+        const hash = global.location.hash.slice(1) || '/overview';
         const [path, queryStr] = hash.split('?');
         const params = {};
         if (queryStr) {
@@ -32,7 +32,7 @@
                 params[decodeURIComponent(k)] = decodeURIComponent(v || '');
             });
         }
-        return { path: path || '/kanban', params };
+        return { path: path || '/overview', params };
     }
 
     /**
@@ -59,7 +59,7 @@
      */
     async function render() {
         const { path, params } = parseHash();
-        const view = routes[path] || routes['/chat'];
+        const view = routes[path] || routes['/overview'];
         const el = mountEl();
         if (!el) return;
 
@@ -102,7 +102,7 @@
      */
     function init() {
         if (!global.location.hash) {
-            global.location.hash = '#/chat';
+            global.location.hash = '#/overview';
         }
         global.addEventListener('hashchange', render);
         render();

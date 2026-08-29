@@ -28,6 +28,7 @@ class ApplicationCreate(BaseModel):
     rejection_reason: Optional[str] = None
     assessment_type: Optional[str] = None
     interview_round: Optional[int] = None
+    interview_type: Optional[str] = None
     next_interview_at: Optional[datetime] = None
     assessment_deadline: Optional[datetime] = None
     offer_status: Optional[str] = None
@@ -51,6 +52,7 @@ class ApplicationUpdate(BaseModel):
     rejection_reason: Optional[str] = None
     assessment_type: Optional[str] = None
     interview_round: Optional[int] = None
+    interview_type: Optional[str] = None
     next_interview_at: Optional[datetime] = None
     assessment_deadline: Optional[datetime] = None
     offer_status: Optional[str] = None
@@ -88,6 +90,7 @@ class ApplicationResponse(BaseModel):
     rejection_reason: Optional[str] = None
     assessment_type: Optional[str] = None
     interview_round: Optional[int] = None
+    interview_type: Optional[str] = None
     next_interview_at: Optional[datetime] = None
     assessment_deadline: Optional[datetime] = None
     offer_status: Optional[str] = None

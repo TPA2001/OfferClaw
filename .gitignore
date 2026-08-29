@@ -78,3 +78,18 @@ AI-Resume-Form-Filling-Assistant-master/
 
 # WorkBuddy 项目数据（会话内存等工具内部数据，不入仓）
 .workbuddy/
+
+# 打包 / 发布产物（构建产物，不入仓）
+*.tar
+*.tar.gz
+*.zip
+*.7z
+*.rar
+
+# 数据库备份文件（offerclaw.db.bak_YYYYMMDD_HHMMSS 等，含数据不入仓）
+*.db.bak*
+
+# 宣传海报物料（临时生成的推广图，不入仓，单独管理）
+poster-*.html
+poster-*.png
+poster-*.jpg

@@ -49,6 +49,9 @@ class Application(Base):
     # 当前面试轮次（仅 status=interview 时使用，1=一面 2=二面 3=三面 4=HR面）
     interview_round = Column(Integer, nullable=True)
 
+    # 面试类型（仅 status=interview 时使用）：AI面试 / 真人面试
+    interview_type = Column(String(30), nullable=True)
+
     # 下一面试时间（用于倒计时提醒）
     next_interview_at = Column(DateTime(timezone=True), nullable=True)
 

@@ -62,6 +62,12 @@ INTERVIEW_ROUND_LABELS = {
     5: "加面",
 }
 
+# 笔试/测评类型枚举（前端下拉）
+ASSESSMENT_TYPES = ["AI测评", "在线笔试", "行测", "性格测试"]
+
+# 面试类型枚举（前端下拉 + 卡片徽标）
+INTERVIEW_TYPES = ["AI面试", "真人面试"]
+
 # offer 状态
 OFFER_STATUSES = {
     "pending": "待回复",
@@ -92,8 +98,9 @@ class ApplicationCreate(BaseModel):
     status: str = "applied"
     rejection_stage: Optional[str] = None
     rejection_reason: Optional[str] = None  # 拒绝补充说明（自由文本）
-    assessment_type: Optional[str] = None   # 笔试类型（在线编程/行测/性格测试）
+    assessment_type: Optional[str] = None   # 笔试类型（AI测评/在线笔试/行测/性格测试）
     interview_round: Optional[int] = None
+    interview_type: Optional[str] = None    # 面试类型（AI面试/真人面试）
     next_interview_at: Optional[str] = None  # ISO 字符串
     assessment_deadline: Optional[str] = None  # 笔试截止时间
     offer_status: Optional[str] = None
@@ -116,6 +123,7 @@ class ApplicationUpdate(BaseModel):
     rejection_reason: Optional[str] = None
     assessment_type: Optional[str] = None
     interview_round: Optional[int] = None
+    interview_type: Optional[str] = None
     next_interview_at: Optional[str] = None
     assessment_deadline: Optional[str] = None
     offer_status: Optional[str] = None
@@ -139,6 +147,7 @@ class ApplicationOut(BaseModel):
     rejection_stage_label: Optional[str] = None
     interview_round: Optional[int] = None
     interview_round_label: Optional[str] = None
+    interview_type: Optional[str] = None
     next_interview_at: Optional[str] = None
     assessment_deadline: Optional[str] = None
     offer_status: Optional[str] = None
@@ -154,6 +163,16 @@ class ApplicationOut(BaseModel):
     applied_at: Optional[str] = None
     updated_at: Optional[str] = None
     sort_order: int = 0
+
+
+def _iso_utc(dt: Optional[datetime]) -> Optional[str]:
+    """序列化 datetime：naive 一律视为 UTC 并附加 +00:00，
+    避免 SQLite 丢失时区信息导致前端把 UTC 当成本地时间显示。"""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
 
 
 def _to_dict(a: Application) -> dict:
@@ -172,20 +191,21 @@ def _to_dict(a: Application) -> dict:
         "assessment_type": a.assessment_type,
         "interview_round": a.interview_round,
         "interview_round_label": INTERVIEW_ROUND_LABELS.get(a.interview_round, str(a.interview_round)) if a.interview_round else None,
-        "next_interview_at": a.next_interview_at.isoformat() if a.next_interview_at else None,
-        "assessment_deadline": a.assessment_deadline.isoformat() if a.assessment_deadline else None,
+        "interview_type": a.interview_type,
+        "next_interview_at": _iso_utc(a.next_interview_at),
+        "assessment_deadline": _iso_utc(a.assessment_deadline),
         "offer_status": a.offer_status,
         "offer_status_label": OFFER_STATUSES.get(a.offer_status) if a.offer_status else None,
         "offer_salary": a.offer_salary,
         "offer_location": a.offer_location,
-        "offer_deadline": a.offer_deadline.isoformat() if a.offer_deadline else None,
+        "offer_deadline": _iso_utc(a.offer_deadline),
         "hr_contact": a.hr_contact,
         "priority": a.priority or "medium",
         "priority_label": PRIORITIES.get(a.priority or "medium", a.priority),
         "notes": a.notes,
         "tags": a.tags,
-        "applied_at": a.applied_at.isoformat() if a.applied_at else None,
-        "updated_at": a.updated_at.isoformat() if a.updated_at else None,
+        "applied_at": _iso_utc(a.applied_at),
+        "updated_at": _iso_utc(a.updated_at),
         "sort_order": a.sort_order or 0,
         "status_history": a.status_history or [],
     }
@@ -215,6 +235,7 @@ def _cleanup_status_fields(app: Application, status: str) -> None:
     if status != "interview":
         app.interview_round = None
         app.next_interview_at = None
+        app.interview_type = None
     if status != "assessment":
         app.assessment_deadline = None
         app.assessment_type = None
@@ -342,16 +363,16 @@ async def export_csv(
             VALID_STATUSES.get(a.status, a.status),
             REJECTION_STAGES.get(a.rejection_stage, a.rejection_stage or "") if a.rejection_stage else "",
             INTERVIEW_ROUND_LABELS.get(a.interview_round, str(a.interview_round)) if a.interview_round else "",
-            a.next_interview_at.isoformat() if a.next_interview_at else "",
-            a.assessment_deadline.isoformat() if a.assessment_deadline else "",
+            _iso_utc(a.next_interview_at) or "",
+            _iso_utc(a.assessment_deadline) or "",
             OFFER_STATUSES.get(a.offer_status, a.offer_status or "") if a.offer_status else "",
             a.offer_salary or "", a.offer_location or "",
-            a.offer_deadline.isoformat() if a.offer_deadline else "",
+            _iso_utc(a.offer_deadline) or "",
             a.hr_contact or "",
             PRIORITIES.get(a.priority or "medium", a.priority or ""),
             a.source or "", a.tags or "",
-            a.applied_at.isoformat() if a.applied_at else "",
-            a.updated_at.isoformat() if a.updated_at else "",
+            _iso_utc(a.applied_at) or "",
+            _iso_utc(a.updated_at) or "",
             a.notes or "", a.job_url or "",
         ])
 
@@ -516,7 +537,7 @@ async def create_application(
             "existing_id": str(existing.id),
             "existing_status": existing.status,
             "existing_status_label": VALID_STATUSES.get(existing.status, existing.status),
-            "applied_at": existing.applied_at.isoformat() if existing.applied_at else None,
+            "applied_at": _iso_utc(existing.applied_at),
             "message": f"30 天内已投递过 {body.company} - {body.position}（当前状态：{VALID_STATUSES.get(existing.status, existing.status)}），请确认是否重复",
         }
 
@@ -534,6 +555,7 @@ async def create_application(
         rejection_reason=body.rejection_reason,
         assessment_type=body.assessment_type,
         interview_round=body.interview_round,
+        interview_type=body.interview_type,
         next_interview_at=_parse_dt(body.next_interview_at),
         assessment_deadline=_parse_dt(body.assessment_deadline),
         offer_status=body.offer_status,
@@ -611,6 +633,10 @@ async def update_application(
         if body.interview_round is not None and (body.interview_round < 1 or body.interview_round > 5):
             raise BadRequestError("面试轮次必须在 1-5 之间")
         app.interview_round = body.interview_round
+    if "interview_type" in provided:
+        if body.interview_type is not None and body.interview_type not in INTERVIEW_TYPES:
+            raise BadRequestError(f"非法面试类型，可选: {'/'.join(INTERVIEW_TYPES)}")
+        app.interview_type = body.interview_type
     if "next_interview_at" in provided:
         app.next_interview_at = _parse_dt(body.next_interview_at)
     if "assessment_deadline" in provided:
