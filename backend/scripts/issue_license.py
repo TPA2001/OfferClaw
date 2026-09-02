@@ -1,4 +1,4 @@
-"""OfferClaw 授权密钥签发 CLI（开发者专用）
+"""OfferCabin 授权密钥签发 CLI（开发者专用）
 
 用法示例：
   # 1. 查看本机指纹（把此指纹报给开发者，或用户自取后报给你）
@@ -64,7 +64,7 @@ def parse_expiry(args) -> int:
 
 
 def main():
-    ap = argparse.ArgumentParser(description="OfferClaw 授权密钥签发 CLI")
+    ap = argparse.ArgumentParser(description="OfferCabin 授权密钥签发 CLI")
     ap.add_argument("-c", "--customer", help="客户名")
     ap.add_argument("-d", "--days", type=int, help="有效天数（默认 365）")
     ap.add_argument("--exp", help="到期日 YYYY-MM-DD（与 --days 二选一）")
@@ -98,11 +98,11 @@ def main():
     now = int(time.time())
     exp = parse_expiry(args)
     payload = {
-        "iss": "offerclaw",
+        "iss": "offercabin",
         "sub": str(uuid.uuid4()),
         "iat": now,
         "exp": exp,
-        "product": "offerclaw",
+        "product": "offercabin",
         "customer": args.customer,
         "features": features,
         "machine": args.machine or "",
@@ -118,7 +118,7 @@ def main():
             print(f"[错误] 签发后自校验失败：{e}", file=sys.stderr)
             sys.exit(1)
 
-    print("===== OfferClaw 授权密钥（分发给用户）=====")
+    print("===== OfferCabin 授权密钥（分发给用户）=====")
     print(token)
     print()
     print("===== 密钥信息 =====")

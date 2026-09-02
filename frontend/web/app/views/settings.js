@@ -5,9 +5,9 @@
 (function (global) {
     'use strict';
 
-    const API = global.OfferClawAPI;
-    const Motion = global.OfferClawMotion;
-    const Theme = global.OfferClawTheme;
+    const API = global.OfferCabinAPI;
+    const Motion = global.OfferCabinMotion;
+    const Theme = global.OfferCabinTheme;
     const esc = API.esc.bind(API);
 
     // ============ 常量 ============
@@ -15,9 +15,9 @@
     const CSS_ID = 'settings-styles';
 
     const PROJECT_INFO = {
-        name: 'OfferClaw',
+        name: 'OfferCabin',
         version: '',
-        repo: 'https://github.com/your-org/offerclaw',
+        repo: 'https://github.com/your-org/offercabin',
         description: '求职投递看板：投递管理 + 画像 + 面试复盘 + Agent 助手',
     };
 
@@ -94,6 +94,21 @@
     border-radius: 8px;
     margin-left: auto;
 }
+/* --- 系统诊断（折叠区） --- */
+.diag-toggle-hint {
+    font-size: 0.68rem;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    color: var(--ink-faint);
+    background: var(--paper-deep);
+    padding: 0.1rem 0.5rem;
+    border-radius: 8px;
+    margin-left: auto;
+}
+.diag-body { animation: settings-fade 0.2s var(--ease); }
+.diag-stats { margin-bottom: 0.2rem; }
+.diag-divider { height: 1px; background: var(--line-soft); margin: 0.9rem 0 0.6rem; }
+@keyframes settings-fade { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
 /* --- 健康状态行 --- */
 .health-row {
@@ -203,6 +218,36 @@
     color: var(--olive-dark);
 }
 
+/* --- LLM 预设模板 --- */
+.llm-template-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+.llm-template-row select {
+    flex: 0 1 auto;
+    min-width: 220px;
+    padding: 0.5rem 0.7rem;
+    font-size: 0.84rem;
+    color: var(--ink);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-family: var(--font-sans);
+}
+.llm-template-row select:focus { outline: none; border-color: var(--olive); }
+.llm-template-note {
+    font-size: 0.74rem;
+    color: var(--ink-faint);
+    font-family: var(--font-sans);
+}
+.llm-divider {
+    height: 1px;
+    background: var(--line-soft);
+    margin: 0.9rem 0 1rem;
+}
+
 /* --- 数据统计 --- */
 .stats-grid {
     display: grid;
@@ -265,6 +310,96 @@
     font-size: 0.82rem;
     color: var(--ink-soft);
     line-height: 1.6;
+}
+
+/* --- 支持本项目 --- */
+.support-intro {
+    font-size: 0.86rem;
+    color: var(--ink-soft);
+    line-height: 1.75;
+    margin-bottom: 1.1rem;
+}
+.donate-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    max-width: 360px;
+}
+.donate-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+.donate-qr {
+    width: 150px;
+    height: 150px;
+    object-fit: contain;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 6px;
+    cursor: zoom-in;
+    transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.donate-qr:hover {
+    border-color: var(--olive);
+    box-shadow: var(--shadow-md);
+}
+.donate-label {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    letter-spacing: 0.5px;
+}
+.donate-note {
+    margin-top: 1rem;
+    padding-top: 0.8rem;
+    border-top: 1px dashed var(--line-soft);
+    font-size: 0.76rem;
+    color: var(--ink-faint);
+    text-align: center;
+}
+
+/* 赞赏码浮层 */
+.donate-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    place-items: center;
+    background: rgba(18, 20, 28, 0.78);
+    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px);
+    cursor: zoom-out;
+    animation: donateFade 0.18s var(--ease);
+}
+.donate-modal img {
+    max-width: min(82vw, 460px);
+    max-height: 80vh;
+    object-fit: contain;
+    background: var(--card);
+    border-radius: 16px;
+    padding: 12px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+    animation: donatePop 0.18s var(--ease);
+}
+.donate-modal .donate-modal-cap {
+    position: absolute;
+    bottom: 9vh;
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: var(--paper-light);
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    letter-spacing: 0.5px;
+    opacity: 0.85;
+}
+@keyframes donateFade { from { opacity: 0; } }
+@keyframes donatePop { from { opacity: 0; transform: scale(0.92); } }
+@media (prefers-reduced-motion: reduce) {
+    .donate-modal, .donate-modal img { animation: none; }
 }
 
 /* --- 危险操作 --- */
@@ -379,12 +514,11 @@
 
     function renderContent() {
         return `
-        ${renderAppearanceSection()}
-        ${renderHealthSection()}
         ${renderLlmSection()}
-        ${renderStatsSection()}
+        ${renderAppearanceSection()}
+        ${renderSupportSection()}
         ${renderAccountSection()}
-        ${renderAboutSection()}
+        ${renderDiagnosticsSection()}
         ${renderDangerSection()}`;
     }
 
@@ -452,63 +586,7 @@
         </div>`;
     }
 
-    // --- 系统健康 ---
-
-    function renderHealthSection() {
-        const h = state.health;
-        const st = getHealthStatus(h);
-        const db = getDbStatus(h);
-        const version = h ? (h.version || '未知') : '—';
-        const uptime = h ? formatUptime(h.uptime) : '—';
-        const startedAt = h && h.started_at ? h.started_at : '';
-
-        let rows;
-        if (state.loadingHealth) {
-            rows = `
-            <div class="settings-loading">
-                <div class="spinner"></div>
-                <span>正在检查系统健康...</span>
-            </div>`;
-        } else {
-            rows = `
-            <div class="health-row">
-                <span class="health-label"><span class="status-dot-lg ${st.cls}"></span>系统状态</span>
-                <span class="health-value ${st.cls}">${esc(st.text)}</span>
-            </div>
-            <div class="health-row">
-                <span class="health-label">版本</span>
-                <span class="health-value">${esc(version)}</span>
-            </div>
-            <div class="health-row">
-                <span class="health-label">运行时间</span>
-                <span class="health-value">${esc(uptime)}</span>
-            </div>
-            ${startedAt ? `
-            <div class="health-row">
-                <span class="health-label">启动时间</span>
-                <span class="health-value">${esc(startedAt)}</span>
-            </div>` : ''}
-            <div class="health-row">
-                <span class="health-label"><span class="status-dot-lg ${db.cls}"></span>数据库</span>
-                <span class="health-value ${db.cls}">${esc(db.text)}</span>
-            </div>`;
-        }
-
-        return `
-        <div class="settings-section">
-            <div class="section-title">
-                <span class="title-icon">🖥</span>
-                <span>系统健康</span>
-                ${h && !state.loadingHealth ? `<span class="title-tag">${esc(st.text)}</span>` : ''}
-            </div>
-            ${rows}
-            <div style="margin-top:0.8rem;">
-                <button class="btn btn-ghost btn-sm" id="btn-refresh-health">刷新</button>
-            </div>
-        </div>`;
-    }
-
-    // --- LLM 配置 ---
+    // --- 系统健康（诊断区内部） ---
 
     function renderLlmSection() {
         const h = state.health;
@@ -549,8 +627,22 @@
                 ? `<span class="llm-save-status ${state.llmSaveStatus.type}">${esc(state.llmSaveStatus.text)}</span>`
                 : '<span class="llm-save-status">保存后立即生效，无需重启服务</span>';
 
+            const templates = (cfg.templates && cfg.templates.length) ? cfg.templates : [];
+            const templateOptions = templates.map(t =>
+                `<option value="${esc(t.id)}">${esc(t.name)}${t.default_model ? ' · ' + esc(t.default_model) : ''}</option>`
+            ).join('');
+
             formHtml = `
             <div class="llm-config-form" style="margin-top:0.9rem;padding-top:0.9rem;border-top:1px dashed var(--line-soft);">
+                ${templates.length ? `
+                <div class="llm-field full llm-template-pick">
+                    <label>快速选择一个服务（一键填充 Base URL 与模型）<span class="field-tag">可选</span></label>
+                    <div class="llm-template-row">
+                        <select id="llm-template"><option value="">— 手动配置 —</option>${templateOptions}</select>
+                        <span class="llm-template-note" id="llm-template-note"></span>
+                    </div>
+                </div>
+                <div class="llm-divider"></div>` : ''}
                 <div class="llm-field full">
                     <label>编排模型（Agent）<span class="field-tag">强模型 · function calling</span></label>
                 </div>
@@ -651,7 +743,7 @@
         const s = state.stats;
         let body;
         if (state.loadingStats) {
-            body = '<div class="skeleton-line" style="width:100%"></div><div class="skeleton-line" style="width:80%"></div>';
+            body = '<div class="skeleton-line" style="width:12rem"></div>';
         } else {
             body = `
             <div class="stats-grid">
@@ -672,15 +764,73 @@
                 </div>
             </div>`;
         }
+        return body;
+    }
 
+    // --- 系统健康（诊断区内部） ---
+
+    function renderHealthBody() {
+        const h = state.health;
+        const st = getHealthStatus(h);
+        const db = getDbStatus(h);
+        const version = h ? (h.version || '未知') : '—';
+        const uptime = h ? formatUptime(h.uptime) : '—';
+        const startedAt = h && h.started_at ? h.started_at : '';
+
+        if (state.loadingHealth) {
+            return `
+            <div class="settings-loading">
+                <div class="spinner"></div>
+                <span>正在检查系统健康...</span>
+            </div>`;
+        }
+        return `
+        <div class="health-row">
+            <span class="health-label"><span class="status-dot-lg ${st.cls}"></span>系统状态</span>
+            <span class="health-value ${st.cls}">${esc(st.text)}</span>
+        </div>
+        <div class="health-row">
+            <span class="health-label">版本</span>
+            <span class="health-value">${esc(version)}</span>
+        </div>
+        <div class="health-row">
+            <span class="health-label">运行时间</span>
+            <span class="health-value">${esc(uptime)}</span>
+        </div>
+        ${startedAt ? `
+        <div class="health-row">
+            <span class="health-label">启动时间</span>
+            <span class="health-value">${esc(startedAt)}</span>
+        </div>` : ''}
+        <div class="health-row">
+            <span class="health-label"><span class="status-dot-lg ${db.cls}"></span>数据库</span>
+            <span class="health-value ${db.cls}">${esc(db.text)}</span>
+        </div>`;
+    }
+
+    // --- 诊断信息（健康 + 数据统计，折叠收纳） ---
+
+    function renderDiagnosticsSection() {
+        const h = state.health;
+        const st = getHealthStatus(h);
+        const stats = renderStatsSection();
         return `
         <div class="settings-section">
-            <div class="section-title">
-                <span class="title-icon">📊</span>
-                <span>数据统计</span>
+            <div class="section-title" style="cursor:pointer" id="diag-toggle" data-collapsed="1">
+                <span class="title-icon">🛠</span>
+                <span>系统诊断</span>
+                ${h && !state.loadingHealth ? `<span class="title-tag" style="margin-left:auto;font-size:0.68rem;font-weight:500">${esc(st.text)} · 点击展开</span>` : ''}
             </div>
-            ${body}
-        </div>`;
+            <div class="diag-body" id="diag-body" style="display:none">
+                <div class="diag-stats">${stats}</div>
+                <div class="diag-divider"></div>
+                ${renderHealthBody()}
+                <div style="margin-top:0.7rem">
+                    <button class="btn btn-ghost btn-sm" id="btn-refresh-health">刷新</button>
+                </div>
+            </div>
+        </div>
+        ${renderAboutSection()}`;
     }
 
     // --- 关于 ---
@@ -707,6 +857,33 @@
                 <span class="about-value"><a href="${esc(PROJECT_INFO.repo)}" target="_blank" rel="noopener noreferrer">GitHub 仓库 ↗</a></span>
             </div>
             <div class="about-desc">${esc(PROJECT_INFO.description)}</div>
+        </div>`;
+    }
+
+    // --- 支持本项目 ---
+
+    function renderSupportSection() {
+        return `
+        <div class="settings-section">
+            <div class="section-title">
+                <span class="title-icon">☕</span>
+                <span>支持本项目</span>
+                <span class="title-tag">完全免费</span>
+            </div>
+            <p class="support-intro">
+                OfferCabin 完全免费、无广告，也没有任何付费功能。如果它在求职路上帮到了你，欢迎请作者喝杯咖啡——金额随意、纯属自愿，你的支持是这个项目持续维护的动力。
+            </p>
+            <div class="donate-grid">
+                <div class="donate-card">
+                    <img class="donate-qr" src="assets/donate/wechat.jpg" alt="微信赞赏码" loading="lazy">
+                    <span class="donate-label">微信</span>
+                </div>
+                <div class="donate-card">
+                    <img class="donate-qr" src="assets/donate/alipay.jpg" alt="支付宝收款码" loading="lazy">
+                    <span class="donate-label">支付宝</span>
+                </div>
+            </div>
+            <div class="donate-note">扫码即可 · 不影响任何功能 · 不留存任何信息</div>
         </div>`;
     }
 
@@ -1071,6 +1248,39 @@
     // ============ 事件绑定 ============
 
     function bindDynamicEvents() {
+        // 预设模型模板：选择后一键填充 Agent 的 Base URL 与模型名称
+        const tplSelect = root.querySelector('#llm-template');
+        if (tplSelect) {
+            const tplMap = {};
+            ((state.llmConfig && state.llmConfig.templates) || []).forEach(t => { tplMap[t.id] = t; });
+            tplSelect.addEventListener('change', () => {
+                const tpl = tplMap[tplSelect.value];
+                const noteEl = root.querySelector('#llm-template-note');
+                if (!tpl) {
+                    if (noteEl) noteEl.textContent = '';
+                    return;
+                }
+                const base = root.querySelector('#llm-agent-base');
+                const model = root.querySelector('#llm-agent-model');
+                if (base) base.value = tpl.base_url || '';
+                if (model && tpl.default_model) model.value = tpl.default_model;
+                if (noteEl) noteEl.textContent = tpl.note || '';
+            });
+        }
+
+        // 诊断信息折叠展开
+        const diagToggle = root.querySelector('#diag-toggle');
+        const diagBody = root.querySelector('#diag-body');
+        if (diagToggle && diagBody) {
+            diagToggle.addEventListener('click', () => {
+                const collapsed = diagBody.style.display !== 'none';
+                diagBody.style.display = collapsed ? 'none' : 'block';
+                diagToggle.dataset.collapsed = collapsed ? '1' : '0';
+                // 展开时统计数字回暖显
+                if (!collapsed) animateStats();
+            });
+        }
+
         const refreshHealth = root.querySelector('#btn-refresh-health');
         if (refreshHealth) refreshHealth.addEventListener('click', loadHealth);
 
@@ -1113,6 +1323,45 @@
         // LLM 配置保存
         const saveLlmBtn = root.querySelector('#btn-save-llm');
         if (saveLlmBtn) saveLlmBtn.addEventListener('click', saveLlmConfig);
+
+        // 赞赏码点击放大
+        root.querySelectorAll('.donate-qr').forEach(img => {
+            img.addEventListener('click', () => openDonateModal(img.src, img.alt || ''));
+        });
+    }
+
+    // ============ 赞赏码浮层 ============
+
+    let donateModalEl = null;
+    function onDonateEsc(e) {
+        if (e.key === 'Escape') closeDonateModal();
+    }
+    function closeDonateModal() {
+        if (!donateModalEl) return;
+        donateModalEl.remove();
+        donateModalEl = null;
+        document.removeEventListener('keydown', onDonateEsc);
+        document.body.style.overflow = '';
+    }
+    function openDonateModal(src, label) {
+        if (donateModalEl) closeDonateModal();
+        const overlay = document.createElement('div');
+        overlay.className = 'donate-modal';
+        const img = document.createElement('img');
+        img.src = src;
+        if (label) img.alt = label;
+        overlay.appendChild(img);
+        if (label) {
+            const cap = document.createElement('div');
+            cap.className = 'donate-modal-cap';
+            cap.textContent = label;
+            overlay.appendChild(cap);
+        }
+        overlay.addEventListener('click', closeDonateModal);
+        document.body.appendChild(overlay);
+        donateModalEl = overlay;
+        document.body.style.overflow = 'hidden';
+        document.addEventListener('keydown', onDonateEsc);
     }
 
     // ============ 账号安全 ============
@@ -1164,9 +1413,10 @@
     }
 
     function cleanup() {
+        closeDonateModal();
         root = null;
     }
 
-    global.OfferClawViews = global.OfferClawViews || {};
-    global.OfferClawViews.settings = { mount, cleanup, title: '设置' };
+    global.OfferCabinViews = global.OfferCabinViews || {};
+    global.OfferCabinViews.settings = { mount, cleanup, title: '设置' };
 })(window);

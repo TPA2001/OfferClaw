@@ -10,6 +10,7 @@ from .community import (
     UserReaction,
     ContentReport,
 )
+from .admin_audit import AdminAuditLog
 
 __all__ = [
     "Profile",
@@ -20,4 +21,5 @@ __all__ = [
     "CommunityJobShare",
     "UserReaction",
     "ContentReport",
+    "AdminAuditLog",
 ]

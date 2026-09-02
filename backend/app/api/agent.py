@@ -29,8 +29,9 @@ from app.agent.runtime.events import (
 )
 from app.models.application import AgentSession
 from app.core.log_utils import sanitize_for_log
+from app.core.tracing import trace_agent_generator
 
-logger = logging.getLogger("offerclaw.api.agent")
+logger = logging.getLogger("offercabin.api.agent")
 
 router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
 
@@ -58,6 +59,45 @@ def _event_to_sse(event) -> str:
     """把 AgentEvent 序列化为 SSE 数据行"""
     data = event.model_dump(mode="json")
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _friendly_llm_error(e: Exception) -> str:
+    """把异常转换为面向用户的友好提示。
+
+    后台完整异常留在日志中，前端只展示分类化的可操作信息：
+    - 鉴权失败 → 引导检查 API Key
+    - 限流     → 引导稍后重试
+    - 网络     → 引导检查网络与 Base URL
+    - 未知     → 通用兜底
+    """
+    from app.core.llm import (
+        LLMError, AuthenticationError, RateLimitError, NetworkError,
+        InvalidRequestError, ContentFilterError,
+    )
+    if isinstance(e, AuthenticationError):
+        return "LLM 鉴权失败：API Key 无效或已过期，请到「设置 → LLM 配置」检查。"
+    if isinstance(e, RateLimitError):
+        return "LLM 服务限流或繁忙，请稍后再试。"
+    if isinstance(e, NetworkError):
+        return "LLM 网络连接失败，请检查网络或 Base URL 是否正确。"
+    if isinstance(e, ContentFilterError):
+        return "本次内容的回复触发了内容审核，请换个说法重试。"
+    if isinstance(e, InvalidRequestError):
+        return f"LLM 请求不被接受（{getattr(e, 'message', '参数有误')}），请检查模型名称是否正确。"
+    if isinstance(e, LLMError):
+        return f"LLM 调用失败（{type(e).__name__}），可到「设置 → LLM 配置」测试连通性排查。"
+    return "对话生成失败：请稍后重试，或检查 LLM 配置。"
+
+
+async def _agent_stream(agent, user_id: str, session_id: str, user_input: str):
+    """包装 Agent 流，挂载 Tracer"""
+    async for event in trace_agent_generator(
+        agent.run_stream(user_input),
+        user_id=user_id,
+        session_id=session_id,
+        user_input=user_input,
+    ):
+        yield event
 
 
 # ============ 路由 ============
@@ -98,11 +138,12 @@ async def agent_chat(
                 session_id=req.session_id,
             )
             try:
-                async for event in agent.run_stream(req.message):
+                async for event in _agent_stream(agent, user_id, req.session_id or "", req.message):
                     yield _event_to_sse(event)
             except Exception as e:
                 logger.exception(f"Agent 流式异常: {e}")
-                yield _event_to_sse(ErrorEvent(message=str(e)))
+                # 向用户返回分类友好提示，避免暴露底层错误细节（含 base_url / key 片段）
+                yield _event_to_sse(ErrorEvent(message=_friendly_llm_error(e)))
         finally:
             db.close()
 
@@ -144,7 +185,7 @@ async def confirm_action(
                     yield _event_to_sse(event)
             except Exception as e:
                 logger.exception(f"Agent 恢复异常: {e}")
-                yield _event_to_sse(ErrorEvent(message=str(e)))
+                yield _event_to_sse(ErrorEvent(message=_friendly_llm_error(e)))
         finally:
             db.close()
 

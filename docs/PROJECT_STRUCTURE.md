@@ -1,6 +1,6 @@
 # 项目结构
 
-OfferClaw 采用 **四层架构**，借鉴 CareerDesk 的 features/orchestration/agentic/platform 分层，同时保持 OfferClaw 独有的 Boss 搜索、智能填表、岗位真实性判断等特色能力。
+OfferCabin 采用 **四层架构**，借鉴 CareerDesk 的 features/orchestration/agentic/platform 分层，同时保持 OfferCabin 独有的 Boss 搜索、智能填表、岗位真实性判断等特色能力。
 
 ## 架构总览
 
@@ -36,7 +36,7 @@ OfferClaw 采用 **四层架构**，借鉴 CareerDesk 的 features/orchestration
 ## 目录结构
 
 ```
-offerclaw/
+offercabin/
 ├── backend/                              # Python FastAPI 后端
 │   ├── app/
 │   │   │
@@ -107,7 +107,17 @@ offerclaw/
 │   │   │   │   ├── smart_fill_tools.py   # 智能填写（2: extract/match）
 │   │   │   │   ├── job_tools.py          # 投递前准备（6: JD/评分/简历/求职信/面试/策略）
 │   │   │   │   ├── job_eval_tools.py     # 岗位分析（3: 真实性/搜索/综合评估）
-│   │   │   │   └── feature_tools.py      # Feature工具（6: 调研/题集/评估/复盘/日志/周报）
+│   │   │   │   ├── feature_tools.py      # Feature工具（6: 调研/题集/评估/复盘/日志/周报）
+│   │   │   │   ├── memory_tools.py       # 长期记忆（update_user_preference）
+│   │   │   │   └── navigate_tools.py     # 视图导航（navigate_view）
+│   │   │   │
+│   │   │   ├── memory/                   # 长期记忆与画像演化（Phase 1）
+│   │   │   │   ├── __init__.py           # 模块导出
+│   │   │   │   ├── schema.py             # UserMemory 模型
+│   │   │   │   ├── embedding.py          # 嵌入（有 Key 向量 / 无 Key hash 降级）
+│   │   │   │   ├── store.py              # 存储 + 向量/关键词检索
+│   │   │   │   ├── retrieval.py          # 双层记忆检索
+│   │   │   │   └── evolution.py          # 画像异步演化（LLM 提炼）
 │   │   │   │
 │   │   │   ├── skills/                   # Agent Skills（声明式技能，独有）
 │   │   │   │   ├── __init__.py           # 模块导出
@@ -124,7 +134,21 @@ offerclaw/
 │   │   │       ├── __init__.py
 │   │   │       └── job_agent.py          # 求职主 Agent（28工具 + 6技能）
 │   │   │
+│   │   ├── mcp/                          # MCP 对外暴露层（零依赖手写，2024-11-05 协议）
+│   │   │   ├── __init__.py               # 模块导出
+│   │   │   ├── adapters.py               # OfferCabinMcp：工具适配 + JSON-RPC 路由（可单测）
+│   │   │   └── stdio.py                  # MCP stdio 传输主循环
+│   │   │
+│   │   ├── core/tracing.py               # 可观测性：Tracer + 本地导出（TRACE_ENABLED 开关）
+│   │   │
 │   │   └── main.py                       # FastAPI 应用入口
+│   │
+│   ├── evals/                            # 自动化评测（Phase 2）
+│   │   └── datasets/                     # Golden Dataset（岗位推荐/面试复盘/画像查询）
+│   │
+│   ├── scripts/                          # 独立运行脚本
+│   │   ├── mcp_server.py                 # MCP Server 入口（--transport stdio|sse）
+│   │   └── eval_agent.py                 # 自动化评测脚本（Markdown 报告 + 彩色摘要）
 │   │
 │   ├── tests/                            # 测试
 │   │   ├── conftest.py                   # pytest 配置
@@ -133,6 +157,9 @@ offerclaw/
 │   │   ├── test_auth.py                  # 鉴权测试
 │   │   ├── test_field_matcher.py         # 字段匹配测试
 │   │   ├── test_log_utils.py             # 日志工具测试
+│   │   ├── test_memory.py                # 长期记忆与画像演化测试（Phase 1）
+│   │   ├── test_eval_regression.py       # 评测回归测试（Phase 2）
+│   │   ├── test_mcp.py                   # MCP Server 适配层测试（Phase 3）
 │   │   ├── test_response_envelope.py     # 响应封装测试
 │   │   └── integration/                  # 集成测试（需启动服务，不被 pytest 自动收集）
 │   │       ├── e2e_legacy.py             # 端到端测试：Boss 搜索 + 表单提取 + 脚本生成
@@ -181,9 +208,9 @@ offerclaw/
 
 | Feature | 文件 | 能力 | 数据模型 |
 |---------|------|------|---------|
-| company_research | [company_research.py](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/backend/app/features/company_research.py) | 公司调研报告（行业/概况/优势/风险/面试建议/薪资） | 无（纯 LLM） |
-| mock_interview | [mock_interview.py](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/backend/app/features/mock_interview.py) | 面试题集生成 + 答案评估 | 无（纯 LLM） |
-| journal | [journal.py](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/backend/app/features/journal.py) | 求职日志 + 面试复盘 + 周报 | JournalEntry |
+| company_research | [company_research.py](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/backend/app/features/company_research.py) | 公司调研报告（行业/概况/优势/风险/面试建议/薪资） | 无（纯 LLM） |
+| mock_interview | [mock_interview.py](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/backend/app/features/mock_interview.py) | 面试题集生成 + 答案评估 | 无（纯 LLM） |
+| journal | [journal.py](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/backend/app/features/journal.py) | 求职日志 + 面试复盘 + 周报 | JournalEntry |
 
 ### 2. Orchestration 层（流程编排）
 
@@ -191,13 +218,13 @@ offerclaw/
 
 | Service | 文件 | 职责 |
 |---------|------|------|
-| ResumeService | [resume_service.py](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/backend/app/services/resume_service.py) | JD抓取/真实性判断/匹配评分/简历生成/求职信/面试准备/投递策略（6合一） |
-| BossSearchService | [boss_search.py](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/backend/app/services/boss_search.py) | Boss 直聘搜索（wapi→HTML→mock 三级降级） |
-| SmartFillService | [smart_fill.py](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/backend/app/services/smart_fill.py) | 智能表单填写（字段提取+语义匹配） |
+| ResumeService | [resume_service.py](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/backend/app/services/resume_service.py) | JD抓取/真实性判断/匹配评分/简历生成/求职信/面试准备/投递策略（6合一） |
+| BossSearchService | [boss_search.py](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/backend/app/services/boss_search.py) | Boss 直聘搜索（wapi→HTML→mock 三级降级） |
+| SmartFillService | [smart_fill.py](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/backend/app/services/smart_fill.py) | 智能表单填写（字段提取+语义匹配） |
 
 ### 3. Agentic 层（Agent 系统）
 
-LLM 驱动的智能体系统，是 OfferClaw 的核心差异化能力。
+LLM 驱动的智能体系统，是 OfferCabin 的核心差异化能力。
 
 #### 3.1 Agent 运行时（runtime/）
 
@@ -223,7 +250,7 @@ LLM 驱动的智能体系统，是 OfferClaw 的核心差异化能力。
 
 #### 3.3 Agent Skills（skills/）
 
-OfferClaw 独有的声明式技能机制。每个 SKILL.md 包含：
+OfferCabin 独有的声明式技能机制。每个 SKILL.md 包含：
 - **name**：技能名
 - **description**：技能描述
 - **triggers**：触发关键词列表
@@ -244,7 +271,30 @@ OfferClaw 独有的声明式技能机制。每个 SKILL.md 包含：
 - **job_agent.py**：求职主 Agent，集成 28 工具 + 6 技能
   - `create_job_agent()`：创建 Agent 实例
   - `build_system_prompt()`：构建 system prompt（含 skills 能力声明）
+  - `build_tool_registry()`：构建全部业务工具注册表，供 Agent 循环与 MCP Server 复用（`app/mcp/adapters.py` 调用此函数暴露工具）
   - `JOB_AGENT_PROMPT`：基础系统提示词
+
+### 5. MCP 对外暴露层（mcp/，Phase 3）
+
+把 OfferCabin 的 Agent 业务工具以 **Model Context Protocol（2024-11-05）** 暴露给外部 AI 平台（Claude Desktop / Cursor / 其他 MCP 客户端）。
+
+**为什么零依赖手写**：官方 mcp SDK 强依赖 `pydantic>=2.10` / 新版 starlette，与项目锁定的 fastapi 0.111（要求 starlette<0.38）冲突。本项目工具已用 JSON Schema 描述参数（`BaseTool.parameters`），按 MCP 规范回填 `inputSchema` 即可，无需引入冲突依赖。
+
+| 文件 | 职责 |
+|------|------|
+| adapters.py | `OfferCabinMcp`：工具适配（list_tools/call_tool）+ JSON-RPC 路由（initialize/ping/tools/list/tools/call/错误码），可独立单测 |
+| stdio.py | MCP stdio 传输主循环：每行一条 JSON-RPC，读 stdin / 写 stdout |
+| scripts/mcp_server.py | 入口：`--transport stdio`（默认）或 `--transport sse`（FastAPI 子应用，HTTP+SSE），`--list-tools` 打印清单 |
+
+**开放能力**：复用 `build_tool_registry` 一次性暴露全部 28 个业务工具；无状态、每次调用新建 DB 会话，支持并发。
+
+**运行方式**：
+```bash
+python scripts/mcp_server.py --list-tools     # 查看将暴露的工具
+python scripts/mcp_server.py                   # stdio（本地 MCP 客户端接入）
+python scripts/mcp_server.py --transport sse --port 8100   # HTTP+SSE（远程）
+```
+环境变量 `MCP_USER_ID` 指定对外操作的用户（默认 `mcp-user`）。需要人工二次确认的敏感操作在 MCP 环境下无法二次确认，会以挂起 + `action_id` 返回。
 
 ### 4. Platform 层（基础设施）
 

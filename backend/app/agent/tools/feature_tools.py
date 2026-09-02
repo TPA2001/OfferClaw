@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from app.core.llm import LLMProvider
 from ..runtime.base_tool import BaseTool, ToolResult
 
-logger = logging.getLogger("offerclaw.agent.tools.features")
+logger = logging.getLogger("offercabin.agent.tools.features")
 
 
 # ====================================================================

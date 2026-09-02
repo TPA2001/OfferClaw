@@ -1,11 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""OfferClaw PyInstaller 打包配置（onedir 模式）
+"""OfferCabin PyInstaller 打包配置（onedir 模式）
 
-产物：dist/OfferClaw/OfferClaw.exe + _internal/（含前端、chromium、依赖）
-分发：把整个 dist/OfferClaw/ 文件夹打成 zip 给用户，解压后双击 OfferClaw.exe 即用
+产物：dist/OfferCabin/OfferCabin.exe + _internal/（含前端、chromium、依赖）
+分发：把整个 dist/OfferCabin/ 文件夹打成 zip 给用户，解压后双击 OfferCabin.exe 即用
 
 构建：在 backend/ 目录执行
-    python -m PyInstaller offerclaw.spec --clean --noconfirm
+    python -m PyInstaller offercabin.spec --clean --noconfirm
 """
 import os
 from pathlib import Path
@@ -93,7 +93,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='OfferClaw',
+    name='OfferCabin',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -114,5 +114,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='OfferClaw',
+    name='OfferCabin',
 )

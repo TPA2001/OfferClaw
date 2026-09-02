@@ -24,7 +24,7 @@ from .openai_provider import OpenAIProvider
 from .mock_provider import MockProvider
 from .retry_provider import RetriableLLMProvider
 
-logger = logging.getLogger("offerclaw.llm.factory")
+logger = logging.getLogger("offercabin.llm.factory")
 
 
 def create_provider(
@@ -52,8 +52,28 @@ def create_provider(
 
     if with_retry:
         import os as _os
-        max_retries = int(_os.getenv("LLM_MAX_RETRIES", "3"))
-        return RetriableLLMProvider(provider, max_retries=max_retries)
+
+        def _int_env(k: str, d: int) -> int:
+            try:
+                return int(_os.getenv(k, d))
+            except (TypeError, ValueError):
+                return d
+
+        def _float_env(k: str, d: float) -> float:
+            try:
+                return float(_os.getenv(k, d))
+            except (TypeError, ValueError):
+                return d
+
+        max_retries = _int_env("LLM_MAX_RETRIES", 3)
+        base_delay = _float_env("LLM_RETRY_BASE_DELAY", 1.0)
+        max_delay = _float_env("LLM_RETRY_MAX_DELAY", 30.0)
+        return RetriableLLMProvider(
+            provider,
+            max_retries=max_retries,
+            base_delay=base_delay,
+            max_delay=max_delay,
+        )
     return provider
 
 

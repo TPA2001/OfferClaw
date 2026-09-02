@@ -1,5 +1,5 @@
 """
-OfferClaw Agent 模块
+OfferCabin Agent 模块
 
 三层架构（参考 Pi）：
 - core/llm: LLM 抽象层（对应 pi-ai）

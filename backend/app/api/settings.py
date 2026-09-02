@@ -20,12 +20,13 @@ from pydantic import BaseModel, Field
 from app.core.auth import get_current_user
 from app.core.config_store import (
     get_masked_config,
+    get_model_templates,
     update_provider_config,
     validate_base_url,
 )
 from app.core.response import ok, BadRequestError
 
-logger = logging.getLogger("offerclaw.api.settings")
+logger = logging.getLogger("offercabin.api.settings")
 
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
 
@@ -58,9 +59,16 @@ class LlmConfigUpdate(BaseModel):
 
 @router.get("/llm")
 async def get_llm_config(user_id: str = Depends(get_current_user)):
-    """获取 LLM 配置（脱敏）"""
+    """获取 LLM 配置（脱敏）+ 常用模型模板"""
     cfg = get_masked_config()
+    cfg["templates"] = get_model_templates()
     return ok(data=cfg, message="LLM 配置（脱敏）")
+
+
+@router.get("/llm/templates")
+async def get_llm_templates(user_id: str = Depends(get_current_user)):
+    """获取常用模型模板列表（Base URL 一键填充用）"""
+    return ok(data=get_model_templates(), message="常用模型模板")
 
 
 @router.put("/llm")

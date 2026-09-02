@@ -9,17 +9,20 @@
 # 敏感字段关键词（大小写不敏感，按 substring 匹配 key 名）
 SENSITIVE_PROFILE_KEYS = [
     # 身份证
-    "id_card", "idcard", "id_number", "identity", "身份证", "身份号", "身份证明",
+    "id_card", "idcard", "id_number", "identity", "身份证", "身份号", "身份证明", "出生证明",
     # 住址
     "home_address", "address", "住址", "家庭住址", "户籍地址",
     # 银行卡
-    "bank_card", "bank_account", "银行卡", "银行账号",
+    "bank_card", "bank_account", "银行卡", "银行账号", "信用卡",
     # 护照
     "passport", "护照",
-    # 社保
-    "social_security", "社保", "社保号",
-    # 紧急联系人（本地专属）
+    # 社保 / 医保 / 公积金
+    "social_security", "社保", "社保号", "医保", "公积金",
+    # 紧急联系人（本地专属）与家庭联系方式
     "emergency_contact", "emergency_phone", "紧急联系人", "紧急电话",
+    "家庭电话", "住宅电话", "家庭电话", "父母电话",
+    # 户口簿 / 婚姻证明（注意：不包含"户籍"，避免误伤 household_type 户口类型字段）
+    "户口本", "户口簿", "结婚证",
 ]
 
 

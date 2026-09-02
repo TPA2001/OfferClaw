@@ -1,5 +1,5 @@
 /**
- * OfferClaw 统一 API 客户端
+ * OfferCabin 统一 API 客户端
  * 封装 REST 调用、SSE 流式读取、统一响应信封处理、JWT 鉴权
  *
  * 鉴权：Token 存 localStorage('oc_token')，所有请求自动带 Authorization: Bearer
@@ -8,8 +8,8 @@
 (function (global) {
     'use strict';
 
-    const CONFIG = global.OFFERCLAW_CONFIG || {
-        API_BASE: (global.OFFERCLAW_API_BASE || ''),
+    const CONFIG = global.OFFERCABIN_CONFIG || {
+        API_BASE: (global.OFFERCABIN_API_BASE || ''),
     };
     const TOKEN_KEY = 'oc_token';
     const USER_KEY = 'oc_user';
@@ -133,6 +133,30 @@
             }
             const json = await resp.json();
             return raw ? json : checkEnvelope(json);
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    /**
+     * multipart/form-data 上传（如 PDF 导入），自动带鉴权头
+     */
+    async function postForm(path, formData, { timeout = 120000 } = {}) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), timeout);
+        try {
+            const resp = await fetch(API_V1 + path, {
+                method: 'POST',
+                headers: headers(), // 不手动设 Content-Type，让浏览器自动带 multipart boundary
+                body: formData,
+                signal: ctrl.signal,
+            });
+            if (!resp.ok) {
+                const errBody = await resp.json().catch(() => ({}));
+                authRedirect(resp.status, errBody);
+                throw Object.assign(new Error(errBody.message || `HTTP ${resp.status}`), { code: errBody.code, status: resp.status });
+            }
+            return checkEnvelope(await resp.json());
         } finally {
             clearTimeout(timer);
         }
@@ -377,7 +401,7 @@
     async function communityReact(body) { return post('/community/reactions', body); }
     async function communityReport(body) { return post('/community/reports', body); }
 
-    global.OfferClawAPI = {
+    global.OfferCabinAPI = {
         CONFIG,
         API_V1,
         token,
@@ -389,6 +413,7 @@
         jsonHeaders,
         get,
         post,
+        postForm,
         put,
         patch,
         del,

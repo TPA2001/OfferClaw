@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OfferClaw 网页端上线改造分析报告</title>
+<title>OfferCabin 网页端上线改造分析报告</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -41,7 +41,7 @@
 </head>
 <body>
 <div class="container">
-  <h1>OfferClaw 网页端上线改造分析报告</h1>
+  <h1>OfferCabin 网页端上线改造分析报告</h1>
   <div class="meta">
     <span>生成日期：2026-08-26</span>
     <span>项目版本：v1.2.0</span>
@@ -49,10 +49,10 @@
   </div>
 
   <h2>一、项目现状概述</h2>
-  <p>OfferClaw 是一个 Agent 驱动的求职管理平台，当前架构为 <strong>FastAPI 后端 + 原生 JS 前端 + Chrome 扩展</strong>。项目目前以 <strong>PyInstaller 单文件桌面端</strong>形式分发，所有功能围绕<strong>单用户本地运行</strong>设计：</p>
+  <p>OfferCabin 是一个 Agent 驱动的求职管理平台，当前架构为 <strong>FastAPI 后端 + 原生 JS 前端 + Chrome 扩展</strong>。项目目前以 <strong>PyInstaller 单文件桌面端</strong>形式分发，所有功能围绕<strong>单用户本地运行</strong>设计：</p>
   <ul>
     <li>鉴权层为 <code>open</code> 模式，所有请求固定为 <code>local-user</code>，无真实用户体系</li>
-    <li>数据库使用 SQLite 单文件，存储在 <code>backend/data/offerclaw.db</code></li>
+    <li>数据库使用 SQLite 单文件，存储在 <code>backend/data/offercabin.db</code></li>
     <li>Playwright 以本地子进程方式运行，用于 Boss 搜索和智能填表</li>
     <li>授权采用机器绑定 JWT（MAC 指纹 + 离线验签）</li>
     <li>限流器为内存滑动窗口，仅支持单进程</li>
@@ -231,7 +231,7 @@
   </div>
 
   <div class="footer">
-    本报告基于 OfferClaw 项目源码（后端 145 个 Python 文件 + 前端 17 个文件 + Chrome 扩展 35 个文件）分析生成。
+    本报告基于 OfferCabin 项目源码（后端 145 个 Python 文件 + 前端 17 个文件 + Chrome 扩展 35 个文件）分析生成。
   </div>
 </div>
 </body>

@@ -22,13 +22,13 @@ tools:
   - query_applications
 ---
 
-# 岗位真实性判断技能（OfferClaw 独有）
+# 岗位真实性判断技能（OfferCabin 独有）
 
 当用户质疑岗位真实性、怀疑是中介/培训贷/骗局时，你切换为「反招聘欺诈专家」模式。
 
-## OfferClaw 的独特优势
+## OfferCabin 的独特优势
 
-CareerDesk 等同类项目只做 JD 分析和面试准备，**OfferClaw 独有岗位真实性判断能力**：
+CareerDesk 等同类项目只做 JD 分析和面试准备，**OfferCabin 独有岗位真实性判断能力**：
 - 基于 9 类风险信号清单（收费/培训贷/中介/薪资异常/信息矛盾/要求模糊/皮包/话术异常/岗位错位）
 - 5 级风险等级（safe/low/medium/high/danger）
 - 量化评分（risk_score + authenticity_score = 100）
@@ -62,7 +62,7 @@ CareerDesk 等同类项目只做 JD 分析和面试准备，**OfferClaw 独有�
 ## 与 CareerDesk 的差异化
 
 - CareerDesk 只做"公司调研"（正面信息整理）
-- OfferClaw 做"真实性判断"（负面风险识别）+ "公司调研"（正面信息）+ "匹配度评分"
+- OfferCabin 做"真实性判断"（负面风险识别）+ "公司调研"（正面信息）+ "匹配度评分"
 - 三者结合：既看公司好不好，又看岗位真不真，还看匹配度高不高
 
 ## 语气

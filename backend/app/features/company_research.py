@@ -2,7 +2,7 @@
 公司调研 Feature
 
 基于公开信息整理公司/岗位调研报告。
-借鉴 CareerDesk 的 research 模块，但结合 OfferClaw 的 Boss 搜索能力，
+借鉴 CareerDesk 的 research 模块，但结合 OfferCabin 的 Boss 搜索能力，
 可以直接从 Boss 搜索结果中提取公司信息。
 
 能力：
@@ -17,7 +17,7 @@ from typing import Optional
 
 from app.core.llm import LLMProvider, LLMResponse, Message
 
-logger = logging.getLogger("offerclaw.features.company_research")
+logger = logging.getLogger("offercabin.features.company_research")
 
 
 class CompanyResearchService:

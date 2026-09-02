@@ -17,7 +17,7 @@ from app.core.response import ok, NotFoundError, BadRequestError, InternalServer
 from app.core.llm import get_gen_provider
 from app.features.journal import JournalEntry, JournalService
 
-logger = logging.getLogger("offerclaw.api.journal")
+logger = logging.getLogger("offercabin.api.journal")
 
 router = APIRouter(prefix="/api/v1/journal", tags=["journal"])
 

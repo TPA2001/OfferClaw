@@ -1,5 +1,5 @@
 /* ============================================
-   OfferClaw Design System v2 — Modern Neutral Canvas
+   OfferCabin Design System v2 — Modern Neutral Canvas
    参考 GitHub Primer / Linear / Notion 的配色纪律：
    - 近中性微着色画布（低饱和底色，任何主色放上去都协调）
    - 每个主题一个明确主色（--olive，可被主色调选择器覆盖）
@@ -2981,15 +2981,48 @@ body[data-density="compact"] .theme-swatch-row {
 
 /* 顶栏用户信息 */
 .topbar-user {
-    font-size: 0.82rem;
-    color: var(--ink-soft);
-    font-weight: 500;
-    padding: 0.3rem 0.6rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.3rem 0.25rem 0.35rem;
     background: var(--paper-light);
     border: 1px solid var(--line-soft);
     border-radius: 6px;
-    max-width: 120px;
+    max-width: 220px;
+}
+.topbar-user .user-avatar {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--olive);
+    color: var(--paper-light);
+    display: grid;
+    place-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.topbar-user .user-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+}
+.topbar-user .logout-btn {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    color: var(--ink-faint);
+}
+.topbar-user .logout-btn:hover {
+    background: var(--danger);
+    color: var(--paper-light);
 }

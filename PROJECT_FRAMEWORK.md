@@ -1,6 +1,6 @@
-# OfferClaw 项目框架说明
+# OfferCabin 项目框架说明
 
-本文档介绍 OfferClaw 的**标准化前后端项目框架**：目录布局、分层职责、入口与启动方式、约定规范。适合新成员快速理解项目骨架，也适合在维护时对照检查代码归属。
+本文档介绍 OfferCabin 的**标准化前后端项目框架**：目录布局、分层职责、入口与启动方式、约定规范。适合新成员快速理解项目骨架，也适合在维护时对照检查代码归属。
 
 > 如需了解各模块的详细设计（数据流、工具列表、Skills 机制等），请参阅 [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)。
 
@@ -24,11 +24,11 @@
 ## 二、顶层目录布局
 
 ```
-OfferClaw/
+OfferCabin/
 ├── backend/          # 后端项目（Python FastAPI）
 ├── frontend/         # 前端项目（原生 HTML/CSS/JS）
 │   └── web/
-├── offerclaw-extension/  # Chrome MV3 浏览器扩展（智能填表 + 本地画像）
+├── offercabin-extension/  # Chrome MV3 浏览器扩展（智能填表 + 本地画像）
 ├── docs/             # 项目文档
 ├── README.md         # 项目总览 + 快速开始
 ├── PROJECT_FRAMEWORK.md  # 本文档：框架说明
@@ -152,7 +152,7 @@ backend/
 
 ### 3.3 入口与启动
 
-**唯一启动入口**：[`backend/run.py`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/backend/run.py)
+**唯一启动入口**：[`backend/run.py`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/backend/run.py)
 
 ```bash
 cd backend
@@ -167,7 +167,7 @@ Windows 下 uvicorn 会强制使用 `SelectorEventLoop`，而 Playwright 依赖 
 
 ### 3.4 配置管理
 
-所有配置通过环境变量 / `.env` 文件加载，集中管理在 [`app/core/config.py`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/backend/app/core/config.py)：
+所有配置通过环境变量 / `.env` 文件加载，集中管理在 [`app/core/config.py`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/backend/app/core/config.py)：
 
 ```python
 from app.core.config import settings
@@ -177,14 +177,14 @@ settings.agent_model      # Agent 编排模型
 settings.gen_model        # 内容生成模型
 ```
 
-**模型分级**（OfferClaw 特色）：
+**模型分级**（OfferCabin 特色）：
 - **Agent 编排模型**（强模型）：GLM-4.5 / DeepSeek-V3 / GPT-4o，用于 function calling
 - **内容生成模型**（快模型）：GLM-4-Flash / Qwen-Plus，用于简历/评分/面试准备
 - 未配置 `GEN_*` 时自动复用 Agent provider（单模型场景）
 
 ### 3.5 统一响应封装
 
-所有 API 遵循统一信封（见 [`app/core/response.py`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/backend/app/core/response.py)）：
+所有 API 遵循统一信封（见 [`app/core/response.py`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/backend/app/core/response.py)）：
 
 ```json
 // 成功
@@ -238,7 +238,7 @@ python -m http.server 3000
 
 ### 4.3 前后端通信约定
 
-- **API 基址**：由 [`config.js`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/frontend/web/config.js) 统一配置，默认 `http://localhost:8000/api/v1`
+- **API 基址**：由 [`config.js`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/frontend/web/config.js) 统一配置，默认 `http://localhost:8000/api/v1`
 - **CORS**：后端通过 `CORS_ORIGINS` 环境变量配置允许的来源
 - **鉴权**：根据 `AUTH_MODE`，前端在请求头携带 `Authorization: Bearer <token>`
 - **响应格式**：所有接口返回统一信封 `{code, message, data}`，前端统一检查 `code === 0`
@@ -254,7 +254,7 @@ python -m http.server 3000
 
 ## 五、打包与部署
 
-当前采用 **PyInstaller 单文件打包**（`backend/build_release.bat` + `offerclaw.spec`），Docker 配置已移除。
+当前采用 **PyInstaller 单文件打包**（`backend/build_release.bat` + `offercabin.spec`），Docker 配置已移除。
 
 ```bash
 cd backend
@@ -262,7 +262,7 @@ build_release.bat        # 生成单文件可执行程序（dist/）
 ```
 
 - 打包产物自带前端静态资源（`_MEIPASS/frontend/web`）与本地数据目录（`exe 同目录/data`）
-- **授权门控默认关闭**（免费分发，无需激活码）：`OFFERCLAW_LICENSE_GATE` 未设置时全部功能直接可用；如需启用授权校验，设置 `OFFERCLAW_LICENSE_GATE=1`（此时走 JWT 密钥激活，见 `app/core/license.py`）
+- **授权门控默认关闭**（免费分发，无需激活码）：`OFFERCABIN_LICENSE_GATE` 未设置时全部功能直接可用；如需启用授权校验，设置 `OFFERCABIN_LICENSE_GATE=1`（此时走 JWT 密钥激活，见 `app/core/license.py`）
 
 ---
 
@@ -322,12 +322,12 @@ from app.services.boss_search import get_boss_search_service
 
 | 文档 | 位置 | 内容 |
 |------|------|------|
-| 项目总览 | [`README.md`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/README.md) | 项目简介、功能列表、快速开始、工具/Skills 表 |
-| **框架说明** | [`PROJECT_FRAMEWORK.md`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/PROJECT_FRAMEWORK.md) | 本文档：标准化框架结构 |
-| 项目结构详解 | [`docs/PROJECT_STRUCTURE.md`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/docs/PROJECT_STRUCTURE.md) | 四层架构、模块详解、数据流 |
-| Agent 架构设计 | [`docs/AGENT_ARCHITECTURE.md`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/docs/AGENT_ARCHITECTURE.md) | Agent 运行时、工具、技能设计 |
-| Agent 使用指南 | [`docs/AGENT_MVP_GUIDE.md`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/docs/AGENT_MVP_GUIDE.md) | 启动、配置 LLM、API 参考 |
-| 智能填写指南 | [`docs/SMART_FILL_GUIDE.md`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferClaw/docs/SMART_FILL_GUIDE.md) | 智能填写设计与使用 |
+| 项目总览 | [`README.md`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/README.md) | 项目简介、功能列表、快速开始、工具/Skills 表 |
+| **框架说明** | [`PROJECT_FRAMEWORK.md`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/PROJECT_FRAMEWORK.md) | 本文档：标准化框架结构 |
+| 项目结构详解 | [`docs/PROJECT_STRUCTURE.md`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/docs/PROJECT_STRUCTURE.md) | 四层架构、模块详解、数据流 |
+| Agent 架构设计 | [`docs/AGENT_ARCHITECTURE.md`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/docs/AGENT_ARCHITECTURE.md) | Agent 运行时、工具、技能设计 |
+| Agent 使用指南 | [`docs/AGENT_MVP_GUIDE.md`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/docs/AGENT_MVP_GUIDE.md) | 启动、配置 LLM、API 参考 |
+| 智能填写指南 | [`docs/SMART_FILL_GUIDE.md`](file:///c:/Users/tpa/Desktop/code/AI/agent/OfferCabin/docs/SMART_FILL_GUIDE.md) | 智能填写设计与使用 |
 
 ---
 

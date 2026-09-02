@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
 
-logger = logging.getLogger("offerclaw.config_store")
+logger = logging.getLogger("offercabin.config_store")
 
 # 配置文件路径：backend/data/llm_config.json
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -231,3 +231,63 @@ def reset_runtime_cache() -> None:
         pass
 
     # 其它 feature 单例若有类似缓存，可在此扩展
+
+
+# ============ 常用模型模板 ============
+
+# 常用 OpenAI 兼容服务的预设模板，供前端「一键填充」降低配置门槛。
+# 字段注释：
+#   id          —— 稳定标识，前端按此定位
+#   name        —— 展示名
+#   base_url    —— Base URL（不含平台方专属路径，统一为 chat/completions 约定）
+#   default_model—— 该服务推荐的编排模型（可留空，交由用户填）
+#   note        —— 选填补充（如是否需要特定 path）
+MODEL_TEMPLATES: list[dict] = [
+    {
+        "id": "openai",
+        "name": "OpenAI",
+        "base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-4o-mini",
+        "note": "官方 API，海外访问通常需要网络代理",
+    },
+    {
+        "id": "deepseek",
+        "name": "DeepSeek",
+        "base_url": "https://api.deepseek.com/v1",
+        "default_model": "deepseek-chat",
+        "note": "国内直连，性价比高，支持 function calling",
+    },
+    {
+        "id": "qwen",
+        "name": "通义千问 DashScope",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "default_model": "qwen-plus",
+        "note": "阿里云兼容 OpenAI 协议端点",
+    },
+    {
+        "id": "zhipu",
+        "name": "智谱 GLM",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "default_model": "glm-4-flash",
+        "note": "国内直连，glm-4-flash 免费可用",
+    },
+    {
+        "id": "moonshot",
+        "name": "Moonshot Kimi",
+        "base_url": "https://api.moonshot.cn/v1",
+        "default_model": "moonshot-v1-8k",
+        "note": "国内直连",
+    },
+    {
+        "id": "siliconflow",
+        "name": "硅基流动 SiliconFlow",
+        "base_url": "https://api.siliconflow.cn/v1",
+        "default_model": "deepseek-ai/DeepSeek-V3",
+        "note": "聚合多家开源模型，注册赠额度",
+    },
+]
+
+
+def get_model_templates() -> list[dict]:
+    """返回常用模型模板列表（脱敏，无敏感信息）"""
+    return MODEL_TEMPLATES

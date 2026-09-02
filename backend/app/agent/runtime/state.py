@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.llm import Message
 from app.models.application import AgentSession
 
-logger = logging.getLogger("offerclaw.agent.state")
+logger = logging.getLogger("offercabin.agent.state")
 
 # 进程级待确认操作注册表：action_id → 工具调用信息
 # 原因：/chat 与 /confirm 是两次独立 HTTP 请求，各自新建 AgentState（内存态不共享）。

@@ -1,6 +1,6 @@
-# OfferClaw Agent 架构设计
+# OfferCabin Agent 架构设计
 
-本文档描述 OfferClaw 的 Agent 化架构，参考 [Pi Agent Harness](https://github.com/earendil-works/pi) 的核心思想，针对求职管理场景做了三层解耦设计。
+本文档描述 OfferCabin 的 Agent 化架构，参考 [Pi Agent Harness](https://github.com/earendil-works/pi) 的核心思想，针对求职管理场景做了三层解耦设计。
 
 ## 目录
 
@@ -10,6 +10,9 @@
 - [Agent Runtime](#agent-runtime)
 - [工具层](#工具层)
 - [应用层](#应用层)
+- [长期记忆与画像演化](#长期记忆与画像演化)
+- [可观测与评测](#可观测与评测)
+- [MCP 对外暴露](#mcp-对外暴露)
 - [数据流](#数据流)
 - [与 Pi 的对比](#与-pi-的对比)
 - [扩展指南](#扩展指南)
@@ -24,9 +27,9 @@ Pi 的核心思想是把 Agent 拆成三个相互独立的层次，让每一层�
 2. **Agent Runtime**（`pi-agent-core`）：实现 Agent 循环引擎、状态管理、工具调用
 3. **应用层**（`pi-coding-agent`）：定义具体场景的系统提示词、工具集、行为准则
 
-OfferClaw 沿用这个三层模型，但根据求职管理场景做了以下适配：
+OfferCabin 沿用这个三层模型，但根据求职管理场景做了以下适配：
 
-| 维度 | Pi | OfferClaw |
+| 维度 | Pi | OfferCabin |
 |------|----|----|
 | 部署形态 | 本地 CLI | Web + 浏览器扩展 |
 | 状态持久化 | 文件系统 | SQLite |
@@ -49,20 +52,29 @@ OfferClaw 沿用这个三层模型，但根据求职管理场景做了以下适�
 │  POST /chat · POST /confirm · GET /sessions          │
 ├──────────────────────────────────────────────────────┤
 │  应用层  app/agent/apps/job_agent.py                 │
-│  系统提示词 + 工具注册                                │
+│  系统提示词 + 工具注册（build_tool_registry）        │
 ├──────────────────────────────────────────────────────┤
 │  Agent Runtime  app/agent/runtime/                   │
 │  loop · state · registry · base_tool · events        │
 ├──────────────────────────────────────────────────────┤
-│  LLM 抽象层  app/core/llm/                           │
-│  base · openai_provider · mock_provider · factory    │
+│  长期记忆  app/agent/memory/                         │
+│  retrieval · store · evolution · embedding · schema  │
+├──────────────────────────────────────────────────────┤
+│  LLM 抽象层  app/core/llm/ + app/core/tracing.py     │
+│  base · provider · factory · Tracer 可观测           │
 ├──────────────────────────────────────────────────────┤
 │  工具层  app/agent/tools/                            │
-│  profile · application · dashboard · smart_fill      │
+│  profile · application · dashboard · feature ...     │
 ├──────────────────────────────────────────────────────┤
-│  业务层  app/models · app/services · app/automation  │
-│  Profile · Application · AgentSession · SmartFill    │
+│  业务层  app/models · app/services · app/features    │
+│  Profile · Application · AgentSession · Memory       │
 └──────────────────────────────────────────────────────┘
+
+ ── 外部链路 ──────────────────────────────────────────
+ Master/Agent  S  外部 AI 平台 (Claude Desktop / Cursor)
+   │           T
+   └──  MCP 层  app/mcp/ (adapters · stdio) ── 工具协议
+        scripts/mcp_server.py  (stdio / SSE)
 ```
 
 ---
@@ -305,6 +317,99 @@ def create_job_agent(
     return AgentLoop(llm, registry, JOB_AGENT_PROMPT, state, max_steps)
 ```
 
+此外抽出 **`build_tool_registry(llm, db, user_id)`**，构建全部业务工具注册表，供 `create_job_agent()` 与 MCP 层复用，避免两套工具定义漂移：
+
+```python
+registry = build_tool_registry(llm, db, user_id)   # Agent 循环用
+# 同一注册表也供 MCP 层暴露（见下方 MCP 章节）
+```
+
+---
+
+## 长期记忆与画像演化
+
+**位置**：`backend/app/agent/memory/`
+
+让 Agent 具备跨会话记忆能力，并把用户偏好持续沉淀为结构化画像。
+
+| 模块 | 职责 |
+|------|------|
+| `embedding.py` | 文本嵌入（有 API Key 用向量，无 Key 降级为确定性 hash） |
+| `store.py` | `user_memories` 表持久化 + 向量/关键词检索 |
+| `retrieval.py` | 双层记忆检索（短期脚本 + 长期向量/关键词） |
+| `evolution.py` | 画像字段变更 → 异步 LLM 提炼偏好 + 记忆条目 |
+| `schema.py` | `UserMemory` 模型 |
+
+流程：
+
+```
+用户多轮对话
+  ↓
+短期记忆（最近 N 轮摘要）
+  ↓ 结合当前 Query
+长期记忆检索（user_memories 向量 + 关键词过滤）
+  ↓ 注入 system prompt
+Agent 生成更贴合的回复
+
+  ↓ 当 /api/profile 发生 PUT/PATCH（关键字段变更）
+  → 异步触发画像演化 → LLM 提炼 → 写入新 Memory 条目
+```
+
+关键点：
+
+- **双层检索**：短期记忆用最近几轮摘要，长期记忆用向量相关性（SQLite JSON 文本列 + 余弦相似度）叠加关键词过滤。
+- **异步解耦**：画像更新后用 FastAPI BackgroundTasks 触发演化，不阻塞主业务流程。
+- **无缝升级**：新增表走 `create_all` 自动建表，不改动既有字段/表，旧数据库可直接加载使用。
+- **优雅降级**：无 Key 时嵌入用确定性 hash，LLM 提炼失败自动降级为规则条目。
+
+---
+
+## 可观测与评测
+
+**位置**：`backend/app/core/tracing.py`（可观测）、`backend/evals/` + `scripts/eval_agent.py`（评测）
+
+| 能力 | 说明 |
+|------|------|
+| **Tracing** | `Tracer` 在 Agent 调用入口自动记录 Input / Output / Latency / TokenUsage / ToolCalls，`TRACE_ENABLED` 开关控制，默认本地导出 |
+| **Golden Dataset** | `evals/datasets/` 下的 `job_recommendation.jsonl` / `interview_review.jsonl` / `profile_query.jsonl` |
+| **自动化评测** | `scripts/eval_agent.py` 跑数据集 → 输出 Markdown 报告 + 终端彩色摘要，可集成 CI 设工具调用准确率闸门 |
+| **回归保护** | `tests/test_eval_regression.py` 保障数据集完整性、工具注册、闸门逻辑 |
+
+---
+
+## MCP 对外暴露
+
+**位置**：`backend/app/mcp/` + `scripts/mcp_server.py`
+
+把 OfferCabin 的 Agent 业务工具以 **Model Context Protocol（2024-11-05）** 暴露给外部 AI 平台。
+
+**为什么零依赖手写**：官方 mcp SDK 依赖 `pydantic>=2.10` / 新版 starlette，与项目锁定的 fastapi 0.111（要求 starlette<0.38）冲突；项目工具已用 JSON Schema 描述参数，直接回填 `inputSchema` 即可。
+
+| 文件 | 职责 |
+|------|------|
+| `adapters.py` | `OfferCabinMcp`：list_tools / call_tool + JSON-RPC 路由（initialize/ping/tools/list/tools/call/错误码），可独立单测 |
+| `stdio.py` | MCP stdio 传输主循环（逐行 JSON-RPC） |
+| `scripts/mcp_server.py` | 入口：`--transport stdio`（默认）或 `--transport sse`（FastAPI HTTP+SSE） |
+
+```
+外部 AI 平台（MCP 客户端）
+  │  JSON-RPC
+  ▼
+scripts/mcp_server.py ── stdio / SSE ──▶ app/mcp/adapters.py
+  ▼
+build_tool_registry() ── 同一注册表 ──▶ Agent 循环
+```
+
+运行：
+
+```bash
+python scripts/mcp_server.py --list-tools            # 27 个工具
+python scripts/mcp_server.py                          # stdio
+python scripts/mcp_server.py --transport sse --port 8100   # HTTP+SSE
+```
+
+`MCP_USER_ID` 指定对外操作用户（默认 `mcp-user`）。需二次确认的敏感操作在 MCP 单向通道无法确认，会以挂起 + `action_id` 返回。
+
 ---
 
 ## 数据流
@@ -363,7 +468,7 @@ def create_job_agent(
 
 ## 与 Pi 的对比
 
-| 方面 | Pi | OfferClaw |
+| 方面 | Pi | OfferCabin |
 |------|----|----|
 | LLM 抽象 | `pi-ai` 支持 OpenAI/Anthropic/Google 等 | `app/core/llm/` 支持 OpenAI 兼容 + Mock |
 | Agent Loop | `pi-agent-core` | `app/agent/runtime/loop.py` |
@@ -434,21 +539,16 @@ class SearchJobsTool(BaseTool):
 
 ## 后续演进路线
 
-### Phase 2（已规划）
+### ✅ 已完成（v0.0.2）
+
+- **Phase 1 · 长期记忆与画像演化**：`app/agent/memory/`，双层记忆检索 + 画像异步演化
+- **Phase 2 · 可观测与评测**：Tracing + Golden Dataset + `scripts/eval_agent.py` 自动化评测
+- **Phase 3 · MCP 协议适配**：`app/mcp/` 把 Agent 工具以 MCP 暴露给外部 AI 平台
+
+### 下一步
 
 - Agent 工具自扩展：让 Agent 自己生成工具代码并注册
+- MCP 鉴权接入：让外部平台用用户 token 指定操作对象（替代固定 `MCP_USER_ID`）
 - 多 Agent 协作：求职主 Agent 调用子 Agent（如简历优化 Agent）
-- 上下文压缩优化：摘要式压缩而非简单丢弃
-- 工具调用结果可视化：在前端展示结构化数据
-
-### Phase 3
-
+- 云端评测报告可视化
 - 浏览器扩展集成：Agent 直接操作扩展完成表单填写
-- 任务调度：定时执行"检查投递状态"等任务
-- 多用户隔离：完善 user_id 边界
-
-### Phase 4
-
-- Agent 评估：自动评估 Agent 决策质量
-- 工具调用审计：记录所有工具调用，便于回放和调试
-- A/B 测试：不同系统提示词效果对比

@@ -1,0 +1,23 @@
+# 岗位推荐黄金数据集（20 条）
+# 每行: {"id","category","input","expected","note"}
+# expected: 该输入应首选的工具名（必须存在于 Agent 注册表中）
+{"id":"jobrec_01","category":"岗位推荐","input":"帮我看下这份JD，值不值得投【算法工程师 字节跳动 薪资40-60k 周末双休 要求硕士学历 熟悉深度学习框架 TensorFlow/PyTorch 有3篇顶会论文优先】","expected":"evaluate_job","note":"综合评估岗位优先级高于单独真实性/匹配度"}
+{"id":"jobrec_02","category":"岗位推荐","input":"帮我评估一下这个岗位链接 https://job.example.com/jd/12345 值不值得投","expected":"evaluate_job","note":"带 URL 的综合评估"}
+{"id":"jobrec_03","category":"岗位推荐","input":"这个岗位靠谱吗？不会是中介/培训贷吧 https://job.example.com/jd/abc","expected":"verify_job_authenticity","note":"只关心真实性"}
+{"id":"jobrec_04","category":"岗位推荐","input":"这家公司怎么样？是不是皮包公司，薪资是虚假的？","expected":"verify_job_authenticity","note":"真实性存疑"}
+{"id":"jobrec_05","category":"岗位推荐","input":"以我的画像匹配度来算，这个后端岗位和我匹配吗？【后端开发 美团 要求Java 3年经验 熟悉微服务】","expected":"score_job_match","note":"仅问匹配度"}
+{"id":"jobrec_06","category":"岗位推荐","input":"岗位JD【数据分析 拼多多 会SQL/Python 有AB实验经验加分】我目前做运营，帮我算下匹配度","expected":"score_job_match","note":"匹配度评分"}
+{"id":"jobrec_07","category":"岗位推荐","input":"这个岗位综合怎么样？能投吗？【前端 滴滴 包三餐 弹性工作 熟悉Vue】","expected":"evaluate_job","note":"能投吗=综合评估"}
+{"id":"jobrec_08","category":"岗位推荐","input":"帮我看看我最近的投递记录里有没有 Java 后端的岗位","expected":"search_applications","note":"在我的投递库内搜索"}
+{"id":"jobrec_09","category":"岗位推荐","input":"有哪些值得尽快跟进的投递？给我列一下今天要关注的","expected":"get_followups","note":"主动展示待办跟进"}
+{"id":"jobrec_10","category":"岗位推荐","input":"这家公司研究一下，告诉我它的业务和风险 https://company.example.com/official","expected":"research_company","note":"公司调研"}
+{"id":"jobrec_11","category":"岗位推荐","input":"我想生成一份针对这个JD定制的简历【数据开发 快手 熟悉大数据生态 Flink/Kafka/Hive】","expected":"generate_resume","note":"定制简历"}
+{"id":"jobrec_12","category":"岗位推荐","input":"针对这个JD写一封求职自荐信【产品经理 小红书 负责社区产品】","expected":"generate_cover_letter","note":"求职信"}
+{"id":"jobrec_13","category":"岗位推荐","input":"我这周投递的时间趋势是怎么样的？帮我做个投递节奏复盘","expected":"get_timeline_stats","note":"投递时间趋势统计"}
+{"id":"jobrec_14","category":"岗位推荐","input":"这个测试开发岗位的薪水看起来虚高，帮我判断下真实性 【测试开发 小公司 月薪30k 0经验可 包学会】","expected":"verify_job_authenticity","note":"薪资异常触发真实性判断"}
+{"id":"jobrec_15","category":"岗位推荐","input":"综合评估下这个校招岗位，游戏客户端开发 【网易 23-30k×16 要求熟悉Unity/Unreal】","expected":"evaluate_job","note":"校招综合评估"}
+{"id":"jobrec_16","category":"岗位推荐","input":"统计下我各家公司的回复率和offer率，方便我判断要不要继续投","expected":"get_company_stats","note":"公司维度统计"}
+{"id":"jobrec_17","category":"岗位推荐","input":"这个岗位和我匹配吗？【自然语言处理 小米 需要熟悉Transformer/RAG】我主要做传统机器学习","expected":"score_job_match","note":"匹配度判断"}
+{"id":"jobrec_18","category":"岗位推荐","input":"这个岗位的综合分析和投递建议是什么？【Java后端 招银 固薪+年终奖 要求证券行业经验优先】","expected":"evaluate_job","note":"综合分析"}
+{"id":"jobrec_19","category":"岗位推荐","input":"帮我解析下京东这个岗位JD的职责和要求，想确认我能不能投","expected":"extract_job_description","note":"提取JD结构"}
+{"id":"jobrec_20","category":"岗位推荐","input":"综合看下我的投递策略，看看还有哪些可以优化的地方","expected":"get_application_advice","note":"投递策略建议"}

@@ -37,7 +37,7 @@ from .errors import (
     InvalidRequestError, ContentFilterError, LLMError,
 )
 
-logger = logging.getLogger("offerclaw.llm.openai")
+logger = logging.getLogger("offercabin.llm.openai")
 
 
 class OpenAIProvider(LLMProvider):
@@ -50,12 +50,17 @@ class OpenAIProvider(LLMProvider):
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model: Optional[str] = None,
+        timeout: Optional[float] = None,
     ):
         # 显式传入的参数优先于环境变量，支持多 provider 实例用不同模型
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "")
         self.base_url = (base_url or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
         self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        self.timeout = 60.0
+        # 超时可做运行时/环境变量覆盖：LLM_TIMEOUT（秒）
+        try:
+            self.timeout = float(timeout) if timeout is not None else float(os.getenv("LLM_TIMEOUT", "60"))
+        except (TypeError, ValueError):
+            self.timeout = 60.0
 
         if not self.api_key:
             logger.warning("OpenAIProvider 未配置 OPENAI_API_KEY，调用将失败")

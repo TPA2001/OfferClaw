@@ -3,11 +3,11 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "offerclaw"
+name = "offercabin"
 version = "2.0.0"
-description = "OfferClaw - 求职投递看板（多用户账号版）：投递管理、画像、日志、Agent 助手"
+description = "OfferCabin - 求职投递看板（多用户账号版）：投递管理、画像、日志、Agent 助手"
 requires-python = ">=3.10,<3.14"
-authors = [{ name = "OfferClaw Team" }]
+authors = [{ name = "OfferCabin Team" }]
 license = "MIT"
 dependencies = [
     "fastapi>=0.111",

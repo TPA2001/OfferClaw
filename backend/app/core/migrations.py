@@ -22,11 +22,31 @@ from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.sql.schema import Table
 
-logger = logging.getLogger("offerclaw.migrations")
+logger = logging.getLogger("offercabin.migrations")
 
-# 迁移前自动备份根目录
+# 兜底备份根目录：仅当无法从数据库 URL 定位时使用
+# （Docker 下 data_dir()= /app/data 在容器层，重建即丢，故应优先用数据库文件旁目录）
 from app.core.paths import data_dir as _data_dir
 BACKUP_DIR = _data_dir() / "backups"
+
+
+def _backup_root(engine: Engine) -> Path:
+    """迁移备份根目录：优先定位到 SQLite 数据库文件旁边。
+
+    Docker 部署时数据库在挂载卷内（如 /data/offerclaw.db），备份落在 /data/backups，
+    容器重建后仍留存，真正充当跨版本升级的安全网。非 SQLite / 无法定位时回退 data_dir。
+    """
+    try:
+        url = engine.url
+        if url.get_backend_name() == "sqlite":
+            db_path = url.database
+            if db_path and db_path != ":memory:":
+                parent = Path(db_path).resolve().parent
+                parent.mkdir(parents=True, exist_ok=True)
+                return parent / "backups"
+    except Exception as e:
+        logger.warning(f"定位备份目录失败，回退 {BACKUP_DIR}：{e}")
+    return BACKUP_DIR
 
 
 def backup_all_tables(engine: Engine) -> Path | None:
@@ -37,7 +57,7 @@ def backup_all_tables(engine: Engine) -> Path | None:
         if not tables:
             return None
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        bk_dir = BACKUP_DIR / f"pre_migrate_{ts}"
+        bk_dir = _backup_root(engine) / f"pre_migrate_{ts}"
         bk_dir.mkdir(parents=True, exist_ok=True)
 
         def _default(o):

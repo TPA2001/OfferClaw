@@ -1,18 +1,20 @@
 /**
- * OfferClaw 前端共享配置
+ * OfferCabin 前端共享配置
  *
  * 集中管理 API_BASE，避免每个 HTML 文件硬编码。
  * 部署时只需修改本文件，不用逐页改。
  *
  * 内测模式：单用户，无鉴权 token。后端忽略 Authorization 头。
  */
-window.OFFERCLAW_CONFIG = {
+window.OFFERCABIN_CONFIG = {
     // API 基地址：开发环境自动指向 localhost:8000，生产环境通过 nginx 反代用相对路径
-    API_BASE: window.OFFERCLAW_API_BASE !== undefined
-        ? window.OFFERCLAW_API_BASE
+    API_BASE: window.OFFERCABIN_API_BASE !== undefined
+        ? window.OFFERCABIN_API_BASE
         : (location.hostname === 'localhost' || location.hostname === '127.0.0.1'
             ? 'http://localhost:8000'
             : ''),
+    // 管理后台端口（与公开应用隔离，独立端口；仅管理员入口可见）
+    ADMIN_PORT: 8001,
     // 内测模式无需鉴权 token，保留占位以兼容 api.js 的 headers 构造
     TOKEN: 'internal-beta',
     // 是否开启调试日志
@@ -237,7 +239,7 @@ window.sanitizeUrl = function(url) {
         bootstrap();
     }
 
-    global.OfferClawTheme = {
+    global.OfferCabinTheme = {
         THEMES: THEMES,
         THEME_MAP: THEME_MAP,
         ACCENTS: ACCENTS,

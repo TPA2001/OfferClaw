@@ -1,6 +1,6 @@
-# OfferClaw Agent MVP 使用指南
+# OfferCabin Agent MVP 使用指南
 
-本指南介绍如何启动、使用、调试 OfferClaw Agent MVP。
+本指南介绍如何启动、使用、调试 OfferCabin Agent MVP。
 
 ## 目录
 
@@ -114,9 +114,9 @@ curl http://localhost:8000/health
 查看日志：
 
 ```
-INFO offerclaw.llm.factory: 使用 OpenAI Provider
+INFO offercabin.llm.factory: 使用 OpenAI Provider
 # 或
-WARNING offerclaw.llm.factory: 未配置 OPENAI_API_KEY，降级使用 Mock Provider
+WARNING offercabin.llm.factory: 未配置 OPENAI_API_KEY，降级使用 Mock Provider
 ```
 
 ---
@@ -286,10 +286,10 @@ curl -N -X POST http://localhost:8000/api/v1/agent/chat \
 后端日志按层级输出：
 
 ```
-INFO offerclaw.llm.factory: 使用 OpenAI Provider
-INFO offerclaw.agent.loop: Agent step 1/8
-INFO offerclaw.agent.tools.application_tools: 创建投递：腾讯 - 后端
-INFO offerclaw.agent.loop: Agent step 2/8
+INFO offercabin.llm.factory: 使用 OpenAI Provider
+INFO offercabin.agent.loop: Agent step 1/8
+INFO offercabin.agent.tools.application_tools: 创建投递：腾讯 - 后端
+INFO offercabin.agent.loop: Agent step 2/8
 ```
 
 调整日志级别（在 `main.py` 顶部）：
@@ -329,7 +329,7 @@ curl -X POST http://localhost:8000/api/v1/agent/chat \
 ### 4. 检查数据库
 
 ```bash
-sqlite3 backend/offerclaw.db
+sqlite3 backend/offercabin.db
 ```
 
 ```sql
@@ -390,7 +390,7 @@ Mock Provider 基于关键词匹配，必须包含特定关键词才能触发工
 检查 `OPENAI_API_KEY` 是否正确。日志会显示：
 
 ```
-ERROR offerclaw.llm.openai: OpenAI API HTTP 错误: 401 - ...
+ERROR offercabin.llm.openai: OpenAI API HTTP 错误: 401 - ...
 ```
 
 ### Q4：国内访问 OpenAI 超时？
@@ -433,7 +433,7 @@ playwright install chromium
 
 ```python
 JOB_AGENT_PROMPT = """
-你是 OfferClaw 求职助手。
+你是 OfferCabin 求职助手。
 ...
 ## 行为准则
 ...
@@ -518,7 +518,7 @@ LLM 会自动识别意图并调用新工具，无需修改其他代码。
 
 ## 总结
 
-OfferClaw Agent MVP 实现了：
+OfferCabin Agent MVP 实现了：
 
 - ✅ 三层解耦架构（LLM / Runtime / App）
 - ✅ 多 Provider 支持（OpenAI 兼容 + Mock 降级）

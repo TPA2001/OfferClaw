@@ -1,5 +1,5 @@
 """
-OfferClaw Backend Application
+OfferCabin Backend Application
 求职投递看板（多用户账号版）：投递管理 + 画像 + 日志 + Agent
 """
 
@@ -23,6 +23,8 @@ from app.core.database import engine, Base, SessionLocal
 from app.core.response import (
     APIError, business_code_for_http, ok as ok_response,
 )
+from app.core.security_middleware import SecurityHeadersMiddleware
+from app.core.config import settings as app_settings
 from app.api import auth, profile, agent, applications, journal, settings, community
 
 # Configure logging
@@ -31,7 +33,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
-logger = logging.getLogger("offerclaw")
+logger = logging.getLogger("offercabin")
 
 # === 启动时校验鉴权配置（jwt 多用户 / open 本地单用户）===
 from app.core.auth import validate_auth_config, AUTH_MODE
@@ -43,6 +45,7 @@ for w in _auth_warnings:
 from app.models.profile import Profile           # noqa: F401
 from app.models.application import Application, AgentSession  # noqa: F401
 from app.models.user import User                  # noqa: F401
+from app.models.memory import UserMemory, ProfileSnapshot  # noqa: F401
 from app.models.community import (                # noqa: F401
     CommunityPost,
     PostComment,
@@ -61,9 +64,9 @@ auto_migrate(engine, Base.metadata)
 
 # Create FastAPI app
 app = FastAPI(
-    title="OfferClaw",
+    title="OfferCabin",
     description="Job Application Management System",
-    version="2.0.0"
+    version="0.0.2"
 )
 
 # CORS middleware
@@ -88,6 +91,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 安全响应头（nosniff / 防点击劫持 / Referrer / HSTS）
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Register routers
 app.include_router(auth.router)            # 账号：注册/登录/改密/找回密码（公开）
@@ -209,6 +215,7 @@ async def health():
     healthy = db_status == "connected"
     return {
         "status": "healthy" if healthy else "unhealthy",
+        "version": f"v{app_settings.app_version}",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "llm_configured": llm_configured,
         "llm_ready": llm_configured,

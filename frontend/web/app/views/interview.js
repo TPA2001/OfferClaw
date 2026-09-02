@@ -6,8 +6,8 @@
 (function (global) {
     'use strict';
 
-    const API = global.OfferClawAPI;
-    const Motion = global.OfferClawMotion;
+    const API = global.OfferCabinAPI;
+    const Motion = global.OfferCabinMotion;
     const esc = API.esc.bind(API);
 
     // ============ 常量 ============
@@ -1674,6 +1674,6 @@
         root = null;
     }
 
-    global.OfferClawViews = global.OfferClawViews || {};
-    global.OfferClawViews.interview = { mount: mount, cleanup: cleanup, title: '面试复盘' };
+    global.OfferCabinViews = global.OfferCabinViews || {};
+    global.OfferCabinViews.interview = { mount: mount, cleanup: cleanup, title: '面试复盘' };
 })(window);

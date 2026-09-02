@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OfferCabin 管理后台</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="stylesheet" href="/__styles/main.css?v=11">
+    <script>
+        // 主题引导（与主站一致，复用 localStorage oc_theme）
+        (function () {
+            try {
+                var t = localStorage.getItem('oc_theme') || 'paper';
+                var dark = { ink: 1, forest: 1, ocean: 1 };
+                document.documentElement.setAttribute('data-theme', t);
+                if (dark[t]) document.documentElement.classList.add('is-dark-pending');
+            } catch (e) {}
+        })();
+    </script>
+    <style>
+        /* 管理后台专属样式：外壳/导航复用 main.css，仅补充表格/卡片/登录卡 */
+        .admin-login-wrap {
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            background: var(--paper); padding: 2rem;
+        }
+        .admin-login-card {
+            background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+            box-shadow: var(--shadow-md, 0 8px 32px rgba(0,0,0,.08));
+            padding: 2.4rem; width: 100%; max-width: 380px;
+        }
+        .admin-login-card h1 {
+            font-family: var(--font-serif); font-size: 1.3rem; font-weight: 700;
+            color: var(--ink); margin: 0 0 .3rem; display: flex; align-items: center; gap: .6rem;
+        }
+        .admin-login-card .login-sub { color: var(--ink-soft); font-size: .82rem; margin-bottom: 1.6rem; }
+        .admin-login-card .field { margin-bottom: 1rem; }
+        .admin-login-card label { display: block; font-size: .78rem; color: var(--ink-soft); margin-bottom: .35rem; }
+        .admin-login-card input {
+            width: 100%; box-sizing: border-box; padding: .6rem .7rem; font-size: .9rem;
+            background: var(--paper); border: 1px solid var(--line); border-radius: 8px; color: var(--ink);
+        }
+        .admin-login-card input:focus { outline: none; border-color: var(--olive); }
+        .admin-login-card .btn-primary {
+            width: 100%; padding: .65rem; font-size: .9rem; font-weight: 600;
+            background: var(--olive); color: #fff; border: none; border-radius: 8px; cursor: pointer;
+        }
+        .admin-login-card .btn-primary:disabled { opacity: .6; cursor: not-allowed; }
+        .admin-login-card .login-error { color: var(--danger); font-size: .8rem; min-height: 1.1rem; margin-top: .6rem; }
+
+        /* 面板专属 */
+        /* 主站 .app-main/#view-mount 为 overflow:hidden（滚动交给各视图的 .view-container），
+           管理后台没有 .view-container，这里改为让挂载点自己滚动，否则长表格被裁切无法下拉 */
+        #view-mount { height: 100%; overflow-y: auto; }
+        .admin-view { padding: 1.4rem 1.6rem 4rem; min-height: 100%; box-sizing: border-box; }
+        .admin-view-title {
+            font-family: var(--font-serif); font-size: 1.15rem; font-weight: 700;
+            color: var(--ink); margin: 0 0 1rem; display: flex; align-items: center; gap: .5rem;
+        }
+        .admin-toolbar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-bottom: 1rem; }
+        .admin-toolbar select, .admin-toolbar input[type=text] {
+            padding: .4rem .55rem; font-size: .82rem; background: var(--paper); border: 1px solid var(--line);
+            border-radius: 7px; color: var(--ink);
+        }
+        .admin-toolbar .btn {
+            padding: .4rem .8rem; font-size: .82rem; border: 1px solid var(--line); border-radius: 7px;
+            background: var(--card); color: var(--ink); cursor: pointer;
+        }
+        .admin-toolbar .btn:hover { border-color: var(--olive); color: var(--olive); }
+
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.4rem; }
+        .stat-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.2rem; }
+        .stat-card .stat-label { font-size: .76rem; color: var(--ink-soft); margin-bottom: .3rem; }
+        .stat-card .stat-value { font-size: 1.5rem; font-family: var(--font-mono); font-weight: 700; color: var(--ink); }
+        .stat-card .stat-sub { font-size: .72rem; color: var(--ink-faint); margin-top: .25rem; }
+
+        .data-table { width: 100%; border-collapse: collapse; font-size: .83rem; background: var(--card); }
+        .data-table th, .data-table td { padding: .55rem .7rem; text-align: left; border-bottom: 1px solid var(--line-soft); }
+        .data-table th { font-size: .74rem; color: var(--ink-soft); font-weight: 600; background: var(--paper-deep); }
+        .data-table tr:hover td { background: var(--paper-deep); }
+        .data-table td.mono { font-family: var(--font-mono); font-size: .78rem; }
+        .data-table .row-actions { display: flex; gap: .35rem; flex-wrap: wrap; }
+        .btn-act {
+            padding: .25rem .5rem; font-size: .74rem; border: 1px solid var(--line); border-radius: 6px;
+            background: var(--card); color: var(--ink-soft); cursor: pointer; white-space: nowrap;
+        }
+        .btn-act:hover { border-color: var(--olive); color: var(--olive); }
+        .btn-act.danger:hover { border-color: var(--danger); color: var(--danger); }
+        .badge {
+            display: inline-block; padding: .1rem .5rem; font-size: .7rem; font-family: var(--font-mono);
+            border-radius: 6px; background: var(--paper-deep); color: var(--ink-soft);
+        }
+        .badge.admin { background: color-mix(in srgb, var(--olive) 16%, transparent); color: var(--olive); }
+        .badge.disabled { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+        .badge.pinned { background: color-mix(in srgb, var(--success, #16a34a) 18%, transparent); color: var(--success, #16a34a); }
+        .badge.hidden { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+        .badge.deleted { background: color-mix(in srgb, var(--ink-faint) 14%, transparent); color: var(--ink-faint); }
+        .badge.pending { background: color-mix(in srgb, #d97706 18%, transparent); color: #d97706; }
+        .badge.handled { background: color-mix(in srgb, var(--success, #16a34a) 16%, transparent); color: var(--success, #16a34a); }
+
+        .pager { display: flex; gap: .5rem; align-items: center; margin-top: 1rem; font-size: .8rem; color: var(--ink-soft); }
+        .pager .btn { padding: .3rem .7rem; font-size: .78rem; }
+        .empty-state { text-align: center; color: var(--ink-faint); padding: 3rem 1rem; font-size: .88rem; }
+        .loading-state { text-align: center; color: var(--ink-soft); padding: 2rem; }
+    </style>
+</head>
+<body>
+    <!-- 登录卡（未登录时显示） -->
+    <div class="admin-login-wrap" id="login-wrap" style="display:none;">
+        <div class="admin-login-card">
+            <h1><span class="brand-mark">OC</span> 管理后台</h1>
+            <div class="login-sub">仅授权管理员可登录。令牌有效期较短，请妥善保管。</div>
+            <form id="login-form">
+                <div class="field">
+                    <label>用户名或邮箱</label>
+                    <input type="text" id="login-account" autocomplete="username" required>
+                </div>
+                <div class="field">
+                    <label>密码</label>
+                    <input type="password" id="login-password" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn-primary" id="login-btn">登录</button>
+                <div class="login-error" id="login-error"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 面板外壳（登录后显示） -->
+    <div class="app-shell" id="panel-shell" style="display:none;">
+        <header class="app-topbar">
+            <div class="topbar-brand">
+                <div class="brand-mark">OC</div>
+                <span>OfferCabin 管理后台</span>
+            </div>
+            <div class="topbar-actions">
+                <div class="topbar-user" id="topbar-user">
+                    <span class="user-avatar" id="admin-avatar">A</span>
+                    <span class="user-name" id="admin-name"></span>
+                    <button class="icon-btn logout-btn" id="btn-logout" title="退出登录" aria-label="退出登录">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="app-nav">
+            <div class="nav-section-label">管理</div>
+            <button class="nav-item" data-tab="dashboard"><span class="nav-label">仪表盘</span></button>
+            <button class="nav-item" data-tab="users"><span class="nav-label">用户管理</span></button>
+            <button class="nav-item" data-tab="reports"><span class="nav-label">内容举报</span></button>
+            <button class="nav-item" data-tab="posts"><span class="nav-label">帖子</span></button>
+            <button class="nav-item" data-tab="jobshares"><span class="nav-label">岗位分享</span></button>
+            <button class="nav-item" data-tab="audit"><span class="nav-label">审计日志</span></button>
+            <div class="nav-spacer"></div>
+            <div class="nav-section-label">账号</div>
+            <button class="nav-item" data-tab="account"><span class="nav-label">修改密码</span></button>
+        </nav>
+
+        <main class="app-main">
+            <div id="view-mount"></div>
+        </main>
+    </div>
+
+    <div class="toast-container"></div>
+
+    <script src="api.js?v=1"></script>
+    <script src="app.js?v=2"></script>
+</body>
+</html>

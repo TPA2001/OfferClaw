@@ -57,6 +57,6 @@ __all__ = [
     "ResearchCompanyTool",
     "GenerateInterviewQuestionsTool", "EvaluateInterviewAnswerTool",
     "ReviewInterviewTool", "CreateJournalEntryTool", "GenerateWeeklySummaryTool",
-    # 视图导航（OfferClaw 独有：Agent 与功能视图无缝衔接）
+    # 视图导航（OfferCabin 独有：Agent 与功能视图无缝衔接）
     "NavigateViewTool",
 ]

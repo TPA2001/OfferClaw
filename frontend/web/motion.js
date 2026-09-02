@@ -1,8 +1,8 @@
 /**
- * OfferClaw Motion System
+ * OfferCabin Motion System
  *
  * 轻量级动画工具库，提供滚动入场、数字滚动、条形图填充、
- * 错开入场与 tab 切换过渡等能力。所有方法均挂在 window.OfferClawMotion。
+ * 错开入场与 tab 切换过渡等能力。所有方法均挂在 window.OfferCabinMotion。
  *
  * 设计原则：
  * - 优先使用 CSS 过渡/关键帧，JS 只负责触发时机
@@ -193,7 +193,7 @@
     }
 
     // ============ 导出 ============
-    window.OfferClawMotion = {
+    window.OfferCabinMotion = {
         revealOnScroll: revealOnScroll,
         revealAll: revealAll,
         countUp: countUp,

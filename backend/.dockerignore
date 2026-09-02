@@ -1,5 +1,5 @@
 # =============================================================================
-# OfferClaw Backend .dockerignore
+# OfferCabin Backend .dockerignore
 # 构建上下文为 backend/ 目录，因此路径相对 backend/ 编写
 # 对应项目根目录下的 backend/data/、backend/tests/ 等
 # =============================================================================

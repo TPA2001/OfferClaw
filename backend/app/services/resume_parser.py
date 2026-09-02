@@ -1,6 +1,6 @@
 """简历 PDF 解析模块
 
-从 PDF 简历提取文本 → 结构化为 OfferClaw 画像 JSON。
+从 PDF 简历提取文本 → 结构化为 OfferCabin 画像 JSON。
 
 隐私与降级策略：
 - 文本提取用 pdfplumber（本地，非 LLM）
@@ -17,11 +17,17 @@ from typing import Any, Dict, List, Tuple
 logger = logging.getLogger(__name__)
 
 
-# OfferClaw 画像空结构（与前端 profile.js emptyProfile 对齐）
+# OfferCabin 画像空结构（与前端 profile.js emptyProfile 对齐）
 def empty_profile() -> Dict[str, Any]:
     return {
-        "basic": {"name": "", "gender": "", "age": "", "phone": "", "email": "",
-                  "location": "", "avatar": "", "job_intent": ""},
+        "basic": {"name": "", "english_name": "", "gender": "", "age": "", "birth": "",
+                  "phone": "", "email": "", "location": "", "avatar": "", "job_intent": "",
+                  "ethnicity": "", "political_status": "", "marital_status": "", "native_place": "",
+                  "household_type": "", "height": "", "weight": "", "health": "",
+                  "wechat": "", "qq": "", "website": "", "github": "", "linkedin": "",
+                  "english_level": "", "driving_license": "", "job_status": "",
+                  "current_company": "", "current_title": "", "years_of_experience": "",
+                  "highest_education": "", "available_date": ""},
         "education": [],
         "experience": [],
         "projects": [],
@@ -30,7 +36,14 @@ def empty_profile() -> Dict[str, Any]:
                     "expected_salary": "", "expected_location": "", "expected_position": ""},
         "certificates": [],
         "job_intent": {"target_positions": [], "target_cities": [], "expected_salary": "",
-                       "work_type": "", "availability": ""},
+                       "work_type": "", "availability": "", "expected_industry": "",
+                       "target_level": "", "remote_preference": "",
+                       "willing_to_relocate": "", "willing_to_travel": "", "current_salary": ""},
+        "languages": [],
+        "awards": [],
+        "essays": [],
+        "publications": [],
+        "patents": [],
     }
 
 
@@ -38,23 +51,34 @@ RESUME_PARSE_PROMPT = """你是简历解析助手。从下方简历文本中提�
 
 字段结构如下：
 {
-  "basic": {"name": "", "gender": "", "age": "", "phone": "", "email": "", "location": "", "job_intent": ""},
-  "education": [{"school": "", "degree": "", "major": "", "start_date": "", "end_date": "", "gpa": "", "description": ""}],
+  "basic": {"name": "", "english_name": "", "gender": "", "age": "", "birth": "", "phone": "", "email": "", "location": "", "job_intent": "", "ethnicity": "", "native_place": "", "job_status": "", "current_company": "", "current_title": "", "years_of_experience": "", "highest_education": ""},
+  "education": [{"school": "", "degree": "", "major": "", "school_type": "", "edu_form": "", "start_date": "", "end_date": "", "gpa": "", "ranking": "", "courses": "", "description": ""}],
   "experience": [{"company": "", "position": "", "start_date": "", "end_date": "", "description": "", "achievements": []}],
   "projects": [{"name": "", "role": "", "description": "", "start_date": "", "end_date": "", "tech_stack": []}],
   "skills": [{"name": "", "level": "熟悉", "category": ""}],
   "summary": {"self_intro": "", "strengths": "", "career_goal": "", "expected_salary": "", "expected_position": ""},
   "certificates": [{"name": "", "issuer": "", "date": "", "score": ""}],
-  "job_intent": {"target_positions": [], "target_cities": [], "expected_salary": "", "work_type": ""}
+  "job_intent": {"target_positions": [], "target_cities": [], "expected_salary": "", "work_type": "", "availability": "", "expected_industry": "", "remote_preference": ""},
+  "languages": [{"name": "英语", "proficiency": "流利", "test_score": "CET-6"}],
+  "awards": [{"name": "校级一等奖学金", "level": "校级", "issuer": "颁发单位", "date": "2023-06", "description": ""}],
+  "essays": [{"question": "为什么选择我们公司", "answer": "", "tag": "互联网版"}],
+  "publications": [{"title": "论文题目", "venue": "期刊/会议", "level": "中文核心", "authors": "作者列表", "role": "第一作者", "date": "2023-06", "doi": "", "description": ""}],
+  "patents": [{"name": "专利名称", "patent_no": "专利号/申请号", "type": "发明专利", "status": "已授权", "holder": "申请人", "inventors": "发明人", "date": "2023-06", "description": ""}]
 }
 
 规则：
 - 无法确定的字段留空字符串或空数组，不要编造
 - tech_stack / achievements / target_positions / target_cities 用字符串数组
 - skills 为对象数组，name 必填，level 默认"熟悉"，category 可空（编程语言/框架/工具/软技能）
+- languages 为对象数组：name 语种、proficiency 熟练度（母语/流利/工作熟练/中等/基础）、test_score 语言成绩（如 CET-6 / 雅思 7.5）
+- awards 为对象数组：name 奖项/荣誉名、level 级别（国家级/省级/市级/校级/企业级/其他）、issuer 颁发单位、date 获奖时间
+- essays 为对象数组：question 网申常见开放题（如"为什么选择我们公司""职业规划"）、answer 对应答案、tag 版本标签（如 互联网版/国央企版）
+- publications 为对象数组：title 论文题目、venue 期刊/会议、level 级别（SCI/SSCI/EI/中文核心/普刊/会议/其他）、authors 作者、role 本人角色（第一作者/共同一作/通讯作者/参与）、date 发表时间、doi
+- patents 为对象数组：name 专利名、patent_no 专利号/申请号、type 类型（发明专利/实用新型/外观设计/软著）、status 状态（已授权/实审中/已申请）、holder 申请人、inventors 发明人、date 时间
 - 日期统一 YYYY-MM 或 YYYY-MM-DD
 - degree 取：高中/大专/本科/硕士/博士
 - gender 取：男/女
+- 敏感字段（身份证号、家庭住址、银行卡、护照等）一律不提取
 - 只返回 JSON 对象本身
 
 简历文本：
@@ -130,8 +154,11 @@ SECTION_HEADERS = [
     ("projects", ["项目经历", "项目经验", "Projects", "项目"]),
     ("skills", ["专业技能", "技能", "技术栈", "Skills"]),
     ("certificates", ["证书", "资格证书", "Certifications"]),
+    ("languages", ["语言", "外语", "Language"]),
     ("summary", ["自我评价", "个人简介", "自我介绍", "Summary", "Profile"]),
     ("job_intent", ["求职意向", "期望工作", "Job Intention"]),
+    ("publications", ["发表论文", "学术论文", "论文发表", "论文", "出版物", "Publications", "Paper"]),
+    ("patents", ["专利", "Patents"]),
     ("honors", ["荣誉", "奖项", "科研", "Honors"]),
 ]
 
@@ -211,6 +238,25 @@ def _parse_basic(head_lines: List[str], profile: Dict[str, Any]) -> None:
         m = re.search(r"籍贯[:：\s]*([^\s]+)", cleaned)
         if m and not profile["basic"]["location"]:
             profile["basic"]["location"] = m.group(1)
+        # 求职状态：离职/在职/待业等
+        m = re.search(r"(离职|在职|待业|应届|在读)", cleaned)
+        if m and not profile["basic"]["job_status"]:
+            profile["basic"]["job_status"] = m.group(1)
+        # 工作年限：如"5年经验/工作5年"
+        m = re.search(r"(?:工作|从业)?\s*(\d{1,2})\s*(?:年|年多)\s*(?:经验|从业|工作)", cleaned)
+        if m and not profile["basic"]["years_of_experience"]:
+            profile["basic"]["years_of_experience"] = m.group(1)
+
+    # 当前公司 / 当前职位：从"现就职/目前就职/现任职于"行解析
+    for line in head_lines:
+        cleaned = _strip_cid(line).strip()
+        m = re.search(r"(?:现就职|目前就职|现任|现任职于|就职于)\s*(?:于)?\s*([^\s，,。]+)", cleaned)
+        if m and not profile["basic"]["current_company"]:
+            profile["basic"]["current_company"] = m.group(1).strip("于，,。")
+        # 当前职位：跟在公司名之后，或"职位：XX"
+        m = re.search(r"(?:职位|岗位|职务)[:：\s]*([^\s，,。]+)", cleaned)
+        if m and not profile["basic"]["current_title"]:
+            profile["basic"]["current_title"] = m.group(1)
 
     # 求职方向（第二行常见的"AIAgent/LLM应用开发"等）
     if len(head_lines) >= 2:
@@ -437,15 +483,158 @@ def _parse_certificates(lines: List[str], profile: Dict[str, Any]) -> None:
             })
 
 
-def _parse_honors(lines: List[str], profile: Dict[str, Any]) -> None:
-    """科研与荣誉 → 写入 summary.strengths（OfferClaw 无独立字段）"""
-    items = []
+# 常见语言成绩关键词 → 熟练度推断
+_LANG_SCORE_RE = re.compile(r"(CET|雅思|托福|IELTS|TOEFL|六级|四级|专四|专八|N1|N2|JLPT|GRE|GMAT|托业|BEC)", re.I)
+# 熟练度关键词（按优先级）
+_LANG_LEVEL_HINTS = [
+    (r"母语|native", "母语"),
+    (r"精通|fluent", "流利"),
+    (r"流利|熟练|工作", "工作熟练"),
+    (r"良好|中等|intermediate", "中等"),
+    (r"基础|初级|basic", "基础"),
+]
+
+
+def _parse_languages(lines: List[str], profile: Dict[str, Any]) -> None:
+    """解析语言能力：'语种 + 熟练度 + 成绩' 格式行"""
+    seen = set(profile["languages"])
+    for line in lines:
+        cleaned = _strip_cid(line).strip().lstrip("•-—:： ").strip()
+        if not cleaned:
+            continue
+        # 只处理明确提到语种的行
+        lang = ""
+        for name in ["英语", "中文", "普通话", "汉语", "日语", "韩语", "法语", "德语",
+                     "西班牙语", "俄语", "意大利语", "英语", "English", "Japanese",
+                     "Korean", "French", "German"]:
+            if name.lower() in cleaned.lower():
+                lang = name
+                break
+        if not lang:
+            continue
+        # 熟练度推断
+        proficiency = ""
+        for pattern, val in _LANG_LEVEL_HINTS:
+            if re.search(pattern, cleaned, re.I):
+                proficiency = val
+                break
+        # 成绩
+        score_m = _LANG_SCORE_RE.search(cleaned)
+        test_score = f"{score_m.group(0).upper()} {cleaned[score_m.end():].strip()[:20]}" if score_m else ""
+        item = {"name": lang, "proficiency": proficiency, "test_score": test_score.strip()}
+        if item not in seen:
+            seen.add(item)
+            profile["languages"].append(item)
+
+
+def _parse_awards(lines: List[str], profile: Dict[str, Any]) -> None:
+    """荣誉/奖项 → 结构化获奖记录（国家级/省级/市级/校级 等）"""
     for line in lines:
         cleaned = _strip_cid(line).strip().lstrip("•-— ").strip()
-        if cleaned:
-            items.append(cleaned)
-    if items and not profile["summary"].get("strengths"):
-        profile["summary"]["strengths"] = "\n".join(items)
+        if not cleaned:
+            continue
+        # 级别推断
+        level = ""
+        for lv in ["国家级", "省级", "市级", "校级", "院级", "企业级"]:
+            if lv in cleaned:
+                level = lv
+                break
+        profile["awards"].append({
+            "name": cleaned, "level": level, "issuer": "", "date": "", "description": ""
+        })
+    # 兼容旧行为：若没有任何获奖，仍把内容落到 summary.strengths 兜底
+    if not profile["awards"] and lines:
+        items = [_strip_cid(l).strip().lstrip("•-— ").strip() for l in lines if _strip_cid(l).strip()]
+        if items and not profile["summary"].get("strengths"):
+            profile["summary"]["strengths"] = "\n".join(items)
+
+
+def _parse_publications(lines: List[str], profile: Dict[str, Any]) -> None:
+    """论文/发表物 → 结构化记录（提取年份、DOI、期刊/会议、作者、角色）"""
+    for line in lines:
+        cleaned = _strip_cid(line).strip().lstrip("•-—[]()0123456789.)]\t ").strip()
+        if not cleaned or len(cleaned) < 8:
+            continue
+        entry = {
+            "title": cleaned, "venue": "", "level": "", "authors": "",
+            "role": "", "date": "", "doi": "", "description": "",
+        }
+        # 年份（常见 19xx/20xx）
+        ym = re.search(r"(19|20)\d{2}", cleaned)
+        if ym:
+            entry["date"] = ym.group(0)
+        # DOI
+        dm = re.search(r"doi[:：]?\s*([^\s，,;；]+)", cleaned, re.IGNORECASE)
+        if dm:
+            entry["doi"] = dm.group(1)
+        # 级别推断
+        for lv in ["SCI", "SSCI", "EI", "中文核心", "核心期刊", "普刊", "会议"]:
+            if lv in cleaned:
+                entry["level"] = lv
+                break
+        # 期刊/会议：形如 "标题[J]. 计算机学报, 2023" 或 "标题[C]//AAAI 2022, EI" → 分离标题与期刊
+        mj = re.search(r"\]\s*(?:\.|//)\s*([^\n]{2,60}?)(?:[，,]\s*(?:19|20)\d{2}|$)", cleaned)
+        if mj:
+            candidate = mj.group(1).strip().strip("[]").strip()
+            # 期刊名应是短名词，不应以常见论文标题动词开头
+            if candidate and len(candidate) < 60 and not candidate.startswith(("基于", "一种", "面向", "研究", "关于")):
+                entry["venue"] = candidate
+                entry["title"] = cleaned[:mj.start()].strip("[] ").strip()
+                # 去掉标题尾部残留的文献类型标记，如 "[J" / "[J]" / "[C]"
+                entry["title"] = re.sub(r"\[\s*[A-Za-z]+\s*\]?\s*$", "", entry["title"]).strip()
+        # 作者：形如 "张三, 李四. 标题" → 取第一个句读前的作者段
+        am = re.match(r"^([\u4e00-\u9fa5·、,，\s]{2,60}?)[。.．]\s*(.+)", entry["title"])
+        if am and not re.search(r"\d", am.group(1)):
+            entry["authors"] = am.group(1).strip().strip("[]")
+            entry["title"] = am.group(2).strip()
+            # 角色推断
+            for role in ["第一作者", "共同一作", "通讯作者", "参与"]:
+                if role in cleaned:
+                    entry["role"] = role
+                    break
+        profile["publications"].append(entry)
+    # 兜底：无有效论文时把内容并入 summary
+    if not profile["publications"] and lines:
+        items = [_strip_cid(l).strip().lstrip("•-—0123456789.)]\t ").strip() for l in lines if _strip_cid(l).strip()]
+        if items and not profile["summary"].get("strengths"):
+            profile["summary"]["strengths"] = "\n".join(items)
+
+
+def _parse_patents(lines: List[str], profile: Dict[str, Any]) -> None:
+    """专利 → 结构化记录（提取专利号、类型、状态）"""
+    for line in lines:
+        cleaned = _strip_cid(line).strip().lstrip("•-—0123456789.)]\t ").strip()
+        if not cleaned or len(cleaned) < 8:
+            continue
+        entry = {
+            "name": cleaned, "patent_no": "", "type": "", "status": "",
+            "holder": "", "inventors": "", "date": "", "description": "",
+        }
+        # 专利号/申请号：CN + 数字
+        pm = re.search(r"(CN\s?\d+(?:\.\d+)?)", cleaned, re.IGNORECASE)
+        if pm:
+            entry["patent_no"] = pm.group(1).replace(" ", "")
+            entry["name"] = cleaned.replace(pm.group(0), "").strip("：:，,;； ").strip()
+        # 类型
+        for tp in ["发明专利", "实用新型", "外观设计", "软件著作权", "软著"]:
+            if tp in cleaned:
+                entry["type"] = tp
+                break
+        # 状态
+        for st in ["已授权", "授权", "实审中", "实质审查", "申请中", "已申请"]:
+            if st in cleaned:
+                entry["status"] = st
+                break
+        # 年份
+        ym = re.search(r"(19|20)\d{2}", cleaned)
+        if ym:
+            entry["date"] = ym.group(0)
+        profile["patents"].append(entry)
+    # 兜底：无有效专利时把内容并入 summary
+    if not profile["patents"] and lines:
+        items = [_strip_cid(l).strip().lstrip("•-—0123456789.)]\t ").strip() for l in lines if _strip_cid(l).strip()]
+        if items and not profile["summary"].get("strengths"):
+            profile["summary"]["strengths"] = "\n".join(items)
 
 
 def _rule_parse(text: str) -> Dict[str, Any]:
@@ -466,7 +655,10 @@ def _rule_parse(text: str) -> Dict[str, Any]:
     _parse_projects(sections.get("projects", []), profile)
     _parse_skills(sections.get("skills", []), profile)
     _parse_certificates(sections.get("certificates", []), profile)
-    _parse_honors(sections.get("honors", []), profile)
+    _parse_languages(sections.get("languages", []), profile)
+    _parse_awards(sections.get("honors", []), profile)
+    _parse_publications(sections.get("publications", []), profile)
+    _parse_patents(sections.get("patents", []), profile)
 
     return profile
 
@@ -500,7 +692,7 @@ async def parse_resume(pdf_bytes: bytes) -> Tuple[Dict[str, Any], str, str]:
 
     Returns:
         (profile, text, source)
-        - profile: OfferClaw 画像结构
+        - profile: OfferCabin 画像结构
         - text: 提取的原文（供前端展示/调试）
         - source: "llm" | "rules"
     """

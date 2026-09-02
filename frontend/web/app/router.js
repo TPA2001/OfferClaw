@@ -1,5 +1,5 @@
 /**
- * OfferClaw SPA 路由器
+ * OfferCabin SPA 路由器
  * 基于 hash 的轻量路由：#/chat, #/kanban, #/profile, #/jobs, #/smart-fill, #/interview, #/settings
  */
 (function (global) {
@@ -108,5 +108,5 @@
         render();
     }
 
-    global.OfferClawRouter = { register, navigate, parseHash, init };
+    global.OfferCabinRouter = { register, navigate, parseHash, init };
 })(window);

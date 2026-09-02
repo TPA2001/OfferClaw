@@ -2,7 +2,7 @@
 视图导航工具
 
 让 Agent 能主动引导用户跳转到前端功能页面。
-这是 OfferClaw 的差异化能力：对话式 Agent 与功能视图无缝衔接。
+这是 OfferCabin 的差异化能力：对话式 Agent 与功能视图无缝衔接。
 """
 
 import logging
@@ -10,7 +10,7 @@ from typing import Optional
 
 from ..runtime.base_tool import BaseTool, ToolResult
 
-logger = logging.getLogger("offerclaw.agent.tool.navigate")
+logger = logging.getLogger("offercabin.agent.tool.navigate")
 
 
 # 支持的目标路由及其描述

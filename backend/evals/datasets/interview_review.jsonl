@@ -1,0 +1,17 @@
+# 面试复盘黄金数据集（15 条）
+# expected: 该输入应首选的工具名（必须存在于 Agent 注册表中）
+{"id":"iv_01","category":"面试复盘","input":"我昨天面完后端一面挂了，帮我复盘下哪里不行，我印象里算法题没ac，项目被深挖卡壳","expected":"review_interview","note":"面试复盘"}
+{"id":"iv_02","category":"面试复盘","input":"复盘一下我的这次面试笔记：【一面 技术 考了并发和JVM，二选一项目深挖，感觉答得一般】","expected":"review_interview","note":"基于笔记复盘"}
+{"id":"iv_03","category":"面试复盘","input":"下周二有滴滴的笔试，帮我提前准备一下考点和面试流程","expected":"prepare_interview","note":"面试准备包"}
+{"id":"iv_04","category":"面试复盘","input":"面试要考什么？帮我对这个JD出一套模拟面试题【Java后端 要求掌握MySQL索引优化、Redis缓存、消息队列】","expected":"generate_interview_questions","note":"按JD出模拟题"}
+{"id":"iv_05","category":"面试复盘","input":"帮我看下我的面试复盘记录，梳理下我这半个月都面了哪些公司","expected":"query_applications","note":"查看投递中面试记录"}
+{"id":"iv_06","category":"面试复盘","input":"帮我评估这段面试回答质量：面试官问MySQL的B+树为什么快，我答了磁盘存储和页分裂，但我没说聚簇索引","expected":"evaluate_interview_answer","note":"评估面试答案"}
+{"id":"iv_07","category":"面试复盘","input":"想想我这次前端面试，考了Vue响应式原理，我答到了依赖收集但没说diff算法，帮我复盘","expected":"review_interview","note":"具体问题复盘"}
+{"id":"iv_08","category":"面试复盘","input":"面试复盘后记得把这篇分析记到我的求职日志里","expected":"review_interview","note":"复盘后再记录了日志（工具串联）"}
+{"id":"iv_09","category":"面试复盘","input":"我准备面字节的产品岗，先帮我出一套打磨版模拟题","expected":"generate_interview_questions","note":"模拟题"}
+{"id":"iv_10","category":"面试复盘","input":"复盘下我一面挂的原因，记录显示是一面挂了，是简历挂还是技术挂？","expected":"query_applications","note":"查投递记录里的拒绝环节"}
+{"id":"iv_11","category":"面试复盘","input":"我的面试安排有哪些？把即将面试和笔试的列出来提醒我","expected":"get_followups","note":"面试/笔试待办提醒"}
+{"id":"iv_12","category":"面试复盘","input":"帮我评估一下我在压力面的回答：面试官不断打断，我坚持回答但不够凝练，可能被扣分","expected":"evaluate_interview_answer","note":"评估回答"}
+{"id":"iv_13","category":"面试复盘","input":"复盘这个岗位的面试：JD要求熟悉Kafka，我答了分区和消费者组，但没对比Kafka和RabbitMQ","expected":"review_interview","note":"结合JD复盘"}
+{"id":"iv_14","category":"面试复盘","input":"针对这个岗位准备面试【算法工程师 要求手撕代码 熟悉排序和并查集】帮我列考点","expected":"prepare_interview","note":"面试准备包"}
+{"id":"iv_15","category":"面试复盘","input":"帮我把本周的面试和投递做个周报总结","expected":"generate_weekly_summary","note":"求职周报"}

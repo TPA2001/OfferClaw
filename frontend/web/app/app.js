@@ -1,18 +1,19 @@
 /**
- * OfferClaw 主控制器
+ * OfferCabin 主控制器
  * 注册所有视图、初始化路由、绑定导航、健康检查、登录守卫
  */
 (function (global) {
     'use strict';
 
-    const Router = global.OfferClawRouter;
-    const API = global.OfferClawAPI;
-    const Views = global.OfferClawViews || {};
+    const Router = global.OfferCabinRouter;
+    const API = global.OfferCabinAPI;
+    const Views = global.OfferCabinViews || {};
 
     /**
      * 注册所有视图
      */
     function registerViews() {
+        if (Views.chat)      Router.register('/chat', Views.chat);
         if (Views.overview)  Router.register('/overview', Views.overview);
         if (Views.kanban)   Router.register('/kanban', Views.kanban);
         if (Views.profile)  Router.register('/profile', Views.profile);
@@ -47,13 +48,37 @@
     /**
      * 顶部显示当前用户 + 刷新用户信息
      */
+    // 取用户名前 1-2 个字符作为头像缩写
+    function initials(name) {
+        if (!name) return 'OC';
+        return name.trim().slice(0, 2).toUpperCase();
+    }
+
     async function loadUserInfo() {
         const user = API.currentUser();
         const el = document.getElementById('current-user');
-        if (el) el.textContent = user ? user.username : '';
+        const av = document.getElementById('user-avatar');
+        const apply = (name) => {
+            if (el) el.textContent = name || '';
+            if (av) av.textContent = initials(name);
+        };
+        apply(user ? user.username : '');
         try {
             const fresh = await API.auth.me();
-            if (el) el.textContent = fresh.username;
+            apply(fresh.username);
+            // 管理员入口：仅管理员可见，指向独立端口的管理后台
+            if (fresh.is_admin) {
+                const navAdmin = document.getElementById('nav-admin');
+                if (navAdmin) {
+                    const cfg = global.OFFERCABIN_CONFIG || {};
+                    const port = cfg.ADMIN_PORT || 8001;
+                    const host = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+                        ? `${location.hostname}:${port}`
+                        : location.host.replace(/:\d+$/, '') + ':' + port;
+                    navAdmin.href = `${location.protocol}//${host}/`;
+                    navAdmin.style.display = '';
+                }
+            }
         } catch (e) {
             // 401 已在 api.js 中处理跳转；其余静默
         }
@@ -106,5 +131,5 @@
         init();
     }
 
-    global.OfferClawApp = { init, checkHealth };
+    global.OfferCabinApp = { init, checkHealth };
 })(window);

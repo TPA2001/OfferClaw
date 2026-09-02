@@ -1,5 +1,5 @@
 """
-OfferClaw 集中配置管理
+OfferCabin 集中配置管理
 
 使用 Pydantic Settings 统一管理环境变量配置，
 替代散落在各模块的 os.getenv 调用。
@@ -19,7 +19,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """OfferClaw 应用配置（从环境变量 / .env 文件加载）"""
+    """OfferCabin 应用配置（从环境变量 / .env 文件加载）"""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -29,13 +29,13 @@ class Settings(BaseSettings):
     )
 
     # ===== 应用 =====
-    app_name: str = "OfferClaw"
-    app_version: str = "1.2.0"
+    app_name: str = "OfferCabin"
+    app_version: str = "0.0.2"
     debug: bool = Field(default=False, alias="APP_DEBUG")
 
     # ===== 数据库 =====
     database_url: str = Field(
-        default="sqlite:///./offerclaw.db",
+        default="sqlite:///./offercabin.db",
         alias="DATABASE_URL",
     )
 
@@ -55,6 +55,20 @@ class Settings(BaseSettings):
         default="http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000",
         alias="CORS_ORIGINS",
     )
+
+    # ===== 管理后台（独立端口，与公开应用隔离）=====
+    # 管理后台默认绑 127.0.0.1：仅本机可达，Docker 内需设 0.0.0.0 并通过宿主 127.0.0.1:8001 映射隔离
+    admin_host: str = Field(default="127.0.0.1", alias="ADMIN_HOST")
+    admin_port: int = Field(default=8001, alias="ADMIN_PORT")
+    # 管理后台 CORS：默认仅放行管理端口本地来源
+    admin_cors_origins: str = Field(
+        default="http://localhost:8001,http://127.0.0.1:8001",
+        alias="ADMIN_CORS_ORIGINS",
+    )
+    # 管理端口 IP 白名单（逗号分隔，留空则放行；建议生产显式配置）
+    admin_allow_ips: Optional[str] = Field(default=None, alias="ADMIN_ALLOW_IPS")
+    # 管理员令牌有效期（小时），短于普通用户令牌，默认 12 小时
+    admin_token_ttl_hours: int = Field(default=12, alias="ADMIN_TOKEN_TTL_HOURS")
 
     # ===== LLM Provider 选择 =====
     llm_provider: str = Field(default="openai", alias="LLM_PROVIDER")
@@ -83,6 +97,19 @@ class Settings(BaseSettings):
     # ===== LLM 重试 =====
     llm_max_retries: int = Field(default=3, alias="LLM_MAX_RETRIES")
 
+    # ===== 可观测性 / Tracing =====
+    # 全局开关：true 时记录每次 Agent 运行的追踪事件到本地 JSONL
+    trace_enabled: bool = Field(default=True, alias="TRACE_ENABLED")
+    # 导出器：local（本地 JSONL）| langsmith（远程 LangSmith）
+    trace_exporter: str = Field(default="local", alias="TRACE_EXPORTER")
+    # 本地追踪日志目录（相对 data 目录）
+    trace_dir: str = Field(default="traces", alias="TRACE_DIR")
+
+    # ===== LangSmith（可选，trace_exporter=langsmith 时生效）=====
+    langsmith_api_key: Optional[str] = Field(default=None, alias="LANGSMITH_API_KEY")
+    langsmith_project: str = Field(default="offercabin", alias="LANGSMITH_PROJECT")
+    langsmith_endpoint: Optional[str] = Field(default=None, alias="LANGSMITH_ENDPOINT")
+
     # ===== 计算属性 =====
 
     @computed_field  # type: ignore[misc]
@@ -96,6 +123,26 @@ class Settings(BaseSettings):
     def allow_credentials(self) -> bool:
         """是否允许携带凭证（通配符时必须关闭）"""
         return "*" not in self.cors_origin_list
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def admin_cors_origin_list(self) -> list[str]:
+        """管理后台 CORS 来源列表"""
+        return [o.strip() for o in self.admin_cors_origins.split(",") if o.strip()]
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def admin_allow_credentials(self) -> bool:
+        """管理后台是否允许携带凭证（通配符时必须关闭）"""
+        return "*" not in self.admin_cors_origin_list
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def admin_allow_ip_list(self) -> list[str]:
+        """管理端口 IP 白名单（已去重、去空）"""
+        if not self.admin_allow_ips:
+            return []
+        return list({ip.strip() for ip in self.admin_allow_ips.split(",") if ip.strip()})
 
     @computed_field  # type: ignore[misc]
     @property

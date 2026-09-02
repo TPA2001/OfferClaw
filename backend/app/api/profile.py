@@ -3,16 +3,22 @@
 提供用户画像的增删改查接口
 """
 
-from fastapi import APIRouter, Depends, UploadFile, File
+import json
+import logging
+from fastapi import APIRouter, Depends, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
+from app.core.llm import Message, get_gen_provider
 from app.core.response import ok, NotFoundError, BadRequestError
 from app.core.sanitizer import strip_sensitive_basic as _strip_sensitive_basic
 from app.models.profile import Profile
+from app.agent.memory.evolution import trigger_evolution
+
+logger = logging.getLogger("offercabin.api.profile")
 
 router = APIRouter(prefix="/api/v1/profiles", tags=["profiles"])
 
@@ -78,7 +84,29 @@ class ProfileUpdate(BaseModel):
     summary: Optional[Dict[str, Any]] = None
     certifications: Optional[List[Dict[str, Any]]] = None
     job_intent: Optional[Dict[str, Any]] = None
+    languages: Optional[List[Dict[str, Any]]] = None
+    awards: Optional[List[Dict[str, Any]]] = None
+    essays: Optional[List[Dict[str, Any]]] = None
+    publications: Optional[List[Dict[str, Any]]] = None
+    patents: Optional[List[Dict[str, Any]]] = None
     extra_fields: Optional[Dict[str, Any]] = None
+
+
+class FieldDescriptor(BaseModel):
+    """网页表单字段描述（来自浏览器插件）"""
+    field_index: Optional[int] = None    # 前端定位用，原样回传
+    type: str = "text"
+    name: str = ""
+    id: str = ""
+    label: str = ""
+    placeholder: str = ""
+    ariaLabel: str = ""
+    options: List[str] = []
+
+
+class MatchFieldsRequest(BaseModel):
+    """插件字段语义匹配请求（LLM 兜底）"""
+    fields: List[FieldDescriptor] = []
 
 
 @router.get("/")
@@ -106,6 +134,11 @@ async def get_profile(
             "summary": profile.summary or {},
             "certifications": profile.certifications or [],
             "job_intent": profile.job_intent or {},
+            "languages": profile.languages or [],
+            "awards": profile.awards or [],
+            "essays": profile.essays or [],
+            "publications": profile.publications or [],
+            "patents": profile.patents or [],
             "extra_fields": profile.extra_fields or {}
         },
         message="获取成功",
@@ -115,6 +148,7 @@ async def get_profile(
 @router.post("/")
 async def create_or_update_profile(
     profile_data: ProfileUpdate,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -133,6 +167,11 @@ async def create_or_update_profile(
             summary=profile_data.summary or {},
             certifications=profile_data.certifications or [],
             job_intent=profile_data.job_intent or {},
+            languages=profile_data.languages or [],
+            awards=profile_data.awards or [],
+            essays=profile_data.essays or [],
+            publications=profile_data.publications or [],
+            patents=profile_data.patents or [],
             extra_fields=profile_data.extra_fields or {}
         )
         db.add(profile)
@@ -154,11 +193,24 @@ async def create_or_update_profile(
             profile.certifications = profile_data.certifications
         if profile_data.job_intent is not None:
             profile.job_intent = profile_data.job_intent
+        if profile_data.languages is not None:
+            profile.languages = profile_data.languages
+        if profile_data.awards is not None:
+            profile.awards = profile_data.awards
+        if profile_data.essays is not None:
+            profile.essays = profile_data.essays
+        if profile_data.publications is not None:
+            profile.publications = profile_data.publications
+        if profile_data.patents is not None:
+            profile.patents = profile_data.patents
         if profile_data.extra_fields is not None:
             profile.extra_fields = profile_data.extra_fields
 
     db.commit()
     db.refresh(profile)
+
+    # 画像演化：异步（后台）检测变更并提炼长期记忆，不阻塞主流程
+    background_tasks.add_task(trigger_evolution, str(profile.user_id), "api")
 
     return ok(
         {"user_id": str(profile.user_id)},
@@ -211,6 +263,8 @@ async def get_profile_completion(
         "household_type", "height", "weight", "health",
         "wechat", "qq", "website", "github", "linkedin",
         "english_level", "driving_license", "job_status",
+        "english_name", "current_company", "current_title",
+        "years_of_experience", "highest_education", "available_date",
     ]
     basic_filled = sum(1 for k in basic_keys if b.get(k))
     sections["basic_info"] = {
@@ -263,12 +317,17 @@ async def get_profile_completion(
 
     # 自我评价
     s = profile.summary or {}
-    summary_keys = ["self_eval", "advantage", "career_goal"]
-    summary_filled = sum(1 for k in summary_keys if s.get(k))
+    # 兼容旧字段名：self_eval/advantage ↔ self_intro/strengths
+    summary_keys = ["self_intro", "strengths", "career_goal"]
+    summary_filled = sum(1 for k in summary_keys if s.get(k)
+                         or (k == "self_intro" and s.get("self_eval"))
+                         or (k == "strengths" and s.get("advantage")))
     sections["summary"] = {
         "total": len(summary_keys), "filled": summary_filled,
         "percentage": round(summary_filled / len(summary_keys) * 100) if summary_keys else 0,
-        "missing": [k for k in summary_keys if not s.get(k)],
+        "missing": [k for k in summary_keys if not (s.get(k)
+                    or (k == "self_intro" and s.get("self_eval"))
+                    or (k == "strengths" and s.get("advantage")))],
     }
     if summary_filled == 0:
         missing.append("summary")
@@ -281,9 +340,49 @@ async def get_profile_completion(
         "count": cert_count,
     }
 
+    # 语言能力
+    lang_count = len(profile.languages or [])
+    sections["languages"] = {
+        "total": 1, "filled": 1 if lang_count > 0 else 0,
+        "percentage": 100 if lang_count > 0 else 0,
+        "count": lang_count,
+    }
+
+    # 获奖/荣誉
+    award_count = len(profile.awards or [])
+    sections["awards"] = {
+        "total": 1, "filled": 1 if award_count > 0 else 0,
+        "percentage": 100 if award_count > 0 else 0,
+        "count": award_count,
+    }
+
+    # 开放题答案库
+    essay_count = len(profile.essays or [])
+    sections["essays"] = {
+        "total": 1, "filled": 1 if essay_count > 0 else 0,
+        "percentage": 100 if essay_count > 0 else 0,
+        "count": essay_count,
+    }
+
+    # 论文/发表物
+    pub_count = len(profile.publications or [])
+    sections["publications"] = {
+        "total": 1, "filled": 1 if pub_count > 0 else 0,
+        "percentage": 100 if pub_count > 0 else 0,
+        "count": pub_count,
+    }
+
+    # 专利
+    pat_count = len(profile.patents or [])
+    sections["patents"] = {
+        "total": 1, "filled": 1 if pat_count > 0 else 0,
+        "percentage": 100 if pat_count > 0 else 0,
+        "count": pat_count,
+    }
+
     # 求职意向
     j = profile.job_intent or {}
-    intent_keys = ["role", "cities", "salary_min", "salary_max"]
+    intent_keys = ["role", "cities", "salary_min", "salary_max", "target_positions", "target_cities"]
     intent_filled = sum(1 for k in intent_keys if j.get(k))
     sections["job_intent"] = {
         "total": len(intent_keys), "filled": intent_filled,
@@ -295,8 +394,9 @@ async def get_profile_completion(
 
     # 加权总完成度（基本信息权重最高）
     weights = {
-        "basic_info": 25, "education": 15, "experience": 20, "skills": 10,
-        "projects": 10, "summary": 5, "certifications": 5, "job_intent": 10,
+        "basic_info": 16, "education": 12, "experience": 16, "skills": 8,
+        "projects": 10, "summary": 5, "certifications": 4, "languages": 4,
+        "awards": 5, "essays": 4, "publications": 4, "patents": 3, "job_intent": 9,
     }
     total_pct = sum(sections[k]["percentage"] * weights[k] / 100 for k in weights)
     total_pct = round(total_pct)
@@ -330,6 +430,7 @@ async def get_profile_flatten(
     # 基本信息
     b = profile.basic_info or {}
     flat["name"] = b.get("name", "")
+    flat["english_name"] = b.get("english_name", "")
     flat["phone"] = b.get("phone", "")
     flat["email"] = b.get("email", "")
     flat["gender"] = b.get("gender", "")
@@ -352,14 +453,30 @@ async def get_profile_flatten(
     flat["english_level"] = b.get("english_level", "")
     flat["driving_license"] = b.get("driving_license", "")
     flat["job_status"] = b.get("job_status", "")
+    flat["current_company"] = b.get("current_company", "")
+    flat["current_title"] = b.get("current_title", "")
+    flat["years_of_experience"] = b.get("years_of_experience", "")
+    flat["highest_education"] = b.get("highest_education", "")
+    flat["available_date"] = b.get("available_date", "")
 
     # 求职意向
     j = profile.job_intent or {}
-    flat["intent_role"] = j.get("role", "")
-    flat["intent_cities"] = j.get("cities", [])
-    flat["intent_salary_min"] = j.get("salary_min", "")
+    flat["intent_role"] = j.get("role", "") or (j.get("target_positions") or [""])[0]
+    flat["intent_cities"] = j.get("cities", []) or j.get("target_cities", [])
+    flat["intent_salary_min"] = j.get("salary_min", "") or j.get("expected_salary", "")
     flat["intent_salary_max"] = j.get("salary_max", "")
-    flat["intent_job_type"] = j.get("job_type", "")
+    flat["intent_job_type"] = j.get("job_type", "") or j.get("work_type", "")
+    flat["target_positions"] = j.get("target_positions", [])
+    flat["target_cities"] = j.get("target_cities", [])
+    flat["expected_salary"] = j.get("expected_salary", "")
+    flat["work_type"] = j.get("work_type", "")
+    flat["availability"] = j.get("availability", "") or j.get("notice_period", "")
+    flat["expected_industry"] = j.get("target_industry", "") or j.get("expected_industry", "")
+    flat["target_level"] = j.get("target_level", "")
+    flat["remote_preference"] = j.get("remote_preference", "")
+    flat["willing_to_relocate"] = j.get("willing_to_relocate", "")
+    flat["willing_to_travel"] = j.get("willing_to_travel", "")
+    flat["current_salary"] = j.get("current_salary", "")
 
     # 教育（取最近一条 / 最高学历）
     edus = profile.education or []
@@ -432,15 +549,48 @@ async def get_profile_flatten(
             flat[k] = ""
     flat["all_projects"] = "、".join(filter(None, [p.get("name", "") for p in projs]))
 
-    # 自我评价
+    # 自我评价（兼容旧字段名）
     s = profile.summary or {}
-    flat["self_eval"] = s.get("self_eval", "")
-    flat["advantage"] = s.get("advantage", "")
+    flat["self_eval"] = s.get("self_intro", "") or s.get("self_eval", "")
+    flat["advantage"] = s.get("strengths", "") or s.get("advantage", "")
+    flat["self_intro"] = flat["self_eval"]
+    flat["strengths"] = flat["advantage"]
     flat["career_goal"] = s.get("career_goal", "")
 
     # 证书
     certs = profile.certifications or []
     flat["all_certs"] = "、".join(filter(None, [c.get("name", "") for c in certs]))
+
+    # 语言能力
+    langs = profile.languages or []
+    flat["languages"] = langs
+    flat["languages_str"] = "、".join(
+        filter(None, [
+            (l.get("name", "") + (" " + l.get("proficiency", ""))).strip() for l in langs
+        ])
+    )
+
+    # 获奖/荣誉
+    awards = profile.awards or []
+    flat["awards"] = awards
+    flat["all_awards"] = "、".join(filter(None, [a.get("name", "") for a in awards]))
+
+    # 开放题答案库（含多版本标签）
+    essays = profile.essays or []
+    flat["essays"] = essays
+    flat["essay_count"] = len(essays)
+
+    # 论文/发表物
+    pubs = profile.publications or []
+    flat["publications"] = pubs
+    flat["all_publications"] = "、".join(filter(None, [p.get("title", "") for p in pubs]))
+    flat["publication_count"] = len(pubs)
+
+    # 专利
+    pats = profile.patents or []
+    flat["patents"] = pats
+    flat["all_patents"] = "、".join(filter(None, [p.get("name", "") for p in pats]))
+    flat["patent_count"] = len(pats)
 
     # 自定义字段
     extra = profile.extra_fields or {}
@@ -448,6 +598,250 @@ async def get_profile_flatten(
         flat[f"extra_{k}"] = v
 
     return ok(flat, message="获取成功")
+
+
+@router.post("/match-fields")
+async def match_fields(
+    req: MatchFieldsRequest,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    插件字段语义匹配（LLM 兜底）
+
+    浏览器插件规则匹配未命中的字段，提交到这里用 LLM 做语义匹配，
+    返回 [{field_index, key, value, confidence, reason}]。
+    key 对应插件 lib/profile.js 的标准字段 key（如 name / gender / school …）。
+
+    未配置 LLM 时返回空 mappings（插件自然回退到本地规则匹配，不影响填写）。
+    """
+    if not req.fields:
+        return ok({"mappings": [], "source": "empty"})
+
+    profile = db.query(Profile).filter(Profile.user_id == user_id).first()
+    if not profile:
+        return ok({"mappings": [], "source": "no_profile"})
+
+    flat = _build_match_profile(profile)
+
+    try:
+        provider = get_gen_provider()
+        if getattr(provider, "name", "") == "mock":
+            return ok({"mappings": [], "source": "mock"})
+    except Exception as exc:  # 未配置 LLM 等任何异常都优雅降级
+        logger.info(f"match-fields LLM 不可用，跳过兜底: {exc}")
+        return ok({"mappings": [], "source": "unavailable"})
+
+    fields_payload = []
+    for i, f in enumerate(req.fields):
+        ctx = {
+            "index": i,
+            "label": f.label,
+            "placeholder": f.placeholder,
+            "aria_label": f.ariaLabel,
+            "name": f.name,
+            "id": f.id,
+            "type": f.type,
+            "options": f.options or [],
+        }
+        # 去掉空上下文
+        ctx = {k: v for k, v in ctx.items() if v}
+        fields_payload.append(ctx)
+
+    system = (
+        "你是网申表单自动填写助手。给定网页表单字段列表和用户简历画像字典，"
+        "判断每个字段应该用画像中的哪个 key 的值来填。"
+        "画像 key 只能从提供的画像字典的 key 中选择；"
+        "只有置信度较高时才返回映射，否则 confidence 低于 0.6 或无法判断就返回 confidence 0 并 reason 说明。"
+        '只输出 JSON 数组，不要输出任何解释或 markdown：'
+        '[{"index": 0, "key": "name", "confidence": 0.95, "reason": "label 为姓名"}]'
+    )
+    user = (
+        "画像字段（key: 值）：\n"
+        + json.dumps(flat, ensure_ascii=False, indent=1)
+        + "\n\n表单字段：\n"
+        + json.dumps(fields_payload, ensure_ascii=False, indent=1)
+        + "\n\n请返回 JSON 数组。"
+    )
+
+    try:
+        resp = await provider.chat(
+            [Message(role="system", content=system), Message(role="user", content=user)],
+            temperature=0.1,
+            max_tokens=1200,
+        )
+        raw = (resp.content or "").strip()
+        arr = _parse_json_array(raw)
+    except Exception as exc:  # LLM 调用失败不阻断
+        logger.warning(f"match-fields LLM 调用失败: {exc}")
+        return ok({"mappings": [], "source": "error"})
+
+    mappings = []
+    for item in arr:
+        if not isinstance(item, dict):
+            continue
+        idx = item.get("index")
+        key = str(item.get("key", "")).strip()
+        if not isinstance(idx, int) or idx < 0 or idx >= len(req.fields):
+            continue
+        if key not in flat:
+            continue
+        confidence = float(item.get("confidence", 0) or 0)
+        if confidence < 0.6:
+            continue
+        mappings.append({
+            "fieldIndex": idx,
+            "key": key,
+            "value": str(flat.get(key, "") or ""),
+            "confidence": round(confidence, 2),
+            "reason": str(item.get("reason", "") or ""),
+        })
+
+    return ok({"mappings": mappings, "source": "llm"})
+
+
+def _build_match_profile(profile: Profile) -> Dict[str, Any]:
+    """把画像压成非空扁平字典，供 match-fields 的 LLM 提示使用"""
+    flat: Dict[str, Any] = {}
+    b = profile.basic_info or {}
+
+    text_keys = [
+        "name", "english_name", "phone", "email", "gender", "birth", "age",
+        "location", "ethnicity", "political_status", "marital_status",
+        "native_place", "household_type", "household_location", "height",
+        "weight", "wechat", "qq", "website", "github", "linkedin",
+        "job_status", "current_company", "current_title", "years_of_experience",
+        "highest_education", "available_date",
+    ]
+    for k in text_keys:
+        v = b.get(k)
+        if v:
+            flat[k] = v
+
+    # 教育（最近一条 + 全部汇总）
+    edus = profile.education or []
+    if edus:
+        latest = edus[-1]
+        for k in ("school", "major", "degree", "school_type", "edu_form", "gpa", "ranking"):
+            if latest.get(k):
+                flat[k] = latest.get(k)
+        if latest.get("start_date"):
+            flat["edu_start"] = latest["start_date"]
+        if latest.get("end_date"):
+            flat["edu_end"] = latest["end_date"]
+    flat["education_summary"] = "；".join(filter(None, [
+        " / ".join(filter(None, [e.get("school", ""), e.get("major", ""), e.get("degree", "")]))
+        for e in edus
+    ]))
+
+    # 工作（最近一条 + 全部汇总）
+    exps = profile.experience or []
+    if exps:
+        latest = exps[-1]
+        if latest.get("company"):
+            flat.setdefault("current_company", latest["company"])
+        if latest.get("title"):
+            flat.setdefault("current_title", latest["title"])
+    flat["experience_summary"] = "；".join(filter(None, [
+        " / ".join(filter(None, [e.get("company", ""), e.get("title", ""), e.get("start_date", ""), e.get("end_date", "")]))
+        for e in exps
+    ]))
+
+    # 项目
+    projs = profile.projects or []
+    flat["project_summary"] = "；".join(filter(None, [
+        " / ".join(filter(None, [p.get("name", ""), p.get("role", ""), p.get("description", "")]))
+        for p in projs
+    ]))
+
+    # 技能
+    skills = profile.skills or []
+    skill_names = [s.get("name") if isinstance(s, dict) else str(s) for s in skills]
+    if skill_names:
+        flat["skills_str"] = "、".join(filter(None, skill_names))
+
+    # 自我评价
+    s = profile.summary or {}
+    if s.get("self_intro") or s.get("self_eval"):
+        flat["self_intro"] = s.get("self_intro") or s.get("self_eval")
+    if s.get("strengths") or s.get("advantage"):
+        flat["strengths"] = s.get("strengths") or s.get("advantage")
+    if s.get("career_goal"):
+        flat["career_goal"] = s["career_goal"]
+
+    # 证书 / 语言 / 获奖 / 论文 / 专利
+    certs = profile.certifications or []
+    if certs:
+        flat["certifications_str"] = "、".join(filter(None, [c.get("name", "") for c in certs]))
+    langs = profile.languages or []
+    if langs:
+        flat["languages_str"] = "、".join(filter(None, [l.get("name", "") for l in langs]))
+    awards = profile.awards or []
+    if awards:
+        flat["awards_str"] = "、".join(filter(None, [a.get("name", "") for a in awards]))
+    pubs = profile.publications or []
+    if pubs:
+        flat["publications_str"] = "、".join(filter(None, [p.get("title", "") for p in pubs]))
+    pats = profile.patents or []
+    if pats:
+        flat["patents_str"] = "、".join(filter(None, [p.get("name", "") for p in pats]))
+
+    # 求职意向
+    j = profile.job_intent or {}
+    if j.get("role"):
+        flat["intent_role"] = j["role"]
+    elif j.get("target_positions"):
+        flat["intent_role"] = j["target_positions"][0]
+    cities = j.get("cities") or j.get("target_cities") or []
+    if cities:
+        flat["intent_city"] = "、".join(cities)
+    if j.get("expected_salary"):
+        flat["intent_salary"] = j["expected_salary"]
+    if j.get("salary_min"):
+        flat["intent_salary"] = j["salary_min"]
+    if j.get("job_type") or j.get("work_type"):
+        flat["job_type"] = j.get("job_type") or j.get("work_type")
+    if j.get("availability") or j.get("notice_period"):
+        flat["availability"] = j.get("availability") or j.get("notice_period")
+    if j.get("target_industry"):
+        flat["target_industry"] = j["target_industry"]
+
+    # 紧急联系人（若本地补充了 non-sensitive 描述）
+    extra = profile.extra_fields or {}
+    if extra.get("emergency_contact"):
+        flat["emergency_contact"] = extra["emergency_contact"]
+    if extra.get("emergency_phone"):
+        flat["emergency_phone"] = extra["emergency_phone"]
+
+    return flat
+
+
+def _parse_json_array(raw: str) -> List[Any]:
+    """从 LLM 输出中解析 JSON 数组（容忍 ```json 代码块 / 前后缀文字）"""
+    if not raw:
+        return []
+    text = raw.strip()
+    # 去掉 markdown 代码块围栏
+    if text.startswith("```"):
+        lines = text.splitlines()
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        text = "\n".join(lines).strip()
+    # 尝试直接解析
+    try:
+        data = json.loads(text)
+        return data if isinstance(data, list) else []
+    except Exception:
+        pass
+    # 抽取第一个 [ ... ] 片段
+    start = text.find("[")
+    end = text.rfind("]")
+    if start >= 0 and end > start:
+        try:
+            data = json.loads(text[start:end + 1])
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+    return []
 
 
 @router.post("/import-pdf")

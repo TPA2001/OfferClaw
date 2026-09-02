@@ -16,7 +16,7 @@ LLM 流式事件适配：
 
 import uuid
 import logging
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Callable, Optional
 
 from app.core.llm import LLMProvider, Message, ToolCall
 from app.core.llm.events import (
@@ -34,7 +34,7 @@ from .events import (
     DoneEvent, ConfirmRequiredEvent, ErrorEvent, NavigateEvent,
 )
 
-logger = logging.getLogger("offerclaw.agent.loop")
+logger = logging.getLogger("offercabin.agent.loop")
 
 
 class AgentLoop:
@@ -48,6 +48,7 @@ class AgentLoop:
         state: AgentState,
         max_steps: int = 10,
         temperature: float = 0.7,
+        memory_loader: Optional[Callable[[str], str]] = None,
     ):
         self.llm = llm
         self.registry = registry
@@ -55,6 +56,8 @@ class AgentLoop:
         self.state = state
         self.max_steps = max_steps
         self.temperature = temperature
+        # 长期记忆加载器：user_input -> 记忆段落文本；None 则不注入（向后兼容）
+        self.memory_loader = memory_loader
 
         # 确保 system prompt 在消息历史开头
         if not self.state.messages or self.state.messages[0].role != "system":
@@ -63,6 +66,16 @@ class AgentLoop:
     async def run_stream(self, user_input: str) -> AsyncIterator[AgentEvent]:
         """流式运行 Agent"""
         self.state.add_user(user_input)
+
+        # 注入查询相关的长期记忆到 System Prompt 首条消息
+        if self.memory_loader is not None:
+            try:
+                memory_block = self.memory_loader(user_input) or ""
+                from app.agent.memory.retrieval import inject_into_system_prompt
+                if self.state.messages:
+                    self.state.messages[0].content = inject_into_system_prompt(self.system_prompt, memory_block)
+            except Exception:
+                logger.debug("长期记忆注入失败，忽略", exc_info=True)
 
         try:
             async for event in self._loop():

@@ -7,7 +7,7 @@
 (function (global) {
     'use strict';
 
-    const API = global.OfferClawAPI;
+    const API = global.OfferCabinAPI;
     const esc = API.esc.bind(API);
 
     const CSS_ID = 'jobshares-styles';
@@ -222,8 +222,8 @@
             ? `<div class="js-row-positions"><span class="js-row-tag-portal">官网招聘入口 · 点击查看全部在招岗位</span></div>`
             : `<div class="js-row-positions"><div class="js-row-position">${esc(pos)}</div></div>`;
         const d = j.deadline ? deadlineInfo(j.deadline) : null;
-        const sharer = j.author === 'OfferClaw'
-            ? 'OfferClaw 官方'
+        const sharer = j.author === 'OfferCabin'
+            ? 'OfferCabin 官方'
             : (j.author || '匿名') + ' 分享';
         return `
 <div class="js-row" data-id="${j.id}" style="animation-delay:${Math.min(idx * 35, 280)}ms">
@@ -277,7 +277,7 @@
             <span class="js-row-badge" style="background:${cat.color}18;color:${cat.color}">${esc(cat.label)}</span>
             ${esc(j.company)}
         </div>
-        <div class="js-modal-sub">${esc(pos)} · 由 ${esc(j.author === 'OfferClaw' ? 'OfferClaw 官方' : (j.author || '匿名') + ' 分享')}</div>
+        <div class="js-modal-sub">${esc(pos)} · 由 ${esc(j.author === 'OfferCabin' ? 'OfferCabin 官方' : (j.author || '匿名') + ' 分享')}</div>
         ${j.referral_code ? `
         <div class="js-referral-card">
             <div>
@@ -390,7 +390,7 @@
         const row = t.closest('.js-row');
 
         if (act === 'open-composer') {
-            state.form = { company: '', position: '', apply_url: '', category: 'internet', city: '', salary: '', deadline: '', description: '', editId: null };
+            state.form = { company: '', position: '', apply_url: '', category: 'internet', city: '', salary: '', deadline: '', referral_code: '', description: '', editId: null };
             state.composerOpen = true;
             render();
             return;
@@ -532,7 +532,10 @@
                 loadList();
             }
         } catch (err) {
-            API.toast(err.message || '提交失败', 'error');
+            const msg = (err && err.name === 'AbortError')
+                ? '请求超时，请检查网络后重试'
+                : (err.message || '提交失败');
+            API.toast(msg, 'error');
         } finally {
             state.submitting = false;
             render();
@@ -621,17 +624,6 @@
         }
     }
 
-    /** 截止信息：{ label, days, expired }，本地时区精确计算 */
-    function deadlineInfo(iso) {
-        const t = new Date(iso).getTime();
-        if (isNaN(t)) return { label: '', days: null, expired: false };
-        const days = Math.ceil((t - Date.now()) / 86400000);
-        if (days < 0) return { label: '已截止', days, expired: true };
-        if (days === 0) return { label: '今天截止', days, expired: false };
-        if (days <= 7) return { label: '剩 ' + days + ' 天', days, expired: false };
-        return { label: '截止 ' + new Date(iso).toLocaleDateString('zh-CN'), days, expired: false };
-    }
-
     function timeAgo(iso) {
         if (!iso) return '';
         const t = new Date(iso).getTime();
@@ -665,6 +657,6 @@
         root = null;
     }
 
-    global.OfferClawViews = global.OfferClawViews || {};
-    global.OfferClawViews.jobShares = { mount, cleanup, title: '投递分享' };
+    global.OfferCabinViews = global.OfferCabinViews || {};
+    global.OfferCabinViews.jobShares = { mount, cleanup, title: '投递分享' };
 })(window);

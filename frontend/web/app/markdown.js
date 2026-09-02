@@ -1,5 +1,5 @@
 /**
- * OfferClaw Markdown 渲染器
+ * OfferCabin Markdown 渲染器
  * 从 agent.html 提取的轻量 MD 渲染（代码块优先、HTML 转义、标题/列表/表格/段落）
  */
 (function (global) {
@@ -82,13 +82,14 @@
         md = md.replace(/\u0000CODE(\d+)\u0000/g, function (_, idx) {
             const block = codeBlocks[parseInt(idx)];
             const langLabel = block.lang ? '<span class="md-code-lang">' + block.lang + '</span>' : '';
-            return '<div class="md-code-block">' + langLabel +
-                '<pre><code>' + block.code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') +
-                '</code></pre></div>';
+            const code = block.code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return '<div class="md-code-block"><div class="md-code-head">' + langLabel +
+                '<button class="md-copy-btn" type="button" data-code="' + code.replace(/"/g, '&quot;') + '">复制</button></div>' +
+                '<pre><code>' + code + '</code></pre></div>';
         });
 
         return md;
     }
 
-    global.OfferClawMarkdown = { render };
+    global.OfferCabinMarkdown = { render };
 })(window);

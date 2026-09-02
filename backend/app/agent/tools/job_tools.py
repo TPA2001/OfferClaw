@@ -1,7 +1,7 @@
 """
 求职内容生成工具（投递前准备能力）
 
-吸取 ai-job-search 的优势，补齐 OfferClaw 在"投递前准备"上的短板：
+吸取 ai-job-search 的优势，补齐 OfferCabin 在"投递前准备"上的短板：
 - JD 抓取与结构化
 - 岗位匹配评分
 - 简历生成
@@ -23,7 +23,7 @@ from app.models.profile import Profile
 from app.services.resume_service import ResumeService
 from ..runtime.base_tool import BaseTool, ToolResult
 
-logger = logging.getLogger("offerclaw.agent.tools.job")
+logger = logging.getLogger("offercabin.agent.tools.job")
 
 
 def _load_profile(db: Session, user_id: str) -> Optional[dict]:

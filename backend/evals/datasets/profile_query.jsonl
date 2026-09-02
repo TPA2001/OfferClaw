@@ -1,0 +1,17 @@
+# 画像查询黄金数据集（15 条）
+# expected: 该输入应首选的工具名（必须存在于 Agent 注册表中）
+{"id":"prof_01","category":"画像查询","input":"看看我现在的画像信息都有什么","expected":"get_profile","note":"查看画像"}
+{"id":"prof_02","category":"画像查询","input":"我的个人资料里写的是什么？给我看下","expected":"get_profile","note":"查看画像"}
+{"id":"prof_03","category":"画像查询","input":"帮我把我的目标城市改成杭州","expected":"update_profile","note":"更新画像字段"}
+{"id":"prof_04","category":"画像查询","input":"我的期望薪资我想更新一下，改成25k，帮我改下画像","expected":"update_profile","note":"更新期望薪资"}
+{"id":"prof_05","category":"画像查询","input":"我最近偏好远程工作，帮我记录一下这个偏好","expected":"update_user_preference","note":"主动记忆用户偏好"}
+{"id":"prof_06","category":"画像查询","input":"你要记住我以后找工作都优先考虑人工智能方向","expected":"update_user_preference","note":"长期记忆写入"}
+{"id":"prof_07","category":"画像查询","input":"告诉我我简历里写的项目经历有哪些","expected":"get_profile","note":"查看简历项目"}
+{"id":"prof_08","category":"画像查询","input":"我的工作年限画像里现在是最新的吗？帮我确认下","expected":"get_profile","note":"确认画像状态"}
+{"id":"prof_09","category":"画像查询","input":"帮我把我的技能栈里加上 go 语言","expected":"update_profile","note":"更新技能栈"}
+{"id":"prof_10","category":"画像查询","input":"你能记住吗？我面试的时候最紧张的其实是系统设计题","expected":"update_user_preference","note":"记忆用户性格弱点"}
+{"id":"prof_11","category":"画像查询","input":"我要投的岗位是偏校招的应届生，帮我把画像里的求职方向改成校招","expected":"update_profile","note":"更新求职方向"}
+{"id":"prof_12","category":"画像查询","input":"看看我的个人信息里学历写的是本科还是硕士","expected":"get_profile","note":"查询学历字段"}
+{"id":"prof_13","category":"画像查询","input":"记得我以后面技术岗比较多，帮我记住这个偏好","expected":"update_user_preference","note":"记忆岗位偏好"}
+{"id":"prof_14","category":"画像查询","input":"我的画像缺了哪些关键信息？帮我检查一下方便完善","expected":"get_profile","note":"检查画像完整性"}
+{"id":"prof_15","category":"画像查询","input":"把我在BOSS上的自我评价更新到画像里，内容是我熟悉分布式系统","expected":"update_profile","note":"更新自我评价"}

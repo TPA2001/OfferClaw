@@ -23,7 +23,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.response import APIError
 
-logger = logging.getLogger("offerclaw.auth")
+logger = logging.getLogger("offercabin.auth")
 
 # open 模式固定用户 ID（历史本地数据归属此用户）
 LOCAL_USER_ID = "local-user"
@@ -48,6 +48,41 @@ def valid_email(email: str) -> bool:
 def valid_password(password: str) -> bool:
     """密码至少 8 位，不允许为空或含空白字符"""
     return bool(password) and len(password) >= 8 and len(password) <= 128 and not re.search(r"\s", password)
+
+
+# 常见弱口令黑名单（仅兜底，真正强度由长度+字符多样性决定）
+_WEAK_PASSWORDS = {
+    "12345678", "123456789", "1234567890", "11111111", "00000000",
+    "password", "password1", "password12", "qwerty123", "abc12345",
+    "iloveyou", "admin123", "letmein1", "welcome1", "passw0rd",
+}
+
+
+def validate_password_strength(password: str) -> str | None:
+    """校验密码强度，返回不通过原因（None 表示通过）。
+
+    规则（在 valid_password 的基础上加强）：
+    - 长度 8-128，不含空白
+    - 含字母 + 数字，或长度 ≥ 12（长口令放宽字符种类要求）
+    - 不在常见弱口令黑名单
+    """
+    if not valid_password(password):
+        if not password:
+            return "密码不能为空"
+        if len(password) < 8:
+            return "密码至少 8 位"
+        if len(password) > 128:
+            return "密码过长（上限 128 位）"
+        if re.search(r"\s", password):
+            return "密码不能包含空白字符"
+        return "密码不合法"
+    if password.lower() in _WEAK_PASSWORDS:
+        return "密码过于常见，请更换更强的口令"
+    has_letter = bool(re.search(r"[a-zA-Z]", password))
+    has_digit = bool(re.search(r"\d", password))
+    if not (has_letter and has_digit) and len(password) < 12:
+        return "密码需包含字母和数字，或长度不少于 12 位"
+    return None
 
 
 # ============ 密码哈希（PBKDF2-SHA256，标准库实现） ============
@@ -77,10 +112,17 @@ def verify_password(password: str, stored: str) -> bool:
 
 # ============ JWT 签发与校验 ============
 
-def create_access_token(user_id: str, token_version: int) -> str:
-    """签发访问令牌"""
+def create_access_token(
+    user_id: str, token_version: int, *, ttl_hours: int | None = None
+) -> str:
+    """签发访问令牌。
+
+    ttl_hours=None 时沿用通用令牌有效期（settings.auth_token_ttl_hours）；
+    管理后台登录传入更短的 admin_token_ttl_hours，降低令牌泄露后的暴露窗口。
+    """
     now = int(time.time())
-    ttl = settings.auth_token_ttl_hours * 3600
+    hours = settings.auth_token_ttl_hours if ttl_hours is None else ttl_hours
+    ttl = hours * 3600
     payload = {
         "sub": user_id,
         "ver": token_version,
@@ -94,14 +136,25 @@ def _auth_error(code: int, message: str) -> APIError:
     return APIError(code, message, headers={"WWW-Authenticate": "Bearer"})
 
 
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> str:
-    """FastAPI 依赖：从 Authorization: Bearer <jwt> 解析当前用户 ID
+def _resolve_user(request: Request, db: Session):
+    """从 Authorization: Bearer <jwt> 解析并校验当前用户对象。
 
-    - AUTH_MODE=open：本地开发模式，固定返回 LOCAL_USER_ID
-    - 其余模式：校验 JWT 签名/有效期/token_version/账号状态
+    - AUTH_MODE=open：本地开发模式，返回与 LOCAL_USER_ID 对应的（自动创建的）本地用户
+    - 其余模式：校验 JWT 签名/有效期/token_version/账号状态后返回 User
+    抛出 APIError(401xx)，供 get_current_user / get_current_admin 复用。
     """
+    from app.models.user import User
+
     if settings.auth_mode == "open":
-        return LOCAL_USER_ID
+        # 本地模式：不落库、不校验令牌，返回一个轻量 User 供取 id/role。
+        # 管理后台启动硬守卫会拒绝 open 模式，故此分支仅主站 get_current_user 触达，
+        # .role 不会被用于鉴权决策。
+        existing = db.get(User, LOCAL_USER_ID)
+        if existing is not None:
+            return existing
+        return User(
+            id=LOCAL_USER_ID, username="local", email="local@local", role="user"
+        )
 
     auth_header = request.headers.get("authorization", "")
     if not auth_header.lower().startswith("bearer "):
@@ -119,8 +172,6 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> str:
     if not user_id:
         raise _auth_error(40100, "访问令牌无效")
 
-    # 延迟导入避免循环依赖
-    from app.models.user import User
     user = db.get(User, user_id)
     if user is None:
         raise _auth_error(40100, "账号不存在")
@@ -129,6 +180,23 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> str:
     if user.token_version != payload.get("ver"):
         raise _auth_error(40103, "密码已变更，请重新登录")
 
+    return user
+
+
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> str:
+    """FastAPI 依赖：返回当前用户 ID（保持 str 返回，兼容既有调用方）"""
+    return _resolve_user(request, db).id
+
+
+def get_current_admin(request: Request, db: Session = Depends(get_db)) -> str:
+    """FastAPI 依赖：仅管理员可通过，返回当前管理员用户 ID。
+
+    在令牌有效性之上叠加 role 校验：非 admin 一律 403，
+    即便普通用户的合法令牌也无法触达管理端点。
+    """
+    user = _resolve_user(request, db)
+    if user.role != "admin":
+        raise APIError(40300, "需要管理员权限")
     return user.id
 
 

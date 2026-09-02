@@ -41,5 +41,9 @@ class User(Base):
     # 账号可用开关（封禁/停用时置 False）
     is_active = Column(Boolean, nullable=False, default=True)
 
+    # 角色：user=普通用户 / admin=管理员
+    # server_default 确保既有行在 auto_migrate ADD COLUMN 时回填 "user"
+    role = Column(String(20), nullable=False, default="user", server_default="user")
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -377,7 +377,7 @@ async def export_csv(
         ])
 
     content = output.getvalue().encode("utf-8")
-    filename = f"offerclaw_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    filename = f"offercabin_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     return StreamingResponse(
         io.BytesIO(content),
         media_type="text/csv; charset=utf-8",

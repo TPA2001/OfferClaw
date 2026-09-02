@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.core.llm import ToolSchema
 
-logger = logging.getLogger("offerclaw.agent.tool")
+logger = logging.getLogger("offercabin.agent.tool")
 
 
 class ToolResult(BaseModel):

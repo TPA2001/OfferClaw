@@ -23,7 +23,7 @@ from sqlalchemy.sql import func
 from app.core.database import Base
 from app.core.llm import LLMProvider, LLMResponse, Message
 
-logger = logging.getLogger("offerclaw.features.journal")
+logger = logging.getLogger("offercabin.features.journal")
 
 
 class JournalEntry(Base):

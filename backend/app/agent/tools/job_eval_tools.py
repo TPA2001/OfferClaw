@@ -20,7 +20,7 @@ from app.core.llm import LLMProvider
 from app.services.resume_service import ResumeService
 from ..runtime.base_tool import BaseTool, ToolResult
 
-logger = logging.getLogger("offerclaw.agent.tools.job_eval")
+logger = logging.getLogger("offercabin.agent.tools.job_eval")
 
 
 def _jd_to_text(data: dict) -> str:

@@ -28,7 +28,7 @@ from .errors import (
     is_retryable, RETRYABLE_ERRORS,
 )
 
-logger = logging.getLogger("offerclaw.llm.retry")
+logger = logging.getLogger("offercabin.llm.retry")
 
 
 class RetriableLLMProvider(LLMProvider):

@@ -8,7 +8,7 @@ from typing import Optional
 from .base_tool import BaseTool
 from app.core.llm import ToolSchema
 
-logger = logging.getLogger("offerclaw.agent.registry")
+logger = logging.getLogger("offercabin.agent.registry")
 
 
 class ToolRegistry:

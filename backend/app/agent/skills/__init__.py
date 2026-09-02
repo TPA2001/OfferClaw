@@ -13,9 +13,9 @@ Agent Skills 模块
 - 技能 = 领域知识 + 行为指令 + 工具集合
 - SKILL.md 是声明式配置，无需写代码即可新增技能
 - 技能可热加载，运行时按用户意图动态激活
-- 与 OfferClaw 独有能力结合：Boss 搜索、智能填表、岗位真实性判断
+- 与 OfferCabin 独有能力结合：Boss 搜索、智能填表、岗位真实性判断
 
-OfferClaw 独有 skills（CareerDesk 没有）：
+OfferCabin 独有 skills（CareerDesk 没有）：
 - job_verify: 岗位真实性判断
 
 借鉴 CareerDesk 新增的 skills：

@@ -1,7 +1,7 @@
 """
 求职主 Agent
 
-OfferClaw 的核心 Agent，集成：
+OfferCabin 的核心 Agent，集成：
 - 投递管理（CRUD + 状态流转）
 - 岗位分析（真实性判断 + 匹配度评分）
 - 内容生成（简历/求职信/面试准备）
@@ -34,18 +34,20 @@ from app.agent.tools import (
     ResearchCompanyTool,
     GenerateInterviewQuestionsTool, EvaluateInterviewAnswerTool,
     ReviewInterviewTool, CreateJournalEntryTool, GenerateWeeklySummaryTool,
-    # 视图导航（OfferClaw 独有）
+    # 视图导航（OfferCabin 独有）
     NavigateViewTool,
 )
+# 长期记忆工具：从子模块直接导入，避免在 Agent 包引导期触发循环依赖
+from app.agent.tools.memory_tools import UpdateUserPreferenceTool
 
 
-JOB_AGENT_PROMPT = """你是 OfferClaw 求职助手，帮助用户管理校招/社招投递全流程。你是一位经验丰富的求职教练，既懂校招节奏，也懂社招博弈，覆盖从"投递前准备"到"投递后管理"的全流程。
+JOB_AGENT_PROMPT = """你是 OfferCabin 求职助手，帮助用户管理校招/社招投递全流程。你是一位经验丰富的求职教练，既懂校招节奏，也懂社招博弈，覆盖从"投递前准备"到"投递后管理"的全流程。
 
 ## 你的能力
 
 ### 投递前准备（核心能力）
 - **JD 分析**：从 URL 抓取岗位 JD，结构化提取要求/职责/技能（`extract_job_description`）
-- **真实性判断**（OfferClaw 独有）：识别中介/培训贷/虚假薪资/皮包公司/收费骗局等风险（`verify_job_authenticity`）
+- **真实性判断**（OfferCabin 独有）：识别中介/培训贷/虚假薪资/皮包公司/收费骗局等风险（`verify_job_authenticity`）
   - 用户说"这个岗位靠谱吗"、"是不是中介"、"帮我看看这家公司"时调用
   - 投递前的安全检查，强烈建议在评估任何岗位时优先执行
 - **匹配评分**：评估用户画像与 JD 的匹配度，5 维度评分，硬性不符一票否决（`score_job_match`）
@@ -74,7 +76,7 @@ JOB_AGENT_PROMPT = """你是 OfferClaw 求职助手，帮助用户管理校招/�
 - **周报生成**：自动汇总本周投递/面试/情绪趋势（`generate_weekly_summary`）
 - **情绪支持**：用户表达焦虑/压力时，先共情后建议，用数据化解恐慌
 
-### 视图导航（OfferClaw 独有）
+### 视图导航（OfferCabin 独有）
 - **引导跳转**：当用户的意图更适合在专门页面完成时，调用 `navigate_view` 引导前端跳转
   - 用户说"我想编辑简历" → 跳转到 `/profile`
   - 用户说"看下我的投递看板" → 跳转到 `/kanban`
@@ -155,19 +157,15 @@ def build_system_prompt(user_input: str | None = None) -> str:
         return base
 
 
-def create_job_agent(
-    llm: LLMProvider,
-    db: Session,
-    user_id: str,
-    session_id: str | None = None,
-    max_steps: int = 10,
-) -> AgentLoop:
-    """创建求职主 Agent 实例"""
+def build_tool_registry(llm: LLMProvider, db: Session, user_id: str) -> ToolRegistry:
+    """构建求职 Agent 的全部业务工具注册表（供 Agent 循环、MCP Server 等复用）"""
     registry = ToolRegistry()
 
     # 画像工具
     registry.register(GetProfileTool(db, user_id))
     registry.register(UpdateProfileTool(db, user_id))
+    # 长期记忆：允许 Agent 主动记录/修正用户偏好
+    registry.register(UpdateUserPreferenceTool(db, user_id))
 
     # 投递管理工具
     registry.register(CreateApplicationTool(db, user_id))
@@ -204,14 +202,38 @@ def create_job_agent(
     registry.register(CreateJournalEntryTool(db, user_id))
     registry.register(GenerateWeeklySummaryTool(db, user_id, llm))
 
-    # 视图导航工具（OfferClaw 独有：Agent 与功能视图无缝衔接）
+    # 视图导航工具（OfferCabin 独有：Agent 与功能视图无缝衔接）
     registry.register(NavigateViewTool())
+
+    return registry
+
+
+def create_job_agent(
+    llm: LLMProvider,
+    db: Session,
+    user_id: str,
+    session_id: str | None = None,
+    max_steps: int = 10,
+) -> AgentLoop:
+    """创建求职主 Agent 实例"""
+    registry = build_tool_registry(llm, db, user_id)
 
     # 构建 system prompt（含 skills 能力声明）
     system_prompt = build_system_prompt()
+    # 预留长期记忆占位符（运行时由 AgentLoop 替换为真实记忆段）
+    from app.agent.memory.retrieval import MEMORY_PLACEHOLDER
+    system_prompt = system_prompt.rstrip() + f"\n\n{MEMORY_PLACEHOLDER}\n"
 
     # 初始化状态
     state = AgentState(db=db, user_id=user_id, session_id=session_id)
+
+    # 长期记忆加载器：基于当前 query 检索并生成 <user_long_term_memory> 段落
+    def memory_loader(user_input: str) -> str:
+        try:
+            from app.agent.memory.retrieval import assemble_long_term_memory
+            return assemble_long_term_memory(db, user_id, user_input)
+        except Exception:
+            return "（长期记忆暂不可用）"
 
     return AgentLoop(
         llm=llm,
@@ -219,4 +241,5 @@ def create_job_agent(
         system_prompt=system_prompt,
         state=state,
         max_steps=max_steps,
+        memory_loader=memory_loader,
     )

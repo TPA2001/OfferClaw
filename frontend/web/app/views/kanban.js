@@ -5,8 +5,8 @@
 (function (global) {
     'use strict';
 
-    const API = global.OfferClawAPI;
-    const Motion = global.OfferClawMotion;
+    const API = global.OfferCabinAPI;
+    const Motion = global.OfferCabinMotion;
     const esc = API.esc.bind(API);
 
     // ============ 常量 ============
@@ -26,6 +26,7 @@
     const PIPELINE = ['applied', 'assessment', 'interview', 'offer'];
 
     const REJECTION_STAGES = {
+        'resume': '简历初筛挂',        // 兼容历史数据（旧版本用的是 resume 而非 resume_rejected）
         'resume_rejected': '简历初筛挂',
         'assessment_failed': '笔试挂',
         'interview_1_failed': '一面挂',
@@ -422,6 +423,9 @@
     margin-bottom: 0.35rem;
     font-weight: 600;
 }
+/* 拒绝徽标 —— 与测评/面试徽标同款，内联在顶行 */
+.badge-rej { background: color-mix(in srgb, var(--st-rejected) 14%, var(--card)); color: var(--st-rejected-deep); }
+.badge-rej .bdot { background: var(--st-rejected); }
 .card-actions {
     display: flex;
     gap: 0.35rem;
@@ -875,7 +879,18 @@
 
     // ============ 卡片 ============
 
-    // 环节徽标：测评类型（assessment） / 面试类型（AI面试 / 真人面试）
+    // 拒绝原因徽标：与测评/面试徽标同款，内联显示在卡片顶行
+    function rejectionBadge(app) {
+        if (app.status !== 'rejected') return '';
+        const stage = pick(app, 'rejection_stage');
+        const reason = pick(app, 'rejection_reason');
+        if (!stage && !reason) return '';
+        const stageLabel = stage ? (REJECTION_STAGES[stage] || stage) : '已拒绝';
+        const title = reason ? `${stageLabel}: ${reason}` : stageLabel;
+        return `<span class="card-badge badge-rej" title="${esc(title)}"><span class="bdot"></span>${esc(stageLabel)}</span>`;
+    }
+
+    // 环节徽标：测评类型（assessment） / 面试类型（AI面试 / 真人面试） / 拒绝原因
     function stageBadges(app) {
         const at = pick(app, 'assessment_type');
         const it = pick(app, 'interview_type');
@@ -886,6 +901,10 @@
         if (app.status === 'interview' && it) {
             const ai = it === 'AI面试' ? ' ai' : '';
             b.push(`<span class="card-badge badge-it${ai}"><span class="bdot"></span>${esc(it)}</span>`);
+        }
+        if (app.status === 'rejected') {
+            const rej = rejectionBadge(app);
+            if (rej) b.push(rej);
         }
         return b.length ? `<div class="card-badges">${b.join('')}</div>` : '';
     }
@@ -1369,7 +1388,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'offerclaw_applications_' + new Date().toISOString().slice(0, 10) + '.json';
+        a.download = 'offercabin_applications_' + new Date().toISOString().slice(0, 10) + '.json';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -1652,6 +1671,6 @@
         root = null;
     }
 
-    global.OfferClawViews = global.OfferClawViews || {};
-    global.OfferClawViews.kanban = { mount: mount, cleanup: cleanup, title: '投递看板' };
+    global.OfferCabinViews = global.OfferCabinViews || {};
+    global.OfferCabinViews.kanban = { mount: mount, cleanup: cleanup, title: '投递看板' };
 })(window);

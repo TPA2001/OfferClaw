@@ -6,8 +6,8 @@
 (function (global) {
     'use strict';
 
-    const API = global.OfferClawAPI;
-    const Motion = global.OfferClawMotion;
+    const API = global.OfferCabinAPI;
+    const Motion = global.OfferCabinMotion;
     const esc = API.esc.bind(API);
 
     // ============ 常量 ============
@@ -20,11 +20,15 @@
         { key: 'experience',   label: '工作经历' },
         { key: 'projects',     label: '项目经历' },
         { key: 'skills',       label: '技能' },
-        { key: 'summary',      label: '自我评价' },
+        { key: 'languages',    label: '语言能力' },
         { key: 'certificates', label: '证书' },
+        { key: 'awards',       label: '获奖荣誉' },
+        { key: 'essays',       label: '开放题答案库' },
+        { key: 'publications', label: '论文' },
+        { key: 'patents',      label: '专利' },
+        { key: 'summary',      label: '自我评价' },
         { key: 'job_intent',   label: '求职意向' },
         { key: 'custom',       label: '自定义字段' },
-        { key: 'sensitive',    label: '敏感信息' },
     ];
 
     const DEGREES = ['高中', '大专', '本科', '硕士', '博士'];
@@ -41,6 +45,23 @@
     // 教育经历：院校层次 & 教育形式（央国企常考）
     const SCHOOL_TYPES = ['985/双一流', '211/双一流', '重点大学', '普通本科', '海外院校', '专科院校'];
     const EDU_FORMS = ['全日制', '非全日制', '统招', '成人教育', '自学考试', '网络教育', '职业教育'];
+    // 语言能力：熟练程度（网申常见枚举）
+    const LANGUAGE_PROFICIENCIES = ['母语', '流利', '工作熟练', '中等', '基础'];
+    const STUDY_MODES = ['统招', '非统招', '联合培养', '委托培养'];
+    const GRADUATION_STATUSES = ['已毕业', '预计毕业', '在读', '肄业'];
+    const EMPLOYMENT_TYPES = ['全职', '兼职', '实习', '合同', '自由职业'];
+    const LOCATION_MODES = ['现场办公', '混合办公', '远程办公', '灵活'];
+    const JOB_AVAILABILITIES = ['随时', '一周内', '一个月内', '两个月内', '三个月内'];
+    // 获奖级别（网申常考）
+    const AWARD_LEVELS = ['国家级', '省级', '市级', '校级', '院级', '企业级', '其他'];
+    // 开放题答案版本标签（不同求职方向可存多版）
+    const ESSAY_TAGS = ['互联网版', '国央企版', '外企英文版', '通用'];
+    // 论文级别 / 作者角色
+    const PUBLICATION_LEVELS = ['SCI', 'SSCI', 'EI', '中文核心', '普刊', '会议', '其他'];
+    const PUBLICATION_ROLES = ['第一作者', '共同一作', '通讯作者', '参与', '其他'];
+    // 专利类型 / 状态
+    const PATENT_TYPES = ['发明专利', '实用新型', '外观设计', '软件著作权', '其他'];
+    const PATENT_STATUSES = ['已授权', '实审中', '已申请'];
 
     const LEVEL_COLORS = {
         '了解': 'var(--ink-faint)',
@@ -540,11 +561,13 @@
     function emptyProfile() {
         return {
             basic: {
-                name: '', gender: '', age: '', birth: '', phone: '', email: '', location: '',
+                name: '', english_name: '', gender: '', age: '', birth: '', phone: '', email: '', location: '',
                 ethnicity: '', political_status: '', marital_status: '', native_place: '',
                 household_type: '', height: '', weight: '', health: '',
                 wechat: '', qq: '', website: '', github: '', linkedin: '',
-                english_level: '', driving_license: '', job_status: '', avatar: '', job_intent: ''
+                english_level: '', driving_license: '', job_status: '', avatar: '', job_intent: '',
+                current_company: '', current_title: '', years_of_experience: '',
+                highest_education: '', available_date: ''
             },
             education: [],
             experience: [],
@@ -552,7 +575,14 @@
             skills: [],
             summary: { self_intro: '', strengths: '', career_goal: '', expected_salary: '', expected_location: '', expected_position: '' },
             certificates: [],
-            job_intent: { target_positions: [], target_cities: [], expected_salary: '', work_type: '', availability: '' },
+            job_intent: { target_positions: [], target_cities: [], expected_salary: '', work_type: '', availability: '',
+                          expected_industry: '', target_level: '', remote_preference: '',
+                          willing_to_relocate: '', willing_to_travel: '', current_salary: '' },
+            languages: [],
+            awards: [],
+            essays: [],
+            publications: [],
+            patents: [],
             extra_fields: {},
         };
     }
@@ -582,11 +612,83 @@
             base.job_intent.target_positions = Array.isArray(base.job_intent.target_positions) ? base.job_intent.target_positions : [];
             base.job_intent.target_cities = Array.isArray(base.job_intent.target_cities) ? base.job_intent.target_cities : [];
         }
+        // 兼容后端 languages 字段
+        base.languages = Array.isArray(p.languages) ? p.languages.map(normalizeLang).filter(Boolean) : [];
+        // 获奖/荣誉
+        base.awards = Array.isArray(p.awards) ? p.awards.map(normalizeAward).filter(Boolean) : [];
+        // 开放题答案库
+        base.essays = Array.isArray(p.essays) ? p.essays.map(normalizeEssay).filter(Boolean) : [];
+        // 论文/发表物
+        base.publications = Array.isArray(p.publications) ? p.publications.map(normalizePublication).filter(Boolean) : [];
+        // 专利
+        base.patents = Array.isArray(p.patents) ? p.patents.map(normalizePatent).filter(Boolean) : [];
         // 自定义字段（用户添加的额外键值对）
         if (p.extra_fields && typeof p.extra_fields === 'object') {
             base.extra_fields = p.extra_fields;
         }
         return base;
+    }
+
+    function normalizeLang(e) {
+        if (!e || typeof e !== 'object') return null;
+        return {
+            name: e.name || '',
+            proficiency: e.proficiency || '',
+            test_score: e.test_score || '',
+            custom_fields: (e.custom_fields && typeof e.custom_fields === 'object') ? e.custom_fields : {},
+        };
+    }
+
+    function normalizeAward(e) {
+        if (!e || typeof e !== 'object') return null;
+        return {
+            name: e.name || '',
+            level: e.level || '',
+            issuer: e.issuer || '',
+            date: e.date || '',
+            description: e.description || '',
+            custom_fields: (e.custom_fields && typeof e.custom_fields === 'object') ? e.custom_fields : {},
+        };
+    }
+
+    function normalizeEssay(e) {
+        if (!e || typeof e !== 'object') return null;
+        return {
+            question: e.question || '',
+            answer: e.answer || '',
+            tag: e.tag || '',
+            custom_fields: (e.custom_fields && typeof e.custom_fields === 'object') ? e.custom_fields : {},
+        };
+    }
+
+    function normalizePublication(e) {
+        if (!e || typeof e !== 'object') return null;
+        return {
+            title: e.title || '',
+            venue: e.venue || '',
+            level: e.level || '',
+            authors: e.authors || '',
+            role: e.role || '',
+            date: e.date || '',
+            doi: e.doi || '',
+            description: e.description || '',
+            custom_fields: (e.custom_fields && typeof e.custom_fields === 'object') ? e.custom_fields : {},
+        };
+    }
+
+    function normalizePatent(e) {
+        if (!e || typeof e !== 'object') return null;
+        return {
+            name: e.name || '',
+            patent_no: e.patent_no || '',
+            type: e.type || '',
+            status: e.status || '',
+            holder: e.holder || '',
+            inventors: e.inventors || '',
+            date: e.date || '',
+            description: e.description || '',
+            custom_fields: (e.custom_fields && typeof e.custom_fields === 'object') ? e.custom_fields : {},
+        };
     }
 
     function normalizeEdu(e) {
@@ -597,6 +699,11 @@
             major: e.major || '',
             school_type: e.school_type || '',
             edu_form: e.edu_form || '',
+            study_mode: e.study_mode || '',
+            minor: e.minor || '',
+            faculty: e.faculty || '',
+            graduation_status: e.graduation_status || '',
+            ranking: e.ranking || '',
             courses: e.courses || '',
             start_date: e.start_date || '',
             end_date: e.end_date || '',
@@ -611,6 +718,14 @@
         return {
             company: e.company || '',
             position: e.position || '',
+            department: e.department || '',
+            industry: e.industry || '',
+            city: e.city || '',
+            employment_type: e.employment_type || '',
+            location_mode: e.location_mode || '',
+            team_size: e.team_size || '',
+            is_current: e.is_current === true,
+            technologies: e.technologies || '',
             start_date: e.start_date || '',
             end_date: e.end_date || '',
             description: e.description || '',
@@ -625,6 +740,10 @@
         return {
             name: e.name || '',
             role: e.role || '',
+            organization: e.organization || '',
+            is_current: e.is_current === true,
+            demo_url: e.demo_url || '',
+            highlights: e.highlights || '',
             description: e.description || '',
             start_date: e.start_date || '',
             end_date: e.end_date || '',
@@ -787,15 +906,20 @@
             case 'experience':   html = renderExperienceTab(); break;
             case 'projects':     html = renderProjectsTab(); break;
             case 'skills':       html = renderSkillsTab(); break;
+            case 'languages':    html = renderLanguagesTab(); break;
             case 'summary':      html = renderSummaryTab(); break;
             case 'certificates': html = renderCertificatesTab(); break;
+            case 'awards':       html = renderAwardsTab(); break;
+            case 'essays':       html = renderEssaysTab(); break;
+            case 'publications': html = renderPublicationsTab(); break;
+            case 'patents':      html = renderPatentsTab(); break;
             case 'job_intent':   html = renderJobIntentTab(); break;
             case 'custom':       html = renderCustomTab(); break;
-            case 'sensitive':    html = renderSensitiveTab(); break;
         }
         // 对象型分类（单块表单）在底部追加「分类自定义字段」区块；
-        // 列表型分类（教育/工作/项目/证书）的自定义字段在每个条目内部维护。
-        if (tab !== 'sensitive' && tab !== 'education' && tab !== 'experience' && tab !== 'projects' && tab !== 'certificates') {
+        // 列表型分类（教育/工作/项目/证书/获奖/开放题/论文/专利）的自定义字段在每个条目内部维护。
+        if (tab !== 'education' && tab !== 'experience' && tab !== 'projects' && tab !== 'certificates'
+            && tab !== 'awards' && tab !== 'essays' && tab !== 'publications' && tab !== 'patents') {
             html += renderSectionCustomFields(tab);
         }
         container.innerHTML = '<div class="tab-panel">' + html + '</div>';
@@ -819,6 +943,10 @@
                 <div class="form-field">
                     <label>姓名</label>
                     <input type="text" data-section="basic" data-field="name" value="${esc(b.name)}" placeholder="你的姓名">
+                </div>
+                <div class="form-field">
+                    <label>英文名</label>
+                    <input type="text" data-section="basic" data-field="english_name" value="${esc(b.english_name)}" placeholder="如 San Zhang">
                 </div>
                 <div class="form-field">
                     <label>性别</label>
@@ -857,6 +985,29 @@
                 <div class="form-field">
                     <label>出生日期</label>
                     <input type="text" data-section="basic" data-field="birth" value="${esc(b.birth)}" placeholder="如 2000-01-15">
+                </div>
+                <div class="form-field">
+                    <label>当前公司</label>
+                    <input type="text" data-section="basic" data-field="current_company" value="${esc(b.current_company)}" placeholder="如 某科技公司">
+                </div>
+                <div class="form-field">
+                    <label>当前职位</label>
+                    <input type="text" data-section="basic" data-field="current_title" value="${esc(b.current_title)}" placeholder="如 高级后端工程师">
+                </div>
+                <div class="form-field">
+                    <label>工作年限</label>
+                    <input type="text" data-section="basic" data-field="years_of_experience" value="${esc(b.years_of_experience)}" placeholder="如 5">
+                </div>
+                <div class="form-field">
+                    <label>最高学历</label>
+                    <select data-section="basic" data-field="highest_education">
+                        <option value="">请选择</option>
+                        ${DEGREES.map(d => `<option value="${d}" ${b.highest_education === d ? 'selected' : ''}>${d}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label>可入职日期</label>
+                    <input type="text" data-section="basic" data-field="available_date" value="${esc(b.available_date)}" placeholder="如 2026-10-01">
                 </div>
                 <div class="form-field">
                     <label>民族</label>
@@ -980,12 +1131,38 @@
                             </select>
                         </div>
                         <div class="form-field">
+                            <label>培养方式</label>
+                            <select data-section="education" data-index="${i}" data-field="study_mode">
+                                <option value="">请选择</option>
+                                ${STUDY_MODES.map(sm => `<option value="${sm}" ${e.study_mode === sm ? 'selected' : ''}>${sm}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>毕业状态</label>
+                            <select data-section="education" data-index="${i}" data-field="graduation_status">
+                                <option value="">请选择</option>
+                                ${GRADUATION_STATUSES.map(gs => `<option value="${gs}" ${e.graduation_status === gs ? 'selected' : ''}>${gs}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-field">
                             <label>专业</label>
                             <input type="text" data-section="education" data-index="${i}" data-field="major" value="${esc(e.major)}" placeholder="如 计算机科学">
                         </div>
                         <div class="form-field">
+                            <label>辅修专业</label>
+                            <input type="text" data-section="education" data-index="${i}" data-field="minor" value="${esc(e.minor)}" placeholder="如 数学">
+                        </div>
+                        <div class="form-field">
+                            <label>院系</label>
+                            <input type="text" data-section="education" data-index="${i}" data-field="faculty" value="${esc(e.faculty)}" placeholder="如 计算机学院">
+                        </div>
+                        <div class="form-field">
                             <label>GPA</label>
                             <input type="text" data-section="education" data-index="${i}" data-field="gpa" value="${esc(e.gpa)}" placeholder="如 3.8/4.0">
+                        </div>
+                        <div class="form-field">
+                            <label>专业排名</label>
+                            <input type="text" data-section="education" data-index="${i}" data-field="ranking" value="${esc(e.ranking)}" placeholder="如 前 10%">
                         </div>
                         <div class="form-field">
                             <label>开始时间</label>
@@ -1040,12 +1217,49 @@
                             <input type="text" data-section="experience" data-index="${i}" data-field="position" value="${esc(e.position)}" placeholder="如 后端工程师">
                         </div>
                         <div class="form-field">
+                            <label>部门</label>
+                            <input type="text" data-section="experience" data-index="${i}" data-field="department" value="${esc(e.department)}" placeholder="如 平台研发部">
+                        </div>
+                        <div class="form-field">
+                            <label>所属行业</label>
+                            <input type="text" data-section="experience" data-index="${i}" data-field="industry" value="${esc(e.industry)}" placeholder="如 互联网 / 金融">
+                        </div>
+                        <div class="form-field">
+                            <label>工作城市</label>
+                            <input type="text" data-section="experience" data-index="${i}" data-field="city" value="${esc(e.city)}" placeholder="如 杭州">
+                        </div>
+                        <div class="form-field">
+                            <label>雇佣类型</label>
+                            <select data-section="experience" data-index="${i}" data-field="employment_type">
+                                <option value="">请选择</option>
+                                ${EMPLOYMENT_TYPES.map(et => `<option value="${et}" ${e.employment_type === et ? 'selected' : ''}>${et}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>办公方式</label>
+                            <select data-section="experience" data-index="${i}" data-field="location_mode">
+                                <option value="">请选择</option>
+                                ${LOCATION_MODES.map(lm => `<option value="${lm}" ${e.location_mode === lm ? 'selected' : ''}>${lm}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>是否当前在职</label>
+                            <select data-section="experience" data-index="${i}" data-field="is_current" data-type="bool">
+                                <option value="false" ${e.is_current ? '' : 'selected'}>否</option>
+                                <option value="true" ${e.is_current ? 'selected' : ''}>是</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
                             <label>开始时间</label>
                             <input type="text" data-section="experience" data-index="${i}" data-field="start_date" value="${esc(e.start_date)}" placeholder="如 2023-06">
                         </div>
                         <div class="form-field">
                             <label>结束时间</label>
                             <input type="text" data-section="experience" data-index="${i}" data-field="end_date" value="${esc(e.end_date)}" placeholder="如 2024-03 或 至今">
+                        </div>
+                        <div class="form-field full">
+                            <label>使用技术</label>
+                            <input type="text" data-section="experience" data-index="${i}" data-field="technologies" value="${esc(e.technologies)}" placeholder="如 Java、Redis、Kafka">
                         </div>
                         <div class="form-field full">
                             <label>工作描述</label>
@@ -1085,11 +1299,22 @@
                     <div class="form-grid">
                         <div class="form-field">
                             <label>项目名称</label>
-                            <input type="text" data-section="projects" data-index="${i}" data-field="name" value="${esc(e.name)}" placeholder="如 OfferClaw 求职助手">
+                            <input type="text" data-section="projects" data-index="${i}" data-field="name" value="${esc(e.name)}" placeholder="如 OfferCabin 求职助手">
                         </div>
                         <div class="form-field">
                             <label>角色</label>
                             <input type="text" data-section="projects" data-index="${i}" data-field="role" value="${esc(e.role)}" placeholder="如 全栈开发 / 负责人">
+                        </div>
+                        <div class="form-field">
+                            <label>所属组织</label>
+                            <input type="text" data-section="projects" data-index="${i}" data-field="organization" value="${esc(e.organization)}" placeholder="如 学校实验室 / 个人项目">
+                        </div>
+                        <div class="form-field">
+                            <label>是否进行中</label>
+                            <select data-section="projects" data-index="${i}" data-field="is_current" data-type="bool">
+                                <option value="false" ${e.is_current ? '' : 'selected'}>否</option>
+                                <option value="true" ${e.is_current ? 'selected' : ''}>是</option>
+                            </select>
                         </div>
                         <div class="form-field">
                             <label>开始时间</label>
@@ -1104,8 +1329,16 @@
                             <input type="url" data-section="projects" data-index="${i}" data-field="url" value="${esc(e.url)}" placeholder="https://github.com/...">
                         </div>
                         <div class="form-field full">
+                            <label>演示链接</label>
+                            <input type="url" data-section="projects" data-index="${i}" data-field="demo_url" value="${esc(e.demo_url)}" placeholder="https://demo.example.com">
+                        </div>
+                        <div class="form-field full">
                             <label>技术栈（逗号分隔）</label>
                             <input type="text" data-section="projects" data-index="${i}" data-field="tech_stack" data-type="csv-array" value="${esc(techStackToText(e.tech_stack))}" placeholder="如 Python, FastAPI, React">
+                        </div>
+                        <div class="form-field full">
+                            <label>项目亮点</label>
+                            <textarea data-section="projects" data-index="${i}" data-field="highlights" placeholder="效果、指标、架构亮点">${esc(e.highlights)}</textarea>
                         </div>
                         <div class="form-field full">
                             <label>项目描述</label>
@@ -1161,6 +1394,275 @@
                 <div class="skill-chips" id="skill-chips">${chipsHtml}</div>
             </div>
         </div>`;
+    }
+
+    // --- 语言能力 ---
+
+    function renderLanguagesTab() {
+        const list = state.profile.languages;
+        let html = '<div class="entry-list">';
+        if (list.length === 0) {
+            html += `<div class="empty-card"><span class="empty-emoji">🌐</span><h3>暂无语言能力</h3><p>添加你的语种与熟练程度，如 英语 / CET-6</p></div>`;
+        } else {
+            list.forEach((e, i) => {
+                html += `
+                <div class="entry-card">
+                    <div class="entry-card-head">
+                        <span class="entry-card-title">语言 <span class="entry-card-index">#${i + 1}</span></span>
+                        <div class="entry-card-actions">
+                            <button class="btn btn-danger btn-sm" data-action="delete-entry" data-section="languages" data-index="${i}">删除</button>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label>语种</label>
+                            <input type="text" data-section="languages" data-index="${i}" data-field="name" value="${esc(e.name)}" placeholder="如 英语 / 日语">
+                        </div>
+                        <div class="form-field">
+                            <label>熟练程度</label>
+                            <select data-section="languages" data-index="${i}" data-field="proficiency">
+                                <option value="">请选择</option>
+                                ${LANGUAGE_PROFICIENCIES.map(p => `<option value="${p}" ${e.proficiency === p ? 'selected' : ''}>${p}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>考试成绩 / 证书</label>
+                            <input type="text" data-section="languages" data-index="${i}" data-field="test_score" value="${esc(e.test_score)}" placeholder="如 CET-6 / 雅思 7.0">
+                        </div>
+                    </div>
+                    ${renderEntryCustomFields('languages', e, i)}
+                </div>`;
+            });
+        }
+        html += `</div>
+        <button class="entry-add-btn" data-action="add-entry" data-section="languages">+ 添加语言</button>`;
+        return html;
+    }
+
+    // --- 获奖荣誉 ---
+
+    function renderAwardsTab() {
+        const list = state.profile.awards;
+        let html = '<div class="entry-list">';
+        if (list.length === 0) {
+            html += `<div class="empty-card"><span class="empty-emoji">🏆</span><h3>暂无获奖荣誉</h3><p>添加奖学金、竞赛、荣誉称号等，网申常考（注意区分于证书）</p></div>`;
+        } else {
+            list.forEach((e, i) => {
+                html += `
+                <div class="entry-card">
+                    <div class="entry-card-head">
+                        <span class="entry-card-title">获奖 <span class="entry-card-index">#${i + 1}</span></span>
+                        <div class="entry-card-actions">
+                            <button class="btn btn-danger btn-sm" data-action="delete-entry" data-section="awards" data-index="${i}">删除</button>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label>奖项名称</label>
+                            <input type="text" data-section="awards" data-index="${i}" data-field="name" value="${esc(e.name)}" placeholder="如 校级一等奖学金">
+                        </div>
+                        <div class="form-field">
+                            <label>获奖级别</label>
+                            <select data-section="awards" data-index="${i}" data-field="level">
+                                <option value="">请选择</option>
+                                ${AWARD_LEVELS.map(l => `<option value="${l}" ${e.level === l ? 'selected' : ''}>${l}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>颁发单位</label>
+                            <input type="text" data-section="awards" data-index="${i}" data-field="issuer" value="${esc(e.issuer)}" placeholder="如 XX大学 / 教育部">
+                        </div>
+                        <div class="form-field">
+                            <label>获奖时间</label>
+                            <input type="text" data-section="awards" data-index="${i}" data-field="date" value="${esc(e.date)}" placeholder="如 2023-06">
+                        </div>
+                        <div class="form-field full">
+                            <label>备注 / 描述</label>
+                            <textarea data-section="awards" data-index="${i}" data-field="description" rows="2" placeholder="如 专业成绩前 5%">${esc(e.description)}</textarea>
+                        </div>
+                    </div>
+                    ${renderEntryCustomFields('awards', e, i)}
+                </div>`;
+            });
+        }
+        html += `</div>
+        <button class="entry-add-btn" data-action="add-entry" data-section="awards">+ 添加获奖</button>`;
+        return html;
+    }
+
+    // --- 开放题答案库 ---
+
+    function renderEssaysTab() {
+        const list = state.profile.essays;
+        let html = '<div class="entry-list">';
+        if (list.length === 0) {
+            html += `<div class="empty-card"><span class="empty-emoji">💬</span><h3>暂无开放题答案</h3><p>提前写好「为什么选择我们公司」「职业规划」等网申常问开放题，可存多个版本（互联网版 / 国央企版 / 外企英文版）</p></div>`;
+        } else {
+            list.forEach((e, i) => {
+                html += `
+                <div class="entry-card">
+                    <div class="entry-card-head">
+                        <span class="entry-card-title">开放题 <span class="entry-card-index">#${i + 1}</span></span>
+                        <div class="entry-card-actions">
+                            <button class="btn btn-danger btn-sm" data-action="delete-entry" data-section="essays" data-index="${i}">删除</button>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-field full">
+                            <label>问题</label>
+                            <input type="text" data-section="essays" data-index="${i}" data-field="question" value="${esc(e.question)}" placeholder="如 为什么选择我们公司">
+                        </div>
+                        <div class="form-field full">
+                            <label>答案</label>
+                            <textarea data-section="essays" data-index="${i}" data-field="answer" rows="4" placeholder="提前撰写、可复用的回答">${esc(e.answer)}</textarea>
+                        </div>
+                        <div class="form-field">
+                            <label>版本标签</label>
+                            <select data-section="essays" data-index="${i}" data-field="tag">
+                                <option value="">请选择</option>
+                                ${ESSAY_TAGS.map(t => `<option value="${t}" ${e.tag === t ? 'selected' : ''}>${t}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    ${renderEntryCustomFields('essays', e, i)}
+                </div>`;
+            });
+        }
+        html += `</div>
+        <button class="entry-add-btn" data-action="add-entry" data-section="essays">+ 添加开放题答案</button>`;
+        return html;
+    }
+
+    // --- 论文 / 发表物 ---
+
+    function renderPublicationsTab() {
+        const list = state.profile.publications;
+        let html = '<div class="entry-list">';
+        if (list.length === 0) {
+            html += `<div class="empty-card"><span class="empty-emoji">📄</span><h3>暂无论文</h3><p>添加发表的论文（SCI / EI / 中文核心 / 普刊 / 会议），校招与科研岗常考</p></div>`;
+        } else {
+            list.forEach((e, i) => {
+                html += `
+                <div class="entry-card">
+                    <div class="entry-card-head">
+                        <span class="entry-card-title">论文 <span class="entry-card-index">#${i + 1}</span></span>
+                        <div class="entry-card-actions">
+                            <button class="btn btn-danger btn-sm" data-action="delete-entry" data-section="publications" data-index="${i}">删除</button>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-field full">
+                            <label>论文题目</label>
+                            <input type="text" data-section="publications" data-index="${i}" data-field="title" value="${esc(e.title)}" placeholder="如 基于深度学习的推荐系统研究">
+                        </div>
+                        <div class="form-field full">
+                            <label>期刊 / 会议</label>
+                            <input type="text" data-section="publications" data-index="${i}" data-field="venue" value="${esc(e.venue)}" placeholder="如 计算机学报 / AAAI 2023">
+                        </div>
+                        <div class="form-field">
+                            <label>级别</label>
+                            <select data-section="publications" data-index="${i}" data-field="level">
+                                <option value="">请选择</option>
+                                ${PUBLICATION_LEVELS.map(l => `<option value="${l}" ${e.level === l ? 'selected' : ''}>${l}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>本人角色</label>
+                            <select data-section="publications" data-index="${i}" data-field="role">
+                                <option value="">请选择</option>
+                                ${PUBLICATION_ROLES.map(r => `<option value="${r}" ${e.role === r ? 'selected' : ''}>${r}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>发表时间</label>
+                            <input type="text" data-section="publications" data-index="${i}" data-field="date" value="${esc(e.date)}" placeholder="如 2023-06">
+                        </div>
+                        <div class="form-field">
+                            <label>DOI / 链接</label>
+                            <input type="text" data-section="publications" data-index="${i}" data-field="doi" value="${esc(e.doi)}" placeholder="如 10.1234/xxxx">
+                        </div>
+                        <div class="form-field full">
+                            <label>作者</label>
+                            <input type="text" data-section="publications" data-index="${i}" data-field="authors" value="${esc(e.authors)}" placeholder="如 张三(第一作者), 李四">
+                        </div>
+                        <div class="form-field full">
+                            <label>备注 / 摘要</label>
+                            <textarea data-section="publications" data-index="${i}" data-field="description" rows="2" placeholder="简述研究内容与成果">${esc(e.description)}</textarea>
+                        </div>
+                    </div>
+                    ${renderEntryCustomFields('publications', e, i)}
+                </div>`;
+            });
+        }
+        html += `</div>
+        <button class="entry-add-btn" data-action="add-entry" data-section="publications">+ 添加论文</button>`;
+        return html;
+    }
+
+    // --- 专利 ---
+
+    function renderPatentsTab() {
+        const list = state.profile.patents;
+        let html = '<div class="entry-list">';
+        if (list.length === 0) {
+            html += `<div class="empty-card"><span class="empty-emoji">⚙️</span><h3>暂无专利</h3><p>添加已申请 / 已授权的专利（发明专利 / 实用新型 / 软著）</p></div>`;
+        } else {
+            list.forEach((e, i) => {
+                html += `
+                <div class="entry-card">
+                    <div class="entry-card-head">
+                        <span class="entry-card-title">专利 <span class="entry-card-index">#${i + 1}</span></span>
+                        <div class="entry-card-actions">
+                            <button class="btn btn-danger btn-sm" data-action="delete-entry" data-section="patents" data-index="${i}">删除</button>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-field full">
+                            <label>专利名称</label>
+                            <input type="text" data-section="patents" data-index="${i}" data-field="name" value="${esc(e.name)}" placeholder="如 一种数据处理方法及装置">
+                        </div>
+                        <div class="form-field">
+                            <label>专利号 / 申请号</label>
+                            <input type="text" data-section="patents" data-index="${i}" data-field="patent_no" value="${esc(e.patent_no)}" placeholder="如 CN202310123456.7">
+                        </div>
+                        <div class="form-field">
+                            <label>类型</label>
+                            <select data-section="patents" data-index="${i}" data-field="type">
+                                <option value="">请选择</option>
+                                ${PATENT_TYPES.map(t => `<option value="${t}" ${e.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>状态</label>
+                            <select data-section="patents" data-index="${i}" data-field="status">
+                                <option value="">请选择</option>
+                                ${PATENT_STATUSES.map(s => `<option value="${s}" ${e.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>时间</label>
+                            <input type="text" data-section="patents" data-index="${i}" data-field="date" value="${esc(e.date)}" placeholder="申请/授权时间，如 2023-06">
+                        </div>
+                        <div class="form-field">
+                            <label>申请人</label>
+                            <input type="text" data-section="patents" data-index="${i}" data-field="holder" value="${esc(e.holder)}" placeholder="如 XX大学">
+                        </div>
+                        <div class="form-field full">
+                            <label>发明人</label>
+                            <input type="text" data-section="patents" data-index="${i}" data-field="inventors" value="${esc(e.inventors)}" placeholder="发明人（含本人）">
+                        </div>
+                        <div class="form-field full">
+                            <label>备注</label>
+                            <textarea data-section="patents" data-index="${i}" data-field="description" rows="2" placeholder="简述专利内容">${esc(e.description)}</textarea>
+                        </div>
+                    </div>
+                    ${renderEntryCustomFields('patents', e, i)}
+                </div>`;
+            });
+        }
+        html += `</div>
+        <button class="entry-add-btn" data-action="add-entry" data-section="patents">+ 添加专利</button>`;
+        return html;
     }
 
     // --- 自我评价 ---
@@ -1295,37 +1797,49 @@
                         ${AVAILABILITIES.map(a => `<option value="${a}" ${j.availability === a ? 'selected' : ''}>${a}</option>`).join('')}
                     </select>
                 </div>
+                <div class="form-field">
+                    <label>期望行业</label>
+                    <input type="text" data-section="job_intent" data-field="expected_industry" value="${esc(j.expected_industry)}" placeholder="如 AI / SaaS / 电商">
+                </div>
+                <div class="form-field">
+                    <label>目标级别</label>
+                    <input type="text" data-section="job_intent" data-field="target_level" value="${esc(j.target_level)}" placeholder="如 高级 / 专家">
+                </div>
+                <div class="form-field">
+                    <label>办公方式偏好</label>
+                    <select data-section="job_intent" data-field="remote_preference">
+                        <option value="">请选择</option>
+                        ${LOCATION_MODES.map(m => `<option value="${m}" ${j.remote_preference === m ? 'selected' : ''}>${m}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label>是否接受异地</label>
+                    <select data-section="job_intent" data-field="willing_to_relocate">
+                        <option value="">请选择</option>
+                        <option value="是" ${j.willing_to_relocate === '是' ? 'selected' : ''}>是</option>
+                        <option value="否" ${j.willing_to_relocate === '否' ? 'selected' : ''}>否</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label>是否接受出差</label>
+                    <select data-section="job_intent" data-field="willing_to_travel">
+                        <option value="">请选择</option>
+                        <option value="是" ${j.willing_to_travel === '是' ? 'selected' : ''}>是</option>
+                        <option value="否" ${j.willing_to_travel === '否' ? 'selected' : ''}>否</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label>当前薪资</label>
+                    <input type="text" data-section="job_intent" data-field="current_salary" value="${esc(j.current_salary)}" placeholder="如 20-30K">
+                </div>
             </div>
         </div>`;
     }
 
     // --- 自定义字段 ---
     // 用户可添加任意「字段名 → 值」，用于覆盖标准画像未列举的信息
-    const LOCAL_SENSITIVE_KEY = 'offerclaw_local_profile_sensitive';
-
-    function loadLocalSensitive() {
-        try {
-            const raw = localStorage.getItem(LOCAL_SENSITIVE_KEY);
-            if (!raw) return {};
-            const o = JSON.parse(raw);
-            return (o && typeof o === 'object') ? o : {};
-        } catch (e) { return {}; }
-    }
-
-    function saveLocalSensitiveFromUI() {
-        const ids = ['id_card', 'home_address', 'bank_card', 'passport', 'emergency_contact', 'emergency_phone'];
-        const map = {};
-        ids.forEach((id) => {
-            const el = root.querySelector('#sens-' + id);
-            map[id] = el ? el.value.trim() : '';
-        });
-        try {
-            localStorage.setItem(LOCAL_SENSITIVE_KEY, JSON.stringify(map));
-            API.toast('敏感信息已仅保存在本机浏览器', 'success');
-        } catch (e) {
-            API.toast('保存失败: ' + (e.message || '未知错误'), 'error');
-        }
-    }
+    // 注：身份证号、家庭住址、银行卡、护照、紧急联系人等敏感字段一律不采集、不存储
+    //    （前端不提供入口，后端 sanitizer 也会兜底剔除）
 
     // --- 分类内自定义字段（每个标签页底部统一区块） ---
 
@@ -1525,45 +2039,6 @@
         API.toast('已删除', 'success', 1200);
     }
 
-    // --- 敏感信息（仅本机） ---
-    function renderSensitiveTab() {
-        const s = loadLocalSensitive();
-        return `
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">🛡️ 敏感信息（仅本机）</h2>
-            </div>
-            <p class="custom-hint sensitive-hint">此处信息<b>只保存在你当前浏览器的本地存储（localStorage），绝不会上传到 OfferClaw 后端</b>。适合存放身份证号、住址、银行卡等。如需在网申时自动填写这些字段，请到扩展的「设置 → 敏感数据」中填写（扩展同样仅存本地）。</p>
-            <div class="form-grid">
-                <div class="form-field">
-                    <label>身份证号</label>
-                    <input type="password" id="sens-id_card" value="${esc(s.id_card)}" placeholder="仅存本机">
-                </div>
-                <div class="form-field">
-                    <label>家庭住址</label>
-                    <input type="password" id="sens-home_address" value="${esc(s.home_address)}" placeholder="仅存本机">
-                </div>
-                <div class="form-field">
-                    <label>银行卡号</label>
-                    <input type="password" id="sens-bank_card" value="${esc(s.bank_card)}" placeholder="仅存本机">
-                </div>
-                <div class="form-field">
-                    <label>护照号</label>
-                    <input type="password" id="sens-passport" value="${esc(s.passport)}" placeholder="仅存本机">
-                </div>
-                <div class="form-field">
-                    <label>紧急联系人</label>
-                    <input type="text" id="sens-emergency_contact" value="${esc(s.emergency_contact)}" placeholder="仅存本机">
-                </div>
-                <div class="form-field">
-                    <label>紧急联系人电话</label>
-                    <input type="text" id="sens-emergency_phone" value="${esc(s.emergency_phone)}" placeholder="仅存本机">
-                </div>
-            </div>
-            <button class="btn btn-primary" data-action="save-sensitive">保存到本机</button>
-        </div>`;
-    }
-
     // --- JSON 备份 ---
 
     function renderJsonBackup() {
@@ -1612,7 +2087,7 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = 'offerclaw-profile-' + new Date().toISOString().slice(0, 10) + '.json';
+                a.download = 'offercabin-profile-' + new Date().toISOString().slice(0, 10) + '.json';
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
@@ -1699,8 +2174,6 @@
                 addEntryCustomField(btn.dataset.section, parseInt(btn.dataset.index, 10));
             } else if (action === 'delete-entry-custom') {
                 deleteEntryCustomField(btn.dataset.section, parseInt(btn.dataset.index, 10), btn.dataset.key);
-            } else if (action === 'save-sensitive') {
-                saveLocalSensitiveFromUI();
             }
         });
 
@@ -1729,7 +2202,7 @@
         });
 
         // 条目级自定义字段：任一输入框回车快速添加
-        ['education', 'experience', 'projects', 'certificates'].forEach((sec) => {
+        ['education', 'experience', 'projects', 'certificates', 'languages', 'awards', 'essays', 'publications', 'patents'].forEach((sec) => {
             panel.querySelectorAll('[id^="ecf-key-' + sec + '-"]').forEach((el) => {
                 const idx = el.id.split('-').pop();
                 el.addEventListener('keydown', (e) => {
@@ -1815,6 +2288,11 @@
             experience: { company: '', position: '', start_date: '', end_date: '', description: '', achievements: [], custom_fields: {} },
             projects: { name: '', role: '', description: '', start_date: '', end_date: '', url: '', tech_stack: [], custom_fields: {} },
             certificates: { name: '', issuer: '', date: '', score: '', custom_fields: {} },
+            languages: { name: '', proficiency: '', test_score: '', custom_fields: {} },
+            awards: { name: '', level: '', issuer: '', date: '', description: '', custom_fields: {} },
+            essays: { question: '', answer: '', tag: '', custom_fields: {} },
+            publications: { title: '', venue: '', level: '', authors: '', role: '', date: '', doi: '', description: '', custom_fields: {} },
+            patents: { name: '', patent_no: '', type: '', status: '', holder: '', inventors: '', date: '', description: '', custom_fields: {} },
         };
         if (!templates[section]) return;
         state.profile[section].push(templates[section]);
@@ -1980,18 +2458,16 @@
         const fd = new FormData();
         fd.append('file', file);
         try {
-            // 必须用 API.API_V1（含 http://localhost:8000 基址），否则相对路径会打到前端静态服务器 404
-            const resp = await fetch(API.API_V1 + '/profiles/import-pdf', { method: 'POST', body: fd });
-            const data = await resp.json().catch(() => ({}));
-            if (!resp.ok) throw new Error(data.message || ('HTTP ' + resp.status));
-            const parsed = normalizeProfile((data.data && data.data.profile) || {});
+            // 走统一 API 客户端：自动带 JWT 鉴权头 + 统一错误处理（否则 401：未登录或缺少访问令牌）
+            const data = await API.postForm('/profiles/import-pdf', fd);
+            const parsed = normalizeProfile((data && data.profile) || {});
             const filled = countFilled(parsed);
             mergeProfile(parsed);
             state.dirty = true;
             renderAll();
             updateSaveStatus();
             const srcMap = { llm: 'LLM', rules: '规则', empty: '空', error: '失败' };
-            const src = (data.data && srcMap[data.data.source]) || '未知';
+            const src = (data && srcMap[data.source]) || '未知';
             if (filled === 0) {
                 API.toast('PDF 解析完成但未提取到有效信息（' + src + '），请手动填写', 'warn', 5000);
             } else {
@@ -2014,6 +2490,11 @@
         if (Array.isArray(parsed.projects) && parsed.projects.length) cur.projects = parsed.projects;
         if (Array.isArray(parsed.skills) && parsed.skills.length) cur.skills = parsed.skills;
         if (Array.isArray(parsed.certificates) && parsed.certificates.length) cur.certificates = parsed.certificates;
+        if (Array.isArray(parsed.languages) && parsed.languages.length) cur.languages = parsed.languages;
+        if (Array.isArray(parsed.awards) && parsed.awards.length) cur.awards = parsed.awards;
+        if (Array.isArray(parsed.essays) && parsed.essays.length) cur.essays = parsed.essays;
+        if (Array.isArray(parsed.publications) && parsed.publications.length) cur.publications = parsed.publications;
+        if (Array.isArray(parsed.patents) && parsed.patents.length) cur.patents = parsed.patents;
         if (parsed.summary) {
             Object.keys(parsed.summary).forEach(k => {
                 if (parsed.summary[k] !== '' && parsed.summary[k] != null) cur.summary[k] = parsed.summary[k];
@@ -2038,6 +2519,11 @@
         n += (p.projects || []).length;
         n += (p.skills || []).length;
         n += (p.certificates || []).length;
+        n += (p.languages || []).length;
+        n += (p.awards || []).length;
+        n += (p.essays || []).length;
+        n += (p.publications || []).length;
+        n += (p.patents || []).length;
         return n;
     }
 
@@ -2080,6 +2566,6 @@
         root = null;
     }
 
-    global.OfferClawViews = global.OfferClawViews || {};
-    global.OfferClawViews.profile = { mount, cleanup, title: '简历画像' };
+    global.OfferCabinViews = global.OfferCabinViews || {};
+    global.OfferCabinViews.profile = { mount, cleanup, title: '简历画像' };
 })(window);

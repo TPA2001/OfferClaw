@@ -13,7 +13,7 @@ from .base import (
     LLMResponse, TokenUsage,
 )
 
-logger = logging.getLogger("offerclaw.llm.mock")
+logger = logging.getLogger("offercabin.llm.mock")
 
 
 class MockProvider(LLMProvider):
@@ -297,7 +297,7 @@ class MockProvider(LLMProvider):
 
     def _default_reply(self, user_text: str) -> str:
         return (
-            "我是 OfferClaw 求职助手，可以帮你：\n"
+            "我是 OfferCabin 求职助手，可以帮你：\n"
             "- 🔍 **搜索岗位**（如：'帮我搜北京Java岗位'）\n"
             "- 🛡️ **判断岗位真实性**（如：'这个岗位靠谱吗'）\n"
             "- 📊 **综合评估岗位**（如：'帮我评估这个岗位'）\n"

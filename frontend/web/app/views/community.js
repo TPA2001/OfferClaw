@@ -7,7 +7,7 @@
 (function (global) {
     'use strict';
 
-    const API = global.OfferClawAPI;
+    const API = global.OfferCabinAPI;
     const esc = API.esc.bind(API);
 
     const CSS_ID = 'community-styles';
@@ -523,6 +523,6 @@
         root = null;
     }
 
-    global.OfferClawViews = global.OfferClawViews || {};
-    global.OfferClawViews.community = { mount, cleanup, title: '社区广场' };
+    global.OfferCabinViews = global.OfferCabinViews || {};
+    global.OfferCabinViews.community = { mount, cleanup, title: '社区广场' };
 })(window);

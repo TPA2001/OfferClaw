@@ -2,7 +2,7 @@
 模拟面试 Feature
 
 根据简历 + JD 生成定制面试题目，支持结构化反馈。
-借鉴 CareerDesk 的 grill 模块，但结合 OfferClaw 的岗位真实性判断能力，
+借鉴 CareerDesk 的 grill 模块，但结合 OfferCabin 的岗位真实性判断能力，
 可以针对性地追问风险点。
 
 能力：
@@ -19,7 +19,7 @@ from typing import Optional
 
 from app.core.llm import LLMProvider, LLMResponse, Message
 
-logger = logging.getLogger("offerclaw.features.mock_interview")
+logger = logging.getLogger("offercabin.features.mock_interview")
 
 
 class MockInterviewService:

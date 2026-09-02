@@ -1,7 +1,7 @@
 """路径解析 - 统一处理 Docker/打包模式与开发模式的目录定位
 
 Docker 模式：
-- 静态目录 = OFFERCLAW_STATIC_DIR 环境变量（如 /app/frontend/web）
+- 静态目录 = OFFERCABIN_STATIC_DIR 环境变量（如 /app/frontend/web）
 
 打包模式（frozen）：
 - 应用目录 = sys.executable 所在目录（exe 旁边）
@@ -42,10 +42,27 @@ def data_dir() -> Path:
 def static_dir() -> Path:
     """前端静态文件目录（只读）"""
     # Docker/自定义部署：优先使用环境变量指定
-    env_dir = os.getenv("OFFERCLAW_STATIC_DIR", "").strip()
+    env_dir = os.getenv("OFFERCABIN_STATIC_DIR", "").strip()
     if env_dir:
         return Path(env_dir)
     if is_frozen():
         # spec 里 datas: ('frontend/web', 'frontend/web') → _MEIPASS/frontend/web
         return Path(sys._MEIPASS) / "frontend" / "web"
     return app_dir().parent / "frontend" / "web"
+
+
+def admin_static_dir() -> Path:
+    """管理后台前端静态文件目录（只读，与主站隔离）"""
+    # Docker/自定义部署：优先使用环境变量指定
+    env_dir = os.getenv("OFFERCABIN_ADMIN_STATIC_DIR", "").strip()
+    if env_dir:
+        return Path(env_dir)
+    if is_frozen():
+        # spec 里 datas: ('frontend/admin', 'frontend/admin') → _MEIPASS/frontend/admin
+        return Path(sys._MEIPASS) / "frontend" / "admin"
+    return app_dir().parent / "frontend" / "admin"
+
+
+def web_styles_dir() -> Path:
+    """主站样式目录（管理后台通过 /__styles 复用，保持设计系统一致）"""
+    return static_dir() / "styles"

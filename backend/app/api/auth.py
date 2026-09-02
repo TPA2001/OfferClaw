@@ -26,16 +26,17 @@ from app.core.auth import (
     get_current_user,
     hash_password,
     valid_email,
-    valid_password,
     valid_username,
+    validate_password_strength,
     verify_password,
 )
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.response import ok, APIError
+from app.core.rate_limit import rate_limit
 from app.models.user import User
 
-logger = logging.getLogger("offerclaw.api.auth")
+logger = logging.getLogger("offercabin.api.auth")
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -78,6 +79,8 @@ def _user_info(user: User) -> dict:
         "id": user.id,
         "username": user.username,
         "email": user.email,
+        "role": user.role or "user",
+        "is_admin": (user.role or "user") == "admin",
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 
@@ -97,7 +100,11 @@ def _hash_token(token: str) -> str:
 # ============ 接口 ============
 
 @router.post("/register")
-async def register(req: RegisterRequest, db: Session = Depends(get_db)):
+async def register(
+    req: RegisterRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(rate_limit(5, 60)),
+):
     """注册新账号"""
     # 邀请码门控（用于售卖账号：设置 REGISTRATION_INVITE_CODE 后必须凭码注册）
     expected_invite = settings.registration_invite_code
@@ -109,8 +116,9 @@ async def register(req: RegisterRequest, db: Session = Depends(get_db)):
         raise APIError(40000, "用户名需为 2-32 位字母/数字/下划线/中文")
     if not valid_email(req.email):
         raise APIError(40000, "邮箱格式不正确")
-    if not valid_password(req.password):
-        raise APIError(40000, "密码至少 8 位，且不能包含空白字符")
+    weak_reason = validate_password_strength(req.password)
+    if weak_reason:
+        raise APIError(40000, weak_reason)
 
     username = req.username.strip()
     email = req.email.strip().lower()
@@ -138,7 +146,11 @@ async def register(req: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login")
-async def login(req: LoginRequest, db: Session = Depends(get_db)):
+async def login(
+    req: LoginRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(rate_limit(10, 60)),
+):
     """登录（用户名或邮箱 + 密码）"""
     account = req.account.strip()
     user = (
@@ -175,8 +187,9 @@ async def change_password(
         raise APIError(40100, "账号不存在")
     if not verify_password(req.old_password, user.password_hash):
         raise APIError(40000, "原密码错误")
-    if not valid_password(req.new_password):
-        raise APIError(40000, "新密码至少 8 位，且不能包含空白字符")
+    weak_reason = validate_password_strength(req.new_password)
+    if weak_reason:
+        raise APIError(40000, weak_reason)
 
     user.password_hash = hash_password(req.new_password)
     user.token_version += 1
@@ -188,7 +201,11 @@ async def change_password(
 
 
 @router.post("/forgot-password")
-async def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+async def forgot_password(
+    req: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(rate_limit(5, 60)),
+):
     """发起找回密码：生成一次性重置令牌
 
     无论邮箱是否存在都返回成功（不泄露注册信息）。
@@ -219,8 +236,9 @@ async def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_
 @router.post("/reset-password")
 async def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
     """使用重置令牌设置新密码"""
-    if not valid_password(req.new_password):
-        raise APIError(40000, "新密码至少 8 位，且不能包含空白字符")
+    weak_reason = validate_password_strength(req.new_password)
+    if weak_reason:
+        raise APIError(40000, weak_reason)
 
     token_hash = _hash_token(req.token.strip())
     user = db.query(User).filter(User.reset_token_hash == token_hash).first()

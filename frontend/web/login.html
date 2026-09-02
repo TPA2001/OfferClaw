@@ -3,136 +3,305 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 · OfferClaw</title>
+    <title>OfferCabin — 求职投递看板</title>
+    <meta name="description" content="把零散的投递整理成一张看板：自动跟进提醒、面试复盘、简历画像、社区互助。注册即用，不再遗漏每一次回复与面试。">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <link rel="stylesheet" href="styles/main.css?v=10">
+    <script>
+        // 主题引导：在首次绘制前应用，避免 FOUC（与 index.html 保持一致）
+        (function () {
+            try {
+                var t = localStorage.getItem('oc_theme') || 'paper';
+                var dark = { ink: 1, forest: 1, ocean: 1 };
+                document.documentElement.setAttribute('data-theme', t);
+                if (dark[t]) document.documentElement.classList.add('is-dark-pending');
+            } catch (e) {}
+        })();
+    </script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-            background: #f7f6f3; color: #27251f; min-height: 100vh;
-            display: flex; align-items: center; justify-content: center; padding: 24px;
+        /* ===== 落地页专属样式（全部复用 main.css 设计变量）===== */
+        .hidden { display: none !important; } /* 表单切换显隐工具类 */
+        .lp-shell { min-height: 100vh; display: flex; flex-direction: column; position: relative; z-index: 2; }
+
+        /* 顶栏：登录页用极简 navbar，右侧只放登录/注册入口 */
+        .lp-nav { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; }
+        .lp-nav .nav-links a { font-size: 0.88rem; }
+        .lp-nav-link {
+            text-decoration: none; color: var(--ink-soft); font-weight: 500; font-size: 0.88rem;
+            padding: 0.45rem 0.85rem; border-radius: 6px; transition: all 0.2s var(--ease);
+            background: none; border: none; cursor: pointer; font-family: inherit;
         }
-        .card {
-            width: 380px; max-width: 100%;
-            background: #fff; border: 1px solid #e8e6e0; border-radius: 16px;
-            padding: 32px 32px 24px; box-shadow: 0 8px 30px rgba(39, 37, 31, 0.06);
+        .lp-nav-link:hover { color: var(--olive); background: var(--olive-glow); }
+
+        /* 主体：split 双栏 */
+        .lp-main {
+            flex: 1; display: grid; grid-template-columns: 1.1fr 0.9fr;
+            align-items: center; gap: 3.5rem; max-width: 1180px;
+            width: 100%; margin: 0 auto; padding: 1.5rem 2rem 3rem;
         }
-        .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-        .brand-mark {
-            width: 34px; height: 34px; border-radius: 9px;
-            background: #2563eb; color: #fff;
-            display: flex; align-items: center; justify-content: center;
-            font-weight: 600; font-size: 14px;
+
+        /* —— 左侧 hero —— */
+        .lp-hero { max-width: 560px; }
+        .lp-eyebrow {
+            font-family: var(--font-mono); font-size: 0.74rem; color: var(--olive);
+            letter-spacing: 2px; text-transform: uppercase; margin-bottom: 0.9rem;
+            font-weight: 500; display: inline-flex; align-items: center; gap: 0.5rem;
         }
-        .brand-name { font-size: 17px; font-weight: 600; color: #27251f; }
-        .subtitle { font-size: 13px; color: #888780; margin-bottom: 22px; }
-        .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid #ecebe6; }
-        .tab {
-            flex: 1; text-align: center; padding: 10px 0; cursor: pointer;
-            font-size: 14px; color: #888780; border-bottom: 2px solid transparent;
-            transition: color .15s, border-color .15s; background: none; border-top: none; border-left: none; border-right: none;
+        .lp-eyebrow::before {
+            content: ''; width: 28px; height: 1px; background: var(--olive); opacity: 0.6;
         }
-        .tab.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 500; }
-        .field { margin-bottom: 14px; }
-        .field label { display: block; font-size: 12.5px; color: #5f5e5a; margin-bottom: 6px; }
-        .field input {
-            width: 100%; padding: 10px 12px; font-size: 14px;
-            border: 1px solid #d8d6cf; border-radius: 8px; outline: none;
-            transition: border-color .15s, box-shadow .15s; background: #fff; color: #27251f;
+        .lp-hero-title {
+            font-family: var(--font-serif); font-size: 2.75rem; font-weight: 900;
+            color: var(--ink); line-height: 1.12; letter-spacing: -0.5px; margin-bottom: 1rem;
         }
-        .field input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
-        .btn {
-            width: 100%; padding: 11px; font-size: 14.5px; font-weight: 500;
-            border: none; border-radius: 8px; cursor: pointer; color: #fff;
-            background: #2563eb; transition: background .15s, opacity .15s;
+        .lp-hero-title em {
+            font-style: normal; color: var(--olive);
+            background: linear-gradient(180deg, transparent 62%, var(--olive-soft) 62%);
+            padding: 0 0.15em;
         }
-        .btn:hover { background: #1d4ed8; }
-        .btn:disabled { opacity: .6; cursor: not-allowed; }
-        .msg { min-height: 20px; font-size: 13px; margin-top: 10px; }
-        .msg.error { color: #dc2626; }
-        .msg.success { color: #16a34a; }
-        .msg.info { color: #888780; }
-        .hint { font-size: 12px; color: #b4b2a9; margin-top: 16px; text-align: center; }
-        .hidden { display: none; }
+        .lp-hero-sub {
+            font-size: 1rem; color: var(--ink-soft); line-height: 1.75; max-width: 480px; margin-bottom: 1.8rem;
+        }
+
+        /* 功能卖点 */
+        .lp-features { list-style: none; display: flex; flex-direction: column; gap: 0.65rem; margin-bottom: 1.8rem; }
+        .lp-feature {
+            display: flex; align-items: flex-start; gap: 0.7rem;
+            font-size: 0.92rem; color: var(--ink); line-height: 1.5;
+        }
+        .lp-feature-ico {
+            flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px;
+            background: var(--olive-soft); color: var(--olive-dark);
+            display: grid; place-items: center; font-size: 0.78rem; margin-top: 1px;
+        }
+        .lp-feature b { font-weight: 600; color: var(--ink); }
+        .lp-feature span { color: var(--ink-soft); }
+
+        /* CTA */
+        .lp-cta { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+        .lp-cta .btn { padding: 0.7rem 1.5rem; font-size: 0.95rem; }
+        .lp-cta-hint { font-size: 0.82rem; color: var(--ink-faint); }
+        .lp-cta-hint a { color: var(--olive); text-decoration: none; font-weight: 500; }
+        .lp-cta-hint a:hover { text-decoration: underline; }
+
+        /* 信任行 */
+        .lp-trust {
+            margin-top: 1.6rem; padding-top: 1.2rem; border-top: 1px dashed var(--line);
+            display: flex; gap: 1.4rem; flex-wrap: wrap;
+            font-size: 0.78rem; color: var(--ink-faint); font-family: var(--font-mono); letter-spacing: 0.3px;
+        }
+        .lp-trust span { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+        /* —— 右侧卡片 —— */
+        .lp-card-wrap { display: flex; justify-content: center; }
+        .lp-card {
+            width: 400px; max-width: 100%; background: var(--card);
+            border: 1px solid var(--line); border-radius: 14px;
+            padding: 1.8rem 1.8rem 1.4rem; box-shadow: var(--shadow-lg);
+            position: relative; overflow: hidden;
+        }
+        .lp-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, var(--olive), var(--terra));
+        }
+        .lp-card-head { margin-bottom: 1.1rem; }
+        .lp-card-title {
+            font-family: var(--font-serif); font-size: 1.3rem; font-weight: 700;
+            color: var(--ink); margin: 0 0 0.25rem; line-height: 1.2;
+        }
+        .lp-card-sub { font-size: 0.8rem; color: var(--ink-faint); margin: 0; }
+
+        /* 表单（复用 .form-field 配色，落地页单列布局）*/
+        .lp-form .form-field { margin-bottom: 0.85rem; }
+        .lp-form .form-field label { font-size: 0.78rem; }
+        .lp-form .btn { width: 100%; padding: 0.72rem; font-size: 0.95rem; justify-content: center; margin-top: 0.2rem; }
+
+        .lp-msg { min-height: 20px; font-size: 0.8rem; margin-top: 0.6rem; line-height: 1.4; }
+        .lp-msg.error { color: var(--danger); }
+        .lp-msg.success { color: var(--success); }
+        .lp-msg.info { color: var(--ink-faint); }
+
+        .lp-hint { font-size: 0.76rem; color: var(--ink-faint); margin-top: 1rem; text-align: center; }
+
+        /* —— 入场动画 —— */
+        @keyframes lpRise {
+            from { opacity: 0; transform: translateY(18px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .lp-hero > * { animation: lpRise 0.6s var(--ease-out) backwards; }
+        .lp-hero > *:nth-child(1) { animation-delay: 0.05s; }
+        .lp-hero > *:nth-child(2) { animation-delay: 0.13s; }
+        .lp-hero > *:nth-child(3) { animation-delay: 0.21s; }
+        .lp-hero > *:nth-child(4) { animation-delay: 0.29s; }
+        .lp-hero > *:nth-child(5) { animation-delay: 0.37s; }
+        .lp-hero > *:nth-child(6) { animation-delay: 0.45s; }
+        .lp-card { animation: lpRise 0.7s var(--ease-out) 0.3s backwards; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .lp-hero > *, .lp-card { animation: none !important; }
+        }
+
+        /* —— 响应式：移动端单列，hero 在上、卡片在下 —— */
+        @media (max-width: 880px) {
+            .lp-nav { padding: 0.9rem 1.2rem; }
+            .lp-main { grid-template-columns: 1fr; gap: 2rem; padding: 1rem 1.2rem 2.5rem; }
+            .lp-hero-title { font-size: 2.1rem; }
+            .lp-card { width: 100%; }
+            /* 移动端先展示卡片入口更顺手：卡片排到 hero 之前 */
+            .lp-main { display: flex; flex-direction: column; }
+            .lp-card-wrap { order: -1; }
+        }
+        @media (max-width: 480px) {
+            .lp-nav .nav-brand-text p { display: none; }
+            .lp-hero-title { font-size: 1.85rem; }
+            .lp-card { padding: 1.5rem 1.3rem 1.2rem; }
+        }
     </style>
 </head>
 <body>
-    <div class="card">
-        <div class="brand">
-            <div class="brand-mark">OC</div>
-            <div class="brand-name">OfferClaw</div>
-        </div>
-        <div class="subtitle">求职投递看板 · 多用户账号服务</div>
+    <div class="lp-shell">
+        <!-- 顶栏 -->
+        <nav class="lp-nav">
+            <div class="nav-brand">
+                <div class="nav-brand-mark">OC</div>
+                <div class="nav-brand-text">
+                    <h1>OfferCabin</h1>
+                    <p>求职投递看板</p>
+                </div>
+            </div>
+            <div class="nav-links">
+                <button class="lp-nav-link" data-tab="login">登录</button>
+                <button class="lp-nav-link" data-tab="register" style="color:var(--olive);font-weight:600;">免费注册</button>
+            </div>
+        </nav>
 
-        <div class="tabs" id="tabs">
-            <button class="tab active" data-tab="login">登录</button>
-            <button class="tab" data-tab="register">注册</button>
-            <button class="tab" data-tab="forgot">找回密码</button>
-        </div>
+        <!-- 主体 split -->
+        <main class="lp-main">
+            <!-- 左侧：宣传 hero -->
+            <section class="lp-hero">
+                <span class="lp-eyebrow">OfferCabin · 求职投递管理</span>
+                <h2 class="lp-hero-title">不再遗漏每一次<br><em>回复与面试</em></h2>
+                <p class="lp-hero-sub">把零散的投递整理成一张看板，自动跟进提醒到点不漏，面试复盘沉淀经验，社区互助共享机会——求职节奏，自己握在手里。</p>
 
-        <!-- 登录 -->
-        <form id="form-login" data-name="login">
-            <div class="field">
-                <label for="login-account">用户名或邮箱</label>
-                <input id="login-account" type="text" autocomplete="username" placeholder="请输入用户名或邮箱">
-            </div>
-            <div class="field">
-                <label for="login-password">密码</label>
-                <input id="login-password" type="password" autocomplete="current-password" placeholder="请输入密码">
-            </div>
-            <button class="btn" type="submit">登 录</button>
-            <div class="msg" id="msg-login"></div>
-        </form>
+                <ul class="lp-features">
+                    <li class="lp-feature">
+                        <span class="lp-feature-ico">▦</span>
+                        <span><b>投递看板</b> — 拖拽式管理全部投递，6 种状态一目了然</span>
+                    </li>
+                    <li class="lp-feature">
+                        <span class="lp-feature-ico">⏰</span>
+                        <span><b>跟进提醒</b> — 停滞、笔试、面试、Offer 到点自动提醒</span>
+                    </li>
+                    <li class="lp-feature">
+                        <span class="lp-feature-ico">▤</span>
+                        <span><b>简历画像</b> — 结构化沉淀简历经历，随时复用</span>
+                    </li>
+                    <li class="lp-feature">
+                        <span class="lp-feature-ico">✎</span>
+                        <span><b>面试复盘</b> — 记录问答与反思，持续精进</span>
+                    </li>
+                    <li class="lp-feature">
+                        <span class="lp-feature-ico">◍</span>
+                        <span><b>社区互助</b> — 共享公司招聘入口与求职经验</span>
+                    </li>
+                </ul>
 
-        <!-- 注册 -->
-        <form id="form-register" data-name="register" class="hidden">
-            <div class="field">
-                <label for="reg-username">用户名</label>
-                <input id="reg-username" type="text" autocomplete="username" placeholder="2-32 位字母/数字/下划线/中文">
-            </div>
-            <div class="field">
-                <label for="reg-email">邮箱</label>
-                <input id="reg-email" type="email" autocomplete="email" placeholder="用于找回密码">
-            </div>
-            <div class="field">
-                <label for="reg-password">密码</label>
-                <input id="reg-password" type="password" autocomplete="new-password" placeholder="至少 8 位">
-            </div>
-            <div class="field">
-                <label for="reg-invite">邀请码（选填）</label>
-                <input id="reg-invite" type="text" placeholder="如有邀请码请填写">
-            </div>
-            <button class="btn" type="submit">注 册</button>
-            <div class="msg" id="msg-register"></div>
-        </form>
+                <div class="lp-cta">
+                    <button class="btn btn-primary" data-tab="register">立即免费注册 →</button>
+                    <span class="lp-cta-hint">已有账号？<a href="#" data-tab="login">直接登录</a></span>
+                </div>
 
-        <!-- 找回密码 -->
-        <form id="form-forgot" data-name="forgot" class="hidden">
-            <div class="field">
-                <label for="forgot-email">注册邮箱</label>
-                <input id="forgot-email" type="email" autocomplete="email" placeholder="请输入注册邮箱">
-            </div>
-            <div class="field hidden" id="forgot-extra">
-                <label for="forgot-token">重置令牌</label>
-                <input id="forgot-token" type="text" placeholder="向管理员获取重置令牌">
-            </div>
-            <div class="field hidden" id="forgot-newpass-wrap">
-                <label for="forgot-newpass">新密码</label>
-                <input id="forgot-newpass" type="password" autocomplete="new-password" placeholder="至少 8 位">
-            </div>
-            <button class="btn" type="submit" id="forgot-btn">获取重置令牌</button>
-            <div class="msg" id="msg-forgot"></div>
-        </form>
+                <div class="lp-trust">
+                    <span>✓ 注册即用</span>
+                    <span>✓ 无需信用卡</span>
+                    <span>✓ 数据自主</span>
+                </div>
+            </section>
 
-        <div class="hint" id="bottom-hint"></div>
+            <!-- 右侧：登录/注册卡片 -->
+            <section class="lp-card-wrap">
+                <div class="lp-card">
+                    <div class="lp-card-head">
+                        <h3 class="lp-card-title" id="card-title">欢迎回来</h3>
+                        <p class="lp-card-sub" id="card-sub">登录后开启你的投递看板</p>
+                    </div>
+
+                    <div class="tabs" id="tabs">
+                        <button class="tab active" data-tab="login">登录</button>
+                        <button class="tab" data-tab="register">注册</button>
+                        <button class="tab" data-tab="forgot">找回密码</button>
+                    </div>
+
+                    <!-- 登录 -->
+                    <form id="form-login" class="lp-form" data-name="login">
+                        <div class="form-field">
+                            <label for="login-account">用户名或邮箱</label>
+                            <input id="login-account" type="text" autocomplete="username" placeholder="请输入用户名或邮箱">
+                        </div>
+                        <div class="form-field">
+                            <label for="login-password">密码</label>
+                            <input id="login-password" type="password" autocomplete="current-password" placeholder="请输入密码">
+                        </div>
+                        <button class="btn btn-primary" type="submit">登 录</button>
+                        <div class="lp-msg" id="msg-login"></div>
+                    </form>
+
+                    <!-- 注册 -->
+                    <form id="form-register" class="lp-form hidden" data-name="register">
+                        <div class="form-field">
+                            <label for="reg-username">用户名</label>
+                            <input id="reg-username" type="text" autocomplete="username" placeholder="2-32 位字母/数字/下划线/中文">
+                        </div>
+                        <div class="form-field">
+                            <label for="reg-email">邮箱</label>
+                            <input id="reg-email" type="email" autocomplete="email" placeholder="用于找回密码">
+                        </div>
+                        <div class="form-field">
+                            <label for="reg-password">密码</label>
+                            <input id="reg-password" type="password" autocomplete="new-password" placeholder="至少 8 位">
+                        </div>
+                        <div class="form-field">
+                            <label for="reg-invite">邀请码（选填）</label>
+                            <input id="reg-invite" type="text" placeholder="如有邀请码请填写">
+                        </div>
+                        <button class="btn btn-primary" type="submit">注 册</button>
+                        <div class="lp-msg" id="msg-register"></div>
+                    </form>
+
+                    <!-- 找回密码 -->
+                    <form id="form-forgot" class="lp-form hidden" data-name="forgot">
+                        <div class="form-field">
+                            <label for="forgot-email">注册邮箱</label>
+                            <input id="forgot-email" type="email" autocomplete="email" placeholder="请输入注册邮箱">
+                        </div>
+                        <div class="form-field hidden" id="forgot-extra">
+                            <label for="forgot-token">重置令牌</label>
+                            <input id="forgot-token" type="text" placeholder="向管理员获取重置令牌">
+                        </div>
+                        <div class="form-field hidden" id="forgot-newpass-wrap">
+                            <label for="forgot-newpass">新密码</label>
+                            <input id="forgot-newpass" type="password" autocomplete="new-password" placeholder="至少 8 位">
+                        </div>
+                        <button class="btn btn-primary" type="submit" id="forgot-btn">获取重置令牌</button>
+                        <div class="lp-msg" id="msg-forgot"></div>
+                    </form>
+
+                    <div class="lp-hint" id="bottom-hint"></div>
+                </div>
+            </section>
+        </main>
     </div>
 
-    <script src="config.js"></script>
-    <script src="app/api.js"></script>
+    <script src="config.js?v=7"></script>
+    <script src="motion.js?v=5"></script>
+    <script src="app/api.js?v=7"></script>
     <script>
         (function () {
-            const API = window.OfferClawAPI;
-            const $ = (id) => document.getElementById(id);
+            var API = window.OfferCabinAPI;
+            var Motion = window.OfferCabinMotion;
+            var $ = function (id) { return document.getElementById(id); };
 
             // 已登录直接进首页
             if (API.isLoggedIn()) {
@@ -140,26 +309,60 @@
                 return;
             }
             // 会话过期提示
-            const params = new URLSearchParams(location.search);
+            var params = new URLSearchParams(location.search);
             if (params.get('reason') === 'expired') {
-                $('msg-login').className = 'msg error';
+                $('msg-login').className = 'lp-msg error';
                 $('msg-login').textContent = '登录已过期，请重新登录';
             }
 
-            // Tab 切换
-            const tabs = document.querySelectorAll('.tab');
-            tabs.forEach(t => t.addEventListener('click', () => {
-                tabs.forEach(x => x.classList.remove('active'));
-                t.classList.add('active');
-                ['login', 'register', 'forgot'].forEach(name => {
-                    $('form-' + name).classList.toggle('hidden', name !== t.dataset.tab);
+            // 卡片标题随 tab 切换
+            var CARD_META = {
+                login:   { title: '欢迎回来',        sub: '登录后开启你的投递看板' },
+                register:{ title: '加入 OfferCabin',  sub: '注册即可用，无需信用卡' },
+                forgot:  { title: '找回密码',         sub: '通过注册邮箱重置密码' }
+            };
+
+            function switchTab(name) {
+                var tabs = document.querySelectorAll('.tab');
+                tabs.forEach(function (t) {
+                    t.classList.toggle('active', t.dataset.tab === name);
                 });
+                ['login', 'register', 'forgot'].forEach(function (n) {
+                    $('form-' + n).classList.toggle('hidden', n !== name);
+                });
+                var meta = CARD_META[name] || CARD_META.login;
+                $('card-title').textContent = meta.title;
+                $('card-sub').textContent = meta.sub;
                 $('bottom-hint').textContent = '';
-            }));
+                // 切换面板入场
+                var panel = $('form-' + name);
+                if (Motion && Motion.tabEnter) Motion.tabEnter(panel);
+                // 移动端：点顶栏/CTA 切 tab 时，滚动到卡片
+                if (window.innerWidth <= 880) {
+                    var card = document.querySelector('.lp-card');
+                    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                // 自动聚焦首个输入框
+                var first = panel.querySelector('input');
+                if (first) setTimeout(function () { first.focus(); }, 50);
+            }
+
+            // tab 点击
+            document.querySelectorAll('.tab').forEach(function (t) {
+                t.addEventListener('click', function () { switchTab(t.dataset.tab); });
+            });
+            // 顶栏 / hero CTA 里的 data-tab 触发器
+            document.querySelectorAll('[data-tab]').forEach(function (el) {
+                if (el.classList.contains('tab')) return; // tab 自身已绑定
+                el.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    switchTab(el.dataset.tab);
+                });
+            });
 
             function show(id, text, type) {
-                const el = $(id);
-                el.className = 'msg ' + (type || 'info');
+                var el = $(id);
+                el.className = 'lp-msg ' + (type || 'info');
                 el.textContent = text;
             }
             function setBusy(btn, busy, text) {
@@ -169,12 +372,12 @@
             }
 
             // 登录
-            $('form-login').addEventListener('submit', async (e) => {
+            $('form-login').addEventListener('submit', async function (e) {
                 e.preventDefault();
-                const account = $('login-account').value.trim();
-                const password = $('login-password').value;
+                var account = $('login-account').value.trim();
+                var password = $('login-password').value;
                 if (!account || !password) return show('msg-login', '请输入账号和密码', 'error');
-                const btn = $('form-login').querySelector('button[type=submit]');
+                var btn = $('form-login').querySelector('button[type=submit]');
                 setBusy(btn, true);
                 try {
                     await API.auth.login(account, password);
@@ -185,17 +388,17 @@
             });
 
             // 注册
-            $('form-register').addEventListener('submit', async (e) => {
+            $('form-register').addEventListener('submit', async function (e) {
                 e.preventDefault();
-                const username = $('reg-username').value.trim();
-                const email = $('reg-email').value.trim();
-                const password = $('reg-password').value;
-                const invite_code = $('reg-invite').value.trim() || undefined;
+                var username = $('reg-username').value.trim();
+                var email = $('reg-email').value.trim();
+                var password = $('reg-password').value;
+                var invite_code = $('reg-invite').value.trim() || undefined;
                 if (!username || !email || !password) return show('msg-register', '请填写完整信息', 'error');
-                const btn = $('form-register').querySelector('button[type=submit]');
+                var btn = $('form-register').querySelector('button[type=submit]');
                 setBusy(btn, true);
                 try {
-                    await API.auth.register({ username, email, password, invite_code });
+                    await API.auth.register({ username: username, email: email, password: password, invite_code: invite_code });
                     location.href = 'index.html';
                 } catch (err) {
                     show('msg-register', err.message, 'error');
@@ -203,16 +406,16 @@
             });
 
             // 找回密码：两步（1 获取令牌 → 2 重置）
-            let resetToken = '';
-            $('form-forgot').addEventListener('submit', async (e) => {
+            var resetToken = '';
+            $('form-forgot').addEventListener('submit', async function (e) {
                 e.preventDefault();
-                const email = $('forgot-email').value.trim();
-                const btn = $('forgot-btn');
+                var email = $('forgot-email').value.trim();
+                var btn = $('forgot-btn');
                 if (!resetToken) {
                     if (!email) return show('msg-forgot', '请输入注册邮箱', 'error');
                     setBusy(btn, true, '生成中...');
                     try {
-                        const data = await API.auth.forgotPassword(email);
+                        var data = await API.auth.forgotPassword(email);
                         if (data && data.delivered === 'response' && data.reset_token) {
                             resetToken = data.reset_token;
                             show('msg-forgot', '重置令牌已生成（调试模式直接下发）', 'success');
@@ -233,14 +436,14 @@
                     return;
                 }
                 // 第二步：重置
-                const tokenInput = $('forgot-token').value.trim();
-                const newPassword = $('forgot-newpass').value;
+                var tokenInput = $('forgot-token').value.trim();
+                var newPassword = $('forgot-newpass').value;
                 if (!tokenInput || !newPassword) return show('msg-forgot', '请填写令牌和新密码', 'error');
                 setBusy(btn, true, '重置中...');
                 try {
                     await API.auth.resetPassword(tokenInput, newPassword);
                     show('msg-forgot', '密码已重置，已自动登录，正在跳转...', 'success');
-                    setTimeout(() => location.href = 'index.html', 800);
+                    setTimeout(function () { location.href = 'index.html'; }, 800);
                 } catch (err) {
                     show('msg-forgot', err.message, 'error');
                 } finally { setBusy(btn, false); }

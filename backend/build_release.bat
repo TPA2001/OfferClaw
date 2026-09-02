@@ -1,13 +1,13 @@
 @echo off
 chcp 65001 >nul 2>&1
 REM ============================================================
-REM OfferClaw build script (desktop app + browser extension)
-REM Output: dist/OfferClaw/
-REM   |-- OfferClaw.exe + _internal/        desktop app (PyInstaller onedir)
-REM   |-- offerclaw-extension/              Chrome MV3 extension
+REM OfferCabin build script (desktop app + browser extension)
+REM Output: dist/OfferCabin/
+REM   |-- OfferCabin.exe + _internal/        desktop app (PyInstaller onedir)
+REM   |-- offercabin-extension/              Chrome MV3 extension
 REM   `-- quick-start.txt                   usage guide (CN, UTF-8)
-REM Zips:   dist/OfferClaw-v<VER>-full.zip   (app + extension bundle)
-REM         dist/OfferClaw-extension-v<EXT_VER>.zip (extension only)
+REM Zips:   dist/OfferCabin-v<VER>-full.zip   (app + extension bundle)
+REM         dist/OfferCabin-extension-v<EXT_VER>.zip (extension only)
 REM Usage:  double-click or run in cmd
 REM ============================================================
 
@@ -17,22 +17,22 @@ cd /d "%~dp0"
 set VERSION=1.2.0
 set EXT_VER=0.0.3
 set PROJ_ROOT=%~dp0..
-set OUT_DIR=dist\OfferClaw
-set EXT_SRC=%PROJ_ROOT%\offerclaw-extension
-set EXT_DST=%OUT_DIR%\offerclaw-extension
-set ZIP_FULL=dist\OfferClaw-v%VERSION%-full.zip
-set ZIP_EXT=dist\OfferClaw-extension-v%EXT_VER%.zip
+set OUT_DIR=dist\OfferCabin
+set EXT_SRC=%PROJ_ROOT%\offercabin-extension
+set EXT_DST=%OUT_DIR%\offercabin-extension
+set ZIP_FULL=dist\OfferCabin-v%VERSION%-full.zip
+set ZIP_EXT=dist\OfferCabin-extension-v%EXT_VER%.zip
 set GUIDE_SRC=quick-start.txt
 set GUIDE_DST=%OUT_DIR%\quick-start.txt
 
 echo ============================================================
-echo  OfferClaw v%VERSION% build (app + extension)
+echo  OfferCabin v%VERSION% build (app + extension)
 echo ============================================================
 echo.
 
-REM 1) Clean old artifacts (PyInstaller --clean clears build/, dist\OfferClaw needs manual clean)
+REM 1) Clean old artifacts (PyInstaller --clean clears build/, dist\OfferCabin needs manual clean)
 if exist "%OUT_DIR%" (
-    echo [1/5] Cleaning old dist\OfferClaw ...
+    echo [1/5] Cleaning old dist\OfferCabin ...
     rmdir /s /q "%OUT_DIR%"
 )
 if exist "%ZIP_FULL%" del /q "%ZIP_FULL%"
@@ -40,7 +40,7 @@ if exist "%ZIP_EXT%" del /q "%ZIP_EXT%"
 
 REM 2) Run PyInstaller (spec file, --clean clears cache, --noconfirm overwrites)
 echo [2/5] Running PyInstaller for desktop app ...
-python -m PyInstaller offerclaw.spec --clean --noconfirm
+python -m PyInstaller offercabin.spec --clean --noconfirm
 if errorlevel 1 (
     echo.
     echo [ERROR] PyInstaller build failed, check logs above
@@ -49,8 +49,8 @@ if errorlevel 1 (
 )
 
 REM 3) Verify desktop app artifact
-if not exist "%OUT_DIR%\OfferClaw.exe" (
-    echo [ERROR] Not found: %OUT_DIR%\OfferClaw.exe
+if not exist "%OUT_DIR%\OfferCabin.exe" (
+    echo [ERROR] Not found: %OUT_DIR%\OfferCabin.exe
     pause
     exit /b 1
 )
@@ -89,8 +89,8 @@ REM 6) Zip: full bundle (app+extension) + extension-only
 echo.
 echo [5/5] Zipping distribution packages ...
 
-REM Full bundle (user extracts and runs OfferClaw.exe)
-powershell -NoProfile -Command "Compress-Archive -Path 'dist\OfferClaw\*' -DestinationPath '%ZIP_FULL%' -Force"
+REM Full bundle (user extracts and runs OfferCabin.exe)
+powershell -NoProfile -Command "Compress-Archive -Path 'dist\OfferCabin\*' -DestinationPath '%ZIP_FULL%' -Force"
 if errorlevel 1 (
     echo [ERROR] Failed to zip full bundle
     pause
@@ -112,8 +112,8 @@ echo  Extension   : %ZIP_EXT%
 echo  App folder  : %OUT_DIR%
 echo.
 echo  Distribution:
-echo    - Send OfferClaw-v%VERSION%-full.zip to users (extract, run OfferClaw.exe)
-echo    - offerclaw-extension-v%EXT_VER%.zip for extension-only updates
+echo    - Send OfferCabin-v%VERSION%-full.zip to users (extract, run OfferCabin.exe)
+echo    - offercabin-extension-v%EXT_VER%.zip for extension-only updates
 echo ============================================================
 pause
 endlocal

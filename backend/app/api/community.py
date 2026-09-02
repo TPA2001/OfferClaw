@@ -13,6 +13,7 @@
 - 防注入：LIKE 搜索转义 % _ \\；分页上限；内容长度限制
 - 隐私：对外只暴露用户名，不暴露邮箱/手机号等
 """
+import asyncio
 import json
 import logging
 import re
@@ -49,7 +50,7 @@ from app.models.community import (
 from app.models.application import Application
 from app.models.user import User
 
-logger = logging.getLogger("offerclaw.api.community")
+logger = logging.getLogger("offercabin.api.community")
 
 router = APIRouter(prefix="/api/v1/community", tags=["community"])
 
@@ -208,11 +209,16 @@ def _check_rate(user_id: str, action: str) -> None:
 
 # ============ 安全：AI 预审 ============
 
+# 预审硬超时（秒）：超时视为审核不可用，降级放行，不阻塞用户发布
+PRECHECK_TIMEOUT_S = 10
+
 async def _ai_precheck(title: str, content: str) -> bool:
     """内容安全预审：返回 True=放行，False=命中违规（转 hidden）
 
     设计原则：任何异常（超时/无 Key/解析失败）一律降级放行，
     绝不因审核故障阻塞用户发布。Mock 模式下直接放行。
+    整体硬超时 PRECHECK_TIMEOUT_S：LLM 供应商不可达时（含内部重试）
+    最多等待该时长，避免用户点提交后长时间停在「提交中」。
     """
     try:
         from app.core.llm import get_gen_provider, Message
@@ -225,10 +231,13 @@ async def _ai_precheck(title: str, content: str) -> bool:
             "人身攻击。仅回复 JSON：{\"pass\": true或false, \"reason\": \"原因\"}。\n"
             f"标题：{title}\n内容：{content[:1500]}"
         )
-        resp = await provider.chat(
-            messages=[Message(role="user", content=prompt)],
-            temperature=0.0,
-            max_tokens=120,
+        resp = await asyncio.wait_for(
+            provider.chat(
+                messages=[Message(role="user", content=prompt)],
+                temperature=0.0,
+                max_tokens=120,
+            ),
+            timeout=PRECHECK_TIMEOUT_S,
         )
         text = (resp.content or "").strip()
         # 提取 JSON（兼容 ```json 包裹）

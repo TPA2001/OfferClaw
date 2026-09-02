@@ -2,7 +2,7 @@
 
 ## 概述
 
-OfferClaw 智能填写功能采用**完全 Web 化**的实现方式，用户**无需安装任何浏览器插件**，即可享受智能表单填写服务。
+OfferCabin 智能填写功能采用**完全 Web 化**的实现方式，用户**无需安装任何浏览器插件**，即可享受智能表单填写服务。
 
 ## 核心优势
 
@@ -26,7 +26,7 @@ OfferClaw 智能填写功能采用**完全 Web 化**的实现方式，用户**�
 ## 用户使用流程
 
 ### 步骤 1: 输入 URL
-访问 OfferClaw 网站，输入目标企业网申页面的 URL。
+访问 OfferCabin 网站，输入目标企业网申页面的 URL。
 
 ```
 例如：https://jobs.company.com/apply
@@ -158,7 +158,7 @@ Response:
   "code": 0,
   "message": "脚本生成成功",
   "data": {
-    "script": "// OfferClaw 智能填写脚本\n...",
+    "script": "// OfferCabin 智能填写脚本\n...",
     "usage": "请将上述脚本复制到浏览器控制台（按 F12 打开）并执行"
   }
 }

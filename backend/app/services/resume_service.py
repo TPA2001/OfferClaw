@@ -19,7 +19,7 @@ from typing import Optional
 
 from app.core.llm import LLMProvider, LLMResponse, Message
 
-logger = logging.getLogger("offerclaw.resume_service")
+logger = logging.getLogger("offercabin.resume_service")
 
 
 class ResumeService:
@@ -265,7 +265,8 @@ class ResumeService:
 
         system = (
             "你是资深简历顾问，擅长撰写符合国内校招/社招审美的简历。要求：\n"
-            "1. 输出 Markdown 格式，结构清晰：基本信息 / 教育经历 / 工作经历 / 项目经历 / 技能 / 自我评价\n"
+            "1. 输出 Markdown 格式，结构清晰：基本信息 / 教育经历 / 工作经历 / 项目经历 / 技能 / 自我评价；"
+            "若画像中存在语言能力、证书、获奖荣誉、论文、专利，则相应补充对应小节（校招/央国企/科研岗简历尤其要保留论文与专利小节）\n"
             "2. 若提供了目标 JD：\n"
             "   - 在简历中突出与 JD 匹配的技能和经验，弱化无关内容\n"
             "   - 自我评价针对 JD 定制，体现匹配点而非通用模板\n"
@@ -434,6 +435,26 @@ def _format_profile_for_llm(profile: dict) -> str:
     certs = profile.get("certifications") or []
     if certs:
         parts.append(f"## 证书荣誉\n{json.dumps(certs, ensure_ascii=False, indent=2)}")
+
+    langs = profile.get("languages") or []
+    if langs:
+        parts.append(f"## 语言能力\n{json.dumps(langs, ensure_ascii=False, indent=2)}")
+
+    awards = profile.get("awards") or []
+    if awards:
+        parts.append(f"## 获奖荣誉\n{json.dumps(awards, ensure_ascii=False, indent=2)}")
+
+    pubs = profile.get("publications") or []
+    if pubs:
+        parts.append(f"## 论文发表\n{json.dumps(pubs, ensure_ascii=False, indent=2)}")
+
+    pats = profile.get("patents") or []
+    if pats:
+        parts.append(f"## 专利\n{json.dumps(pats, ensure_ascii=False, indent=2)}")
+
+    essays = profile.get("essays") or []
+    if essays:
+        parts.append(f"## 开放题答案\n{json.dumps(essays, ensure_ascii=False, indent=2)}")
 
     intent = profile.get("job_intent") or {}
     if intent:

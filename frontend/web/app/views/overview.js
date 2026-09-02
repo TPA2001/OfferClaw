@@ -4,8 +4,8 @@
 (function (global) {
     'use strict';
 
-    const API = global.OfferClawAPI;
-    const Motion = global.OfferClawMotion;
+    const API = global.OfferCabinAPI;
+    const Motion = global.OfferCabinMotion;
     const esc = API.esc.bind(API);
 
     // ============ 状态 ============
@@ -377,7 +377,7 @@
         fuEl.querySelectorAll('.ov-fu-item').forEach(item => {
             item.addEventListener('click', () => {
                 // 点击提醒项跳转到投递看板
-                global.OfferClawRouter.navigate('/kanban');
+                global.OfferCabinRouter.navigate('/kanban');
             });
         });
     }
@@ -395,6 +395,6 @@
         root = null;
     }
 
-    global.OfferClawViews = global.OfferClawViews || {};
-    global.OfferClawViews.overview = { mount: mount, cleanup: cleanup, title: '投递总览' };
+    global.OfferCabinViews = global.OfferCabinViews || {};
+    global.OfferCabinViews.overview = { mount: mount, cleanup: cleanup, title: '投递总览' };
 })(window);
